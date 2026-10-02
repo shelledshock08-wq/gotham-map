@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1a4a">
+<title>Sonic: Emerald Meadow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+  :root { --bg: #05081a; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); overflow: hidden;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas#screen { display: block; image-rendering: auto; background: #000; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+  #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #touch.on { display: block; }
+  .tbtn {
+    position: absolute; pointer-events: auto; border-radius: 50%;
+    background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.45);
+    color: rgba(255,255,255,.85); font: 700 20px system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    width: 64px; height: 64px; touch-action: none;
+  }
+  .tbtn.down { background: rgba(255,255,255,.45); }
+  #t-left  { left: 16px;  bottom: 92px; }
+  #t-right { left: 152px; bottom: 92px; }
+  #t-up    { left: 84px;  bottom: 160px; }
+  #t-down  { left: 84px;  bottom: 24px; }
+  #t-jump  { right: 24px; bottom: 60px; width: 92px; height: 92px; font-size: 26px; background: rgba(40,110,255,.35); }
+  #t-pause { right: 16px; top: 16px; width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="screen" width="1280" height="720"></canvas></div>
+<div id="touch">
+  <div class="tbtn" id="t-left"  data-k="left">&#9664;</div>
+  <div class="tbtn" id="t-right" data-k="right">&#9654;</div>
+  <div class="tbtn" id="t-up"    data-k="up">&#9650;</div>
+  <div class="tbtn" id="t-down"  data-k="down">&#9660;</div>
+  <div class="tbtn" id="t-jump"  data-k="jump">A</div>
+  <div class="tbtn" id="t-pause" data-k="start">II</div>
+</div>
+<script src="js/assets.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/input.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
