@@ -44,7 +44,7 @@ const Assets = {
       const im = new Image();
       im.onload = () => { this.img[key] = im; this.loaded++; onProgress && onProgress(this.loaded / this.total); resolve(); };
       im.onerror = () => { console.warn('Missing image', src); this.loaded++; resolve(); };
-      im.src = src;
+      im.src = (window.EMBEDDED_ASSETS && window.EMBEDDED_ASSETS[src]) || src;
     }));
     return Promise.all(jobs).then(() => this.buildDerived());
   },

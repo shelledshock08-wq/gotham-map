@@ -9,7 +9,9 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-You can also open `index.html` directly. Sound effects fall back to `<audio>` elements when the page is loaded from `file://`.
+**Easiest:** open `sonic-standalone.html`. It's a single file with every script, image, sound and the font built in, so it works offline, by double-click, on its own. Rebuild it with `python3 tools/build_standalone.py` after changing the game.
+
+You can also open `index.html` directly, but only with the `js/` and `assets/` folders next to it. Sound effects fall back to `<audio>` elements when the page is loaded from `file://`.
 
 To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy from branch, root folder). The game is fully static.
 
@@ -58,6 +60,6 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **Tiles, enemies, backgrounds:** Kenney "New Platformer Pack", CC0 ([kenney.nl](https://kenney.nl/assets/new-platformer-pack)), via the [shorepine/kenney](https://github.com/shorepine/kenney) mirror. The backgrounds were given transparent skies so they can be layered.
 - **Sound effects / jingles:** Kenney "Digital Audio" and "Music Jingles", CC0 ([kenney.nl](https://kenney.nl)), via the [ETdoFresh/kenney.nl](https://github.com/ETdoFresh/kenney.nl) mirror. They were converted to MP3. See `assets/LICENSE-kenney.txt`.
 - **Hero, rings, monitors, boss, music:** drawn and composed in code for this project.
-- **Font:** Press Start 2P (SIL OFL), loaded from Google Fonts.
+- **Font:** Press Start 2P (SIL OFL), bundled in `assets/fonts` (from `@fontsource/press-start-2p`).
 
 This is an unofficial, non-commercial fan game. Sonic the Hedgehog and Dr. Eggman are trademarks of SEGA. This project is not affiliated with or endorsed by SEGA. Don't sell it or monetize it.

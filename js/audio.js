@@ -115,8 +115,18 @@ const Sound = {
 
   loadSamples() {
     for (const name of SFX_NAMES) {
-      const url = `assets/sfx/${name}.mp3`;
-      fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      const path = `assets/sfx/${name}.mp3`;
+      const embedded = window.EMBEDDED_ASSETS && window.EMBEDDED_ASSETS[path];
+      const url = embedded || path;
+      const getData = embedded
+        ? Promise.resolve().then(() => {   // standalone build: decode the data: URI directly
+          const bin = atob(embedded.slice(embedded.indexOf(',') + 1));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return bytes.buffer;
+        })
+        : fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+      getData
         .then((ab) => new Promise((res, rej) => this.ctx.decodeAudioData(ab, res, rej)))
         .then((buf) => { this.buffers[name] = buf; })
         .catch(() => {

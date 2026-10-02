@@ -16,6 +16,8 @@ function tileHeight(ch, lx) {
   }
 }
 
+const BG_FILL = { hills: '#2ecc71', trees: '#2ecc71', desert: '#f3c7a5', mushrooms: '#de7e4f' };
+
 class World {
   constructor(level) {
     this.level = level;
@@ -156,7 +158,7 @@ class World {
     const layers = [
       { img: I.background_clouds, f: 0.08, s: 2.2, drift: 0.15, yOff: -260 },
       { img: I[bgKey === 'desert' ? 'background_fade_desert' : 'background_fade_hills'], f: 0.2, s: 2.4, yOff: -150 },
-      { img: I[`background_color_${bgKey}`], f: 0.4, s: 2.6, yOff: -40 },
+      { img: I[`background_color_${bgKey}`], f: 0.4, s: 2.6, yOff: -40, fill: BG_FILL[bgKey] },
     ];
     if (this.theme === 'stone') {
       // starry night for the fortress
@@ -178,6 +180,7 @@ class World {
       if (this.theme === 'stone' && L !== layers[0]) ctx.globalAlpha = 0.75;
       x = Math.floor(x);
       for (; x < VIEW_W; x += w) ctx.drawImage(L.img, x, Math.floor(y), w, h);
+      if (L.fill && y + h < VIEW_H) { ctx.fillStyle = L.fill; ctx.fillRect(0, Math.floor(y + h) - 1, VIEW_W, VIEW_H - Math.floor(y + h) + 1); }
       ctx.globalAlpha = 1;
     }
     if (this.theme === 'stone') { ctx.fillStyle = 'rgba(30,16,80,.38)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
