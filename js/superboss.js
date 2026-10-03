@@ -1248,8 +1248,102 @@ class FinalBattle {
     }
   }
 
-  startRescue() {
+  // Eggman is finished. The player decides what Sonic does with him.
+  startChoice() {
     if (this.phase !== 'brawl') return;
+    this.phase = 'choice'; this.t = 0; this.choice = { sel: null, t: 0 }; this.g.speech.clear();
+    const h = this.hero, E = this.egg2;
+    h.grab = null; h.pound = null; h.spin = null; h.punchT = 0; h.lunge = 0; h.invuln = 0; h.charge = 0;
+    E.act = null; E.stun = 99999; if (E.state === 'grabbed' || E.state === 'pinned') { E.state = 'air'; E.ground = false; }
+    this.objs = this.objs.filter((o) => !(o instanceof EggBomb));
+    this.hitStop = 18; this.zoom = 1.12; this.shake = 16; this.slow = 30;
+    Sound.punch(1.8);
+  }
+
+  updateChoice(inp) {
+    const h = this.hero, E = this.egg2, C = this.choice, t = this.t;
+    E.update();
+    if (E.ground && E.state !== 'cower') { E.state = 'cower'; E.vx = 0; }
+    E.facing = h.x < E.x ? -1 : 1;
+    // Sonic walks up and stands over him
+    const tx = E.x - 130, ty = this.gy - 40;
+    h.x += (tx - h.x) * 0.06; h.y += (ty - h.y) * 0.06; h.facing = 1; h.vx = 0; h.vy = 0;
+    if (t === 30) this.say('eggman', 'P-please... Sonic... I\'m begging you...', { dur: 220, prio: 5 });
+    if (t === 260) this.say('sonic', '...', { dur: 100, prio: 5 });
+    if (t < 60) return;
+    C.t++;
+    if (inp.leftPressed) { C.sel = 'kill'; Sound.play('select', { rate: 0.7 }); }
+    if (inp.rightPressed) { C.sel = 'spare'; Sound.play('select', { rate: 1.2 }); }
+    if (C.sel && (inp.punchPressed || inp.jumpPressed || inp.startPressed)) {
+      this.g.eggmanFate = C.sel;
+      Sound.play('checkpoint', { rate: C.sel === 'kill' ? 0.6 : 1 });
+      if (C.sel === 'kill') this.startKill(); else { this.spared = true; this.startRescue(); }
+    }
+  }
+
+  // KILL: one spin dash, straight through him
+  startKill() {
+    this.phase = 'kill'; this.t = 0;
+    const h = this.hero, E = this.egg2;
+    E.state = 'cower'; E.vx = 0; E.vy = 0;
+    h.spin = { state: 'charge', charge: 0, t: 0 }; h.facing = 1;
+    this.killFrom = E.x - 230; this.killTo = E.x + 270;
+  }
+
+  updateKill() {
+    const h = this.hero, E = this.egg2, t = this.t, M = this.metal;
+    if (E.state !== 'carried') E.update();
+    if (t < 70) {   // rev up
+      h.x += (this.killFrom - h.x) * 0.2; h.y += (this.gy - 28 - h.y) * 0.2;
+      h.spin.charge = t;
+      if (t % 10 === 0) { Sound.play('charge', { rate: 1 + t / 60, vol: 0.8 }); this.add(new FBEffect('dust', h.x - 20, this.gy - 8, { dur: 20 })); }
+      if (t === 12) this.say('eggman', 'W-what are you doing...?! NO--', { dur: 70, prio: 5 });
+      this.shake = Math.max(this.shake, t / 12);
+    }
+    if (t === 70) { h.spin.state = 'dash'; Sound.play('release', { rate: 0.6 }); Sound.boostBurst && Sound.boostBurst(); }
+    if (t >= 70 && t <= 82) {
+      const k = (t - 70) / 12;
+      h.x = this.killFrom + (this.killTo - this.killFrom) * k; h.y = E.y - 46;
+      if (!this.killHit && h.x >= E.x) {   // through him
+        this.killHit = true;
+        E.hole = true; E.state = 'impaled'; E.flash = 0;
+        const cx = E.x, cy = E.y - 52;
+        for (let i = 0; i < 46; i++) this.add(new Gore(this, cx + 10, cy + (Math.random() - 0.5) * 30, 3 + Math.random() * 11, -5 + Math.random() * 7, 'blood'));
+        for (let i = 0; i < 12; i++) this.add(new Gore(this, cx - 6, cy + (Math.random() - 0.5) * 20, -2 - Math.random() * 5, -3 + Math.random() * 4, 'blood'));
+        for (let i = 0; i < 5; i++) this.add(new Gore(this, cx + 8, cy + (Math.random() - 0.5) * 14, 2 + Math.random() * 7, -4 + Math.random() * 3, 'organ'));
+        for (let i = 0; i < 5; i++) this.add(new Gore(this, cx + 4, cy + (Math.random() - 0.5) * 14, 1 + Math.random() * 6, -5 + Math.random() * 3, 'gut'));
+        for (let i = 0; i < 3; i++) this.add(new Gore(this, cx, cy + 6, (Math.random() - 0.5) * 2, -1, 'gut'));
+        this.add(new FBEffect('impact', cx, cy, { dur: 14, big: true }));
+        this.hitStop = 24; this.slow = 50; this.shake = 30; this.redFlash = 1.2; this.impact(1, true);
+        Sound.punch(2.2); Sound.play('boom', { rate: 0.6 }); Sound.play('bosshit');
+      }
+    }
+    if (t > 82 && t < 120) { h.spin = null; h.x += (this.killTo - h.x) * 0.2; h.y += (this.gy - 40 - h.y) * 0.15; h.facing = -1; }
+    if (E.hole && E.state === 'impaled' && t % 5 === 0) this.add(new Gore(this, E.x + (Math.random() - 0.5) * 16, E.y - 36, (Math.random() - 0.5) * 0.6, 0.5, 'blood'));
+    if (t === 150) this.say('eggman', 'I... knew you had... it in you.', { dur: 230, prio: 5 });
+    if (t === 400) {   // he drops
+      E.state = 'corpse'; E.ground = true; E.y = this.gy; Sound.play('boom', { rate: 0.4, vol: 0.6 }); this.shake = 10;
+      for (let i = 0; i < 8; i++) this.stain(E.x - 40 + i * 12, this.gy, 10 + Math.random() * 8, false);
+    }
+    if (t === 470) this.metal = new MetalSonic(this, E.x + 10, E.y - 160);
+    if (M) {
+      M.update();
+      if (M.state === 'grab') M.state = 'hover';
+      if (M.state === 'hover' && t < 640) { M.x += (E.x + 10 - M.x) * 0.05; }
+    }
+    if (t === 560) { this.say('sonic', '...', { dur: 80, prio: 5 }); }
+    if (t === 640 && M) {   // Metal takes what's left of him
+      E.state = 'carried'; E.corpse = true; M.state = 'hover';
+      Sound.play('release', { rate: 1.6 });
+    }
+    if (E.state === 'carried' && M) { E.x = M.x + 6; E.y = M.y + 150; E.facing = 1; }
+    if (t === 700) this.memo = { text: 'Metal Sonic will remember that.', t: 0 };
+    if (t === 720 && M) { M.state = 'out'; Sound.play('release', { rate: 0.5 }); }
+    if (t === 900) { this.phase = 'collapse'; this.t = 0; Sound.stopTrack(); Sound.stopMusic(); }
+  }
+
+  startRescue() {
+    if (this.phase !== 'brawl' && this.phase !== 'choice') return;
     this.phase = 'rescue'; this.t = 0;
     const h = this.hero, E = this.egg2;
     h.grab = null; h.pound = null; h.punchT = 0; h.lunge = 0; h.invuln = 0;
@@ -1288,7 +1382,9 @@ class FinalBattle {
     }
     if (E.state === 'carried' && this.metal) { E.x = this.metal.x + 6; E.y = this.metal.y + 150; E.rot = 0; E.facing = 1; }
     if (t === 100) this.say('sonic', 'WHAT?!', { dur: 70, prio: 5, big: true });
+    if (t === 110 && this.spared) E.smile = true;
     if (t === 160) this.say('eggman', 'Ho ho ho! Perfect timing, Metal!', { dur: 140, prio: 5 });
+    if (t === 300 && this.spared) this.memo = { text: 'Eggman will remember that.', t: 0 };
     if (t === 250) this.say('sonic', '...Metal Sonic?!', { dur: 120, prio: 5 });
     if (t === 340) this.say('eggman', "This isn't over, hedgehog! Not by a long shot!", { dur: 160, prio: 5 });
     if (t === 420 && this.metal) { this.metal.state = 'out'; Sound.play('release', { rate: 0.5 }); }
@@ -1433,6 +1529,11 @@ class FinalBattle {
       if (this.egg2) this.egg2.update();
       if (g.rings <= 0) { this.phase = 'lost'; this.t = 0; h.active = false; Sound.play('death'); Sound.stopTrack(); Sound.stopMusic(); this.say('sonic', 'No... my power...', { prio: 5, dur: 120 }); }
       if (this.t % 600 === 0) for (let i = 0; i < 3; i++) this.add(new FloatRing(this, this.ax + 100 + Math.random() * 1000, this.camY + 160, 0, 1));
+    } else if (this.phase === 'choice') {
+      this.updateChoice(inp);
+    } else if (this.phase === 'kill') {
+      this.updateKill();
+      if (this.phase !== 'kill') return;
     } else if (this.phase === 'rescue') {
       this.updateRescue(inp);
     } else if (this.phase === 'collapse') {
@@ -1459,11 +1560,13 @@ class FinalBattle {
     const cam = this.g.cam, h = this.hero, E = this.egg2;
     const center = { x: cam.x + VIEW_W / 2, y: cam.y + VIEW_H * 0.55 };
     let tz = 1, tf = center;
-    if ((this.phase === 'brawl' || this.phase === 'rescue') && E) {
+    if ((this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'choice' || this.phase === 'kill') && E && E.state !== 'carried') {
       tf = { x: (h.x + E.x) / 2, y: (h.y + E.y - 60) / 2 };
       const d = Math.abs(h.x - E.x) + Math.abs(h.y - (E.y - 60)) * 0.6;
       tz = h.pound ? 2.4 : Math.max(1.45, Math.min(2.1, 2.35 - d / 480));
       if (this.phase === 'rescue') tz = this.t < 90 ? 1.9 : 1.25;
+      if (this.phase === 'choice') tz = 1.8;
+      if (this.phase === 'kill') tz = this.t < 70 ? 1.7 : this.t < 400 ? 2.1 : 1.5;
     } else if (this.phase === 'rip' && this.t > 60) {
       const hp = this.robot.headPos(); tf = { x: hp.x - 40, y: hp.y + 20 }; tz = 1.6;
     }
@@ -1558,7 +1661,7 @@ class FinalBattle {
       g.text(ctx, 'WARNING', VIEW_W / 2, 300, 56, '#ff3030', 'center', '#000');
       g.text(ctx, 'EGG COLOSSUS APPROACHING', VIEW_W / 2, 350, 18, '#fff', 'center', '#000');
     }
-    if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'tbc') this.drawRage(ctx, t);
+    if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'tbc' || this.phase === 'choice' || this.phase === 'kill') this.drawRage(ctx, t);
     if (this.phase === 'collapse') {
       const p = 0.5 + 0.5 * Math.sin(t * 0.2);
       ctx.fillStyle = `rgba(255,0,0,${0.12 + 0.18 * p})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -1566,6 +1669,40 @@ class FinalBattle {
     }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.phase === 'tbc') this.drawTBC(ctx, t);
+  }
+
+  drawChoice(ctx) {
+    const g = this.g, C = this.choice, k = Math.min(1, C.t / 20), t = this.g.t;
+    ctx.save(); ctx.globalAlpha = k;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 70, VIEW_W, 160);
+    g.text(ctx, 'WHAT WILL YOU DO?', VIEW_W / 2, 108, 20, '#fff', 'center', '#000');
+    const opt = (label, x, sel, col, arrow) => {
+      const w = 300, y = 124;
+      ctx.fillStyle = sel ? col : 'rgba(30,30,40,.85)'; ctx.fillRect(x - w / 2, y, w, 56);
+      ctx.strokeStyle = sel ? '#fff' : col; ctx.lineWidth = sel ? 4 : 2; ctx.strokeRect(x - w / 2, y, w, 56);
+      g.text(ctx, arrow + '  ' + label, x, y + 38, 24, sel ? '#fff' : col, 'center', '#000');
+    };
+    opt('KILL', VIEW_W / 2 - 200, C.sel === 'kill', '#c3141e', '\u25C0');
+    opt('SPARE', VIEW_W / 2 + 200, C.sel === 'spare', '#2f7dff', '\u25B6');
+    if (C.sel && Math.floor(t / 20) % 2) g.text(ctx, `PRESS ${keyLabel('punch')} TO CONFIRM`, VIEW_W / 2, 214, 14, '#ffd23f', 'center', '#000');
+    else if (!C.sel) g.text(ctx, 'LEFT OR RIGHT TO CHOOSE', VIEW_W / 2, 214, 14, '#c9d4ff', 'center', '#000');
+    ctx.restore();
+  }
+
+  // Telltale-style note that the choice has consequences
+  drawMemo(ctx) {
+    const m = this.memo; m.t++;
+    const a = Math.min(1, m.t / 25, Math.max(0, (260 - m.t) / 30));
+    if (m.t > 260) { this.memo = null; return; }
+    ctx.save(); ctx.globalAlpha = a;
+    const x = 40, y = 190;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - 12, y - 30, 560, 48);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + 8, y - 6, 12, 0.3, Math.PI * 1.9); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x + 18, y - 16); ctx.lineTo(x + 24, y - 4); ctx.lineTo(x + 12, y - 6); ctx.fill();
+    ctx.font = `italic 18px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000'; ctx.fillText(m.text, x + 36 + 2, y - 4 + 2);
+    ctx.fillStyle = '#fff'; ctx.fillText(m.text, x + 36, y - 4);
+    ctx.restore();
   }
 
   // Sonic's fury: pulsing red edges that close in as rage builds, red flash on heavy blows, letterbox bars
@@ -1614,6 +1751,8 @@ class FinalBattle {
 
   drawHUD(ctx) {
     const g = this.g, R = this.robot, h = this.hero;
+    if (this.phase === 'choice' && this.t >= 60) this.drawChoice(ctx);
+    if (this.memo) this.drawMemo(ctx);
     if (this.phase === 'battle' || this.phase === 'finale') {
       const w = 520, x = VIEW_W / 2 - w / 2, y = 26;
       ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - 5, y - 5, w + 10, 26);
@@ -1629,7 +1768,7 @@ class FinalBattle {
         g.text(ctx, label, bx + 8, by + 17, 11, '#1a1406', 'left', null);
       });
     }
-    if (this.phase === 'brawl' || this.phase === 'rescue') {
+    if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'choice') {
       const E = this.egg2;
       if (E) {
         const w = 520, x = VIEW_W / 2 - w / 2, y = 26;

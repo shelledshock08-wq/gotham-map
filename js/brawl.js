@@ -37,7 +37,22 @@ function drawEggFrame(ctx, idx, x, y, opts = {}) {
   if (opts.flip) ctx.scale(-1, 1);
   if (opts.sx || opts.sy) ctx.scale(opts.sx || 1, opts.sy || 1);   // impact squash
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
-  ctx.drawImage(img, f[0] * k, f[1] * k, f[2] * k, f[3] * k, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+  if (opts.hole) {
+    // draw him on a scratch canvas, punch the hole out, then rim it with blood
+    const c = drawEggFrame.scratch || (drawEggFrame.scratch = document.createElement('canvas'));
+    c.width = Math.ceil(w) + 2; c.height = Math.ceil(h) + 2;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(img, f[0] * k, f[1] * k, f[2] * k, f[3] * k, 0, 0, Math.round(w), Math.round(h));
+    const hx = w * 0.5, hy = h * 0.52, rx = w * 0.15, ry = h * 0.16;
+    g.globalCompositeOperation = 'destination-out';
+    g.beginPath(); g.ellipse(hx, hy, rx, ry, 0, 0, Math.PI * 2); g.fill();
+    g.globalCompositeOperation = 'source-atop';
+    g.lineWidth = 7; g.strokeStyle = '#4a0008'; g.beginPath(); g.ellipse(hx, hy, rx + 3, ry + 3, 0, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 3; g.strokeStyle = '#b3121c'; g.beginPath(); g.ellipse(hx, hy, rx + 1, ry + 1, 0, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#7a0a10'; for (let i = 0; i < 5; i++) g.fillRect(hx - rx + i * rx * 0.45, hy + ry, 3, 8 + (i * 7) % 15);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(c, Math.round(-w / 2), Math.round(-h));
+  } else ctx.drawImage(img, f[0] * k, f[1] * k, f[2] * k, f[3] * k, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   ctx.restore();
 }
 
@@ -68,7 +83,7 @@ class PowFX {
 
 // Blood droplets and knocked-out teeth. They fall, hit the floor and leave stains.
 class Gore {
-  constructor(fb, x, y, vx, vy, kind) { this.fb = fb; this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.kind = kind; this.t = 0; this.r = kind === 'blood' ? 2 + Math.random() * 3.5 : 0; this.rot = Math.random() * 6; }
+  constructor(fb, x, y, vx, vy, kind) { this.fb = fb; this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.kind = kind; this.t = 0; this.r = kind === 'blood' ? 2 + Math.random() * 3.5 : 0; this.rot = Math.random() * 6; this.life = kind === 'organ' || kind === 'gut' ? 2400 : 600; this.sz = 0.8 + Math.random() * 0.6; }
   update() {
     this.t++; this.vy += 0.45; this.x += this.vx; this.y += this.vy; this.rot += this.vx * 0.1;
     const fb = this.fb;
@@ -79,11 +94,26 @@ class Gore {
       else if (Math.abs(this.vy) > 3) { this.vy = -this.vy * 0.35; this.vx *= 0.6; }
       else { this.vy = 0; this.vx *= 0.8; }
     }
-    if (this.t > 600) this.dead = true;
+    if ((this.kind === 'organ' || this.kind === 'gut') && this.t % 7 === 0 && this.t < 200) this.fb.stain(this.x, this.fb.gy, 3 + Math.random() * 3, false);
+    if (this.t > this.life) this.dead = true;
   }
   draw(ctx, cam) {
     const x = this.x - cam.x, y = this.y - cam.y;
-    if (this.kind === 'blood') {
+    if (this.kind === 'organ') {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.rot); ctx.scale(this.sz, this.sz);
+      ctx.fillStyle = '#5e0a12'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8e1a24'; ctx.beginPath(); ctx.ellipse(-2, -1, 6, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,190,190,.5)'; ctx.fillRect(-4, -3, 3, 2);
+      ctx.restore();
+    } else if (this.kind === 'gut') {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.rot); ctx.scale(this.sz, this.sz);
+      for (let i = 0; i < 5; i++) {
+        const px = (i - 2) * 6, py = Math.sin(i * 1.4 + this.x * 0.05) * 4;
+        ctx.fillStyle = i % 2 ? '#c8606a' : '#b04652'; ctx.beginPath(); ctx.arc(px, py, 4.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(255,220,220,.4)'; ctx.fillRect(-10, -3, 16, 1.5);
+      ctx.restore();
+    } else if (this.kind === 'blood') {
       ctx.fillStyle = '#9b0d12';
       ctx.beginPath(); ctx.ellipse(x, y, this.r, this.r * (1 + Math.min(1.5, Math.abs(this.vy) * 0.08)), Math.atan2(this.vy, this.vx) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
     } else {
@@ -223,7 +253,7 @@ class BrawlEggman {
 
   damage(d, big) {
     this.hp -= d; this.flash = big ? 10 : 6;
-    if (this.hp <= 1) { this.hp = 1; this.fb.startRescue(); }
+    if (this.hp <= 1) { this.hp = 1; this.fb.startChoice(); }
   }
 
   // Spray blood from (x, y) in direction dir (-1/1, 0 = upward); teeth with probability toothP
@@ -316,18 +346,28 @@ class BrawlEggman {
     else if (this.state === 'cower') idx = lose(0.15);
     else if (this.state === 'down' || this.state === 'pinned') { idx = eggFrame('lose2'); rot = this.state === 'pinned' ? -Math.PI / 2 * (flip ? -1 : 1) * 0.9 : 0; }
     else if (this.state === 'hurt') idx = eggFrame('lose0');
+    else if (this.state === 'impaled') idx = eggFrame('lose1');
+    else if (this.state === 'corpse') { idx = eggFrame('lose2'); rot = (flip ? 1 : -1) * Math.PI / 2 * 0.95; }
+    else if (this.state === 'carried' && this.corpse) { idx = eggFrame('lose2'); rot = Math.PI / 2 * 0.85; }
     else { idx = lose(0.3); rot = this.ground ? 0 : this.rot; }
     rot += this.snap * this.snapDir * 0.35;   // head snaps back on impact
     let dx = 0;
     if (this.state === 'cower' || this.fear > 0.6) dx = (Math.random() - 0.5) * (this.state === 'cower' ? 6 : 2);
+    if (this.state === 'impaled') dx = (Math.random() - 0.5) * 3;
+    if (this.state === 'corpse' || this.corpse) dx = 0;
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
     const sq = { sx: 1 + 0.28 * this.squash, sy: 1 - 0.2 * this.squash };
     this.idx = idx; this.drawRot = rot;
-    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, dmg: this.dmgLevel, ...sq });
+    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, dmg: this.dmgLevel, hole: this.hole, ...sq });
+    if (this.smile) {   // a knowing little smile under the mustache
+      const hp = this.headPos(), sx = hp.x - cam.x + dx, sy = hp.y - cam.y;
+      ctx.save(); ctx.strokeStyle = '#2a0a04'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy + 3, 9, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillRect(sx - 6, sy + 8, 12, 3); ctx.restore();
+    }
     if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85, ...sq });
     // sweat drops when scared
-    if (this.fear > 0.35 && t % 30 < 20) {
+    if (this.fear > 0.35 && t % 30 < 20 && !this.hole && !this.corpse && !this.smile) {
       ctx.fillStyle = '#9fe3ff';
       for (let i = 0; i < 1 + Math.floor(this.fear * 3); i++) {
         const sx = x + (i % 2 ? 40 : -40) + i * 4, sy = y - 120 + ((t + i * 9) % 30);

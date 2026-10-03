@@ -81,6 +81,7 @@ class SpeechSystem {
           const hp = R.headPos();
           return { x: F.egg.x + (hp.x - F.egg.x) * k, y: F.egg.y + (hp.y - F.egg.y) * k - 70 };
         }
+        if (F.egg2) { const e = F.egg2.headPos(); return { x: e.x, y: e.y - 40 }; }   // on foot
         const hp = F.robot.headPos(); return { x: hp.x, y: hp.y - 70 };
       }
       if (g.boss) return { x: g.boss.x, y: g.boss.y - 80 };

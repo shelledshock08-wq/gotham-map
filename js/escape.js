@@ -6,7 +6,7 @@
 'use strict';
 
 const ESC_DT = 1 / 60;
-const ESC_RUN = 38, ESC_BOOST = 64, ESC_SLIDE = 34;
+const ESC_RUN = 38, ESC_BOOST = 70, ESC_SLIDE = 34, ESC_ROLL = 50;   // spin dash: faster than running, slower than boost
 const ESC_GRAV = 34, ESC_JUMP = 12.5;
 const ESC_WATER_MIN = 41;        // slower than this on water and you sink
 const ESC_SONIC_SCALE = 1.9;     // model is ~1 m tall; the course is built for a ~1.9 unit Sonic
@@ -298,6 +298,7 @@ class EscapeCourse {
     this.seg(140).seg(160, { yaw: 0.6, bank: 0.12 }).seg(100).seg(140, { yaw: -0.7, pitch: -0.06, bank: -0.12 }).seg(70);
     this.hint(8, 'The whole base is coming down! Hold {laser} to BOOST!');
     this.rings(30, 8, 0); this.rings(80, 8, -4); this.rings(110, 6, 4);
+    this.hint(100, 'Hold {clones}, let go: SPIN DASH! Faster than running, and it busts bots!');
     this.hint(150, 'Crates! BOOST {laser} straight through them!');
     for (const x of [-4, 0, 4]) this.add('crate', 172, x);
     this.hint(196, 'Boost or jump {punch} into those bots!');
@@ -374,7 +375,8 @@ class EscapeCourse {
     // ===== D. across the bay =====
     s = this.at0;
     this.seg(60, { env: 'road', w: 16 });
-    this.hint(s, "Water! Keep BOOSTING {laser} or I'll sink!");
+    this.hint(s - 120, "Water up ahead. Save some boost: if I stop boosting out there, I sink!");
+    this.hint(s, "HOLD {laser}! Don't let go till we're across!");
     s = this.at0;
     this.WATER = [s];
     this.seg(220, { env: 'water', w: 24, yaw: 0.5, bank: 0.1 });
@@ -501,6 +503,7 @@ class EscapeStage {
     this.ground = true; this.jumped = false; this.slide = false; this.boosting = false; this.boostT = 0;
     this.gauge = 100; this.invuln = 0; this.homing = null; this.chain = 0; this.airDash = false;
     this.lean = 0; this.dead = null; this.trick = 0; this.sink = 0; this.hitT = 0; this.dashT = 0; this.dashAir = 0;
+    this.rev = 0; this.rolling = false;
     this.collapse = -70; this.shake = 0; this.flash = 0; this.boostFlash = 0; this.fovKick = 0;
     this.hintIdx = 0; this.objIdx = 0;
     this.fx = []; this.lostRings = []; this.chunks = [];
@@ -803,7 +806,7 @@ class EscapeStage {
   }
 
   // ------------------------------------------------------------ helpers
-  get height() { return this.slide ? 0.8 : (this.jumped || this.homing) ? 1.2 : 1.9; }
+  get height() { return this.slide ? 0.8 : (this.jumped || this.homing || this.rolling || this.rev > 0) ? 1.2 : 1.9; }
   get onWater() { return this.course.env(this.s) === 'water'; }
 
   sprite(mat, pos, size, dur, vy = 0.02, v = null) {
@@ -888,12 +891,27 @@ class EscapeStage {
     if (!wantBoost) this.boosting = false;
     Sound.boostHold(this.boosting ? 1 : 0);
     if (this.boosting) {
-      this.boostT++; this.gauge = Math.max(0, this.gauge - (this.onWater ? 0.3 : 0.42));
+      this.boostT++; this.gauge = Math.max(0, this.gauge - (this.onWater ? 0.3 : 0.48));
       if (this.t % 2 === 0) {   // blue sparks streaming off him
         const p = this.course.at(this.s - 1.2, this.x + (Math.random() - 0.5) * 1.4, this.y + 0.4 + Math.random() * 1.4);
         this.sprite(this.blueMat, p, 1.2 + Math.random(), 18, 0, this.course.frame(this.s).f.clone().multiplyScalar(-0.15));
       }
     }
+
+    // ---- spin dash: hold to rev, let go to roll (no gauge; can't skim water)
+    if (inp.clones && this.ground && !this.boosting && !this.onWater) {
+      if (this.rev === 0) { this.rolling = false; Sound.play('roll', { vol: 0.6 }); }
+      this.rev = Math.min(45, this.rev + 1);
+      this.speed *= 0.975;
+      if (this.rev % 9 === 0) Sound.play('charge', { rate: 1 + this.rev / 50, vol: 0.6 });
+    } else if (this.rev > 0) {
+      if (this.ground && !this.boosting) {
+        this.rolling = true; this.speed = Math.max(this.speed, ESC_ROLL + this.rev * 0.15);
+        Sound.play('release'); this.shake = Math.max(this.shake, 5); this.fovKick = 6;
+      }
+      this.rev = 0;
+    }
+    if (this.rolling && (this.boosting || !this.ground || this.onWater || inp.down || this.speed < 24)) this.rolling = false;
 
     // ---- ground controls
     const steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
@@ -901,12 +919,12 @@ class EscapeStage {
     this.slide = this.ground && inp.down && this.speed > 12 && !this.boosting && !this.onWater;
     if (this.slide && !this.wasSlide) Sound.play('roll', { vol: 0.6 });
     this.wasSlide = this.slide;
-    let target = this.boosting ? ESC_BOOST : this.slide ? ESC_SLIDE : ESC_RUN;
+    let target = this.boosting ? ESC_BOOST : this.rev > 0 ? 20 : this.rolling ? ESC_ROLL : this.slide ? ESC_SLIDE : ESC_RUN;
     if (this.dashT > 0) { this.dashT--; target = Math.max(target, 70); }
     this.speed += (target - this.speed) * (this.speed < target ? 0.025 : 0.015);
 
     if (inp.punchPressed) {
-      if (this.ground) { this.vy = ESC_JUMP; this.ground = false; this.jumped = true; this.airDash = false; Sound.play('jump'); }
+      if (this.ground) { this.vy = ESC_JUMP; this.ground = false; this.jumped = true; this.airDash = false; this.rev = 0; Sound.play('jump'); }
       else if (!this.homing) {
         const tg = this.homingTarget();
         if (tg) { this.homing = { tg, t: 0 }; this.jumped = true; Sound.play('release', { rate: 1.4, vol: 0.7 }); }
@@ -941,12 +959,13 @@ class EscapeStage {
     }
     if (this.trick > 0) this.trick--;
     // water: you only stay up while you're fast
+    // water: only boosting (or a dash panel's kick) keeps you on top. Anything else and you go under.
     if (this.onWater && this.ground) {
-      if (this.speed < ESC_WATER_MIN) {
-        this.sink += 1;
-        if (this.sink === 1) g.speech.say('sonic', 'Too slow! BOOST {laser}!', { dur: 90, prio: 4, cool: 200, coolKey: 'sink' });
-        if (this.sink > 40) this.die('sank');
-      } else this.sink = Math.max(0, this.sink - 2);
+      if (!this.boosting && this.dashT <= 0) {
+        this.sink = 40; this.splash(10);
+        g.speech.say('sonic', this.gauge <= 0 ? 'Out of boost--!' : 'I stopped boosting--!', { dur: 90, prio: 5 });
+        this.die('sank');
+      } else this.sink = 0;
       if (this.t % 2 === 0) this.splash(this.boosting ? 2 : 1);
     } else this.sink = 0;
 
@@ -1057,7 +1076,7 @@ class EscapeStage {
         }
         case 'crate':
           if (crossed && dx < 1.6 && this.y < 2) {
-            if (this.boosting || this.homing) { this.smash(o); this.speed *= 0.85; }
+            if (this.boosting || this.homing || this.rolling) { this.smash(o); this.speed *= 0.85; }
             else { this.bonk(o, 1.6); }
           }
           break;
@@ -1067,7 +1086,7 @@ class EscapeStage {
         case 'pawn': case 'drone': {
           const oy = o.y || 0, oh = o.type === 'pawn' ? 2.6 : 1.4;
           if (Math.abs(ds) < 1.4 && dx < 1.5 && this.y < oy + oh && top > oy - (o.type === 'drone' ? 0.7 : 0)) {
-            if (this.boosting || this.jumped || this.homing || this.dashAir > 0) this.smash(o);
+            if (this.boosting || this.jumped || this.homing || this.rolling || this.dashAir > 0) this.smash(o);
             else this.hurt('hit');
           }
           break;
@@ -1204,9 +1223,10 @@ class EscapeStage {
       const k = this.phase === 'tbc' ? 1 : Math.min(1, (this.t - 150) / 30);
       M.root.rotateY(Math.PI * k);
     }
-    const inBall = !!((this.jumped || this.homing) && !this.ground && !this.dead);
+    const inBall = !!(((this.jumped || this.homing) && !this.ground && !this.dead) || this.rolling || this.rev > 0);
     M.body.visible = !inBall; M.ball.visible = inBall;
-    if (inBall) M.ball.rotation.x += 0.5;
+    if (inBall) M.ball.rotation.x += this.rev > 0 ? 0.6 + this.rev * 0.02 : 0.5;
+    M.ball.position.y = this.rev > 0 || this.rolling ? 0.62 : 0.75;
     M.body.rotation.set(0, 0, 0); M.body.position.set(0, 0, 0);
     const sp = this.speed;
     if (this.phase === 'intro' || this.phase === 'tbc' || (this.phase === 'outro' && this.speed < 3 && this.ground)) this.play('idle', 0.3);
@@ -1390,6 +1410,8 @@ class EscapeStage {
     ctx.fillStyle = 'rgba(0,0,0,.35)'; for (let i = 1; i < 10; i++) ctx.fillRect(i * w / 10 - 1, 0, 2, 22);
     ctx.restore();
     g.text(ctx, 'BOOST', x - 6, y - 14, 16, '#7fe3ff');
+    g.text(ctx, `SPIN DASH [${keyLabel('clones')}]`, x + 170, y - 14, 12, this.rolling || this.rev > 0 ? '#ffd23f' : '#c9d4ff');
+    if (this.rev > 0) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + 170, y - 8, 150 * this.rev / 45, 5); }
     g.text(ctx, '[' + keyLabel('laser') + ']', x + 110, y - 14, 12, '#fff');
     const mw = 420, mx = VIEW_W / 2 - mw / 2, my = 36;
     const gap = Math.max(0, Math.min(110, this.s - this.collapse));

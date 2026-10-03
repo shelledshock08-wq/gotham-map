@@ -14,7 +14,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280, height: 720, minWidth: 640, minHeight: 360,
-    backgroundColor: '#05081a', autoHideMenuBar: true, title: 'Sonic: Emerald Meadow',
+    backgroundColor: '#05081a', autoHideMenuBar: true, title: 'Sonic Anthology',
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   win.removeMenu();

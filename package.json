@@ -1,7 +1,7 @@
 {
-  "name": "sonic-emerald-meadow",
+  "name": "sonic-anthology",
   "version": "1.0.0",
-  "description": "Sonic: Emerald Meadow - unofficial non-commercial fan game",
+  "description": "Sonic Anthology - unofficial non-commercial fan game",
   "main": "electron/main.js",
   "author": "shelledshock08-wq",
   "license": "UNLICENSED",
@@ -16,8 +16,8 @@
     "electron-builder": "25.1.8"
   },
   "build": {
-    "appId": "com.fangame.sonic-emerald-meadow",
-    "productName": "Sonic Emerald Meadow",
+    "appId": "com.fangame.sonic-anthology",
+    "productName": "Sonic Anthology",
     "directories": { "output": "dist" },
     "files": ["index.html", "js/**", "assets/**", "electron/**", "package.json"],
     "win": { "target": "portable", "signAndEditExecutable": false },

@@ -708,7 +708,7 @@ class Game {
     ctx.save(); ctx.translate(cx, 548);
     ctx.fillStyle = '#e3262e'; ctx.beginPath(); ctx.moveTo(-250, -22); ctx.lineTo(250, -22); ctx.lineTo(230, 22); ctx.lineTo(-230, 22); ctx.closePath(); ctx.fill();
     ctx.restore();
-    this.text(ctx, 'EMERALD MEADOW', cx, 558, 22, '#fff', 'center', '#5a0b14');
+    this.text(ctx, 'ANTHOLOGY', cx, 560, 26, '#fff', 'center', '#5a0b14');
 
     if (Math.floor(t / 30) % 2 === 0) this.text(ctx, 'PRESS ENTER / TAP TO START', cx, 630, 20, '#ffd23f', 'center');
     this.text(ctx, `HI-SCORE ${this.hiscore}`, cx, 40, 14, '#fff', 'center');

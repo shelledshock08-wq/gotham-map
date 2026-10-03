@@ -1,4 +1,4 @@
-# Sonic: Emerald Meadow (fan game)
+# Sonic Anthology (fan game)
 
 A complete 2D Sonic-style platformer in plain HTML5 canvas and JavaScript. It has no build step and no dependencies.
 
@@ -56,10 +56,11 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Action | Keyboard | Gamepad | Touch |
 |---|---|---|---|
 | Steer | ← / → | D-pad / stick | ◀ ▶ |
-| Boost (hold; smashes crates and robots, but Egg trucks and rocks are solid) | X | X | B |
+| Boost (hold; very fast but drains quickly; smashes crates and robots, but Egg trucks and rocks are solid) | X | X | B |
 | Jump / homing attack in mid-air / air dash | Z / Space | A | A |
 | Slide | hold ↓ | Down | ▼ |
-| Run on water | keep boosting (or hit the floating dash panels) | | |
+| Spin dash: hold to rev, let go to roll (faster than running, slower than boost; busts crates and robots; no gauge; not on water) | hold C | hold Y | hold X |
+| Run on water | you MUST be boosting (floating dash panels give a short kick); stop and you drown instantly | | |
 
 **Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–8) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl or the 3D base escape. Turn it off with `DEV_MENU = false` in `js/game.js`.
 
@@ -76,7 +77,11 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation. Counter Eggman's eye laser by holding your laser while it charges: the beams lock into a clash you win by mashing.
-- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away.
+- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. When his health runs out you choose: **KILL** or **SPARE**.
+  - **Spare:** Metal Sonic snatches him away at the last second, as before, and Eggman smiles. *Eggman will remember that.*
+  - **Kill:** Sonic spin-dashes straight through him, leaving a hole in his body. His last words are "I... knew you had... it in you." Metal Sonic arrives too late and carries the body away. *Metal Sonic will remember that.*
+
+  Either way the game carries on to the escape.
 - **Egg Base Escape:** Eggman sets the base to self-destruct. Sonic drops out of super form and the game switches to a behind-the-back 3D boost stage in the style of Sonic Generations (three.js), with the Sonic Generations model and animations: run, max-speed sprint, spring, hurt, falling and victory. It plays *Rise From The Ashes* if `assets/music/rise_from_the_ashes.mp3` is present. The course has five parts:
   1. You boost through the collapsing base and a loop in its hangar.
   2. You burst out onto an elevated highway through a burning city at dusk, with banked turns, cars, Egg Pawns, a broken bridge you cross by chaining homing attacks, a loop and a corkscrew.
