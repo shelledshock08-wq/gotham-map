@@ -679,7 +679,7 @@ class SuperHero {
       drawBeam(ctx, x + Math.cos(B.ang) * 20, y + Math.sin(B.ang) * 20, e.x - cam.x, e.y - cam.y, B.w, '#ffffff', '#ffc929', t);
     }
     const rage = this.fb.phase === 'brawl' || this.fb.phase === 'rescue' ? this.fb.rage : 0;
-    drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1, rage);
+    if (!this.depowered) drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1, rage);
     if (rage > 0.35 && t % 6 === 0) this.fb.add(new FBEffect('ember', this.x + (Math.random() - 0.5) * 50, this.y + 20, { dur: 40, vx: (Math.random() - 0.5) * 1.2, vy: -2 - Math.random() * 2 }));
     if (rage > 0.55 && t % 50 === 0) this.fb.add(new FBEffect('dust', this.x + this.facing * 16, this.y - 14, { dur: 20 }));   // heavy breathing
     if (this.invuln > 0 && Math.floor(this.invuln / 3) % 2 === 0) return;
@@ -699,7 +699,8 @@ class SuperHero {
       lx = Math.cos(a) * d; ly = Math.sin(a) * d;
     }
     if (this.pound && this.punchT > 0) ly = this.punchT > 4 ? -8 : 6;
-    drawSonicFrame(ctx, animFrame(pose, this.anim), x + lx, y + 34 + bob + ly, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
+    if (this.depowered) pose = 'idle';
+    drawSonicFrame(ctx, animFrame(pose, this.anim), x + lx, y + 34 + bob + ly, { sheet: this.depowered ? 'sonic' : 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
     if (this.carry) {
       ctx.save(); ctx.translate(x, y - 64); drawPartIcon(ctx, this.carry.kind, 0.6, true); ctx.restore();
       drawPrompt(ctx, x, y - 112, 'grab', 'THROW!', t);
@@ -1251,7 +1252,7 @@ class FinalBattle {
     if (this.phase !== 'brawl') return;
     this.phase = 'rescue'; this.t = 0;
     const h = this.hero, E = this.egg2;
-    h.grab = null; h.pound = null; h.punchT = 0; h.lunge = 0;
+    h.grab = null; h.pound = null; h.punchT = 0; h.lunge = 0; h.invuln = 0;
     E.act = null; E.stun = 9999; if (E.state === 'grabbed') { E.state = 'air'; E.ground = false; }
     if (E.state === 'pinned') E.state = 'down';
     this.objs = this.objs.filter((o) => !(o instanceof EggBomb));
@@ -1291,7 +1292,24 @@ class FinalBattle {
     if (t === 250) this.say('sonic', '...Metal Sonic?!', { dur: 120, prio: 5 });
     if (t === 340) this.say('eggman', "This isn't over, hedgehog! Not by a long shot!", { dur: 160, prio: 5 });
     if (t === 420 && this.metal) { this.metal.state = 'out'; Sound.play('release', { rate: 0.5 }); }
-    if (t === 520) { this.phase = 'tbc'; this.t = 0; Sound.play('actclear', { rate: 0.8 }); }
+    if (t === 520) { this.phase = 'collapse'; this.t = 0; Sound.stopTrack(); Sound.stopMusic(); }
+  }
+
+  // Eggman's parting gift: the base self-destructs. Hands over to the 3D escape.
+  updateCollapse() {
+    const t = this.t, h = this.hero, g = this.g;
+    this.shake = Math.max(this.shake, 4 + Math.min(14, t / 16));
+    if (t % 40 === 1) Sound.play('boom', { vol: 0.5, rate: 0.5 + Math.random() * 0.3 });
+    if (t % 9 === 0) this.add(new FBEffect('boom', this.ax + 80 + Math.random() * (this.aw - 160), this.camY + 60 + Math.random() * 300, { dur: 26, s: 1 + Math.random() }));
+    if (t % 5 === 0) this.add(new FBEffect('dust', this.ax + Math.random() * this.aw, this.camY + 30, { dur: 40 }));
+    if (t === 10) this.add(new FBEffect('text', this.ax + 640, this.camY + 250, { text: 'SELF-DESTRUCT ACTIVATED', dur: 150, size: 30, color: '#ff4040' }));
+    if (t === 40) this.add(new FBEffect('text', this.ax + 640, this.camY + 300, { text: '"ENJOY THE FIREWORKS, SONIC! HO HO HO!"', dur: 130, size: 16, color: '#ffd0c0' }));
+    if (t === 70) this.say('sonic', "He's blowing up the whole base?!", { dur: 110, prio: 5 });
+    if (t === 150) { this.say('sonic', 'My power\'s spent... Fine. Just me and my legs.', { dur: 130, prio: 5 }); this.flash = 0.6; h.depowered = true; h.facing = 1; Sound.play('ringloss', { rate: 0.7 }); }
+    if (t > 150) { h.y += (this.gy - 34 - h.y) * 0.12; h.vx = 0; h.vy = 0; }   // drops out of super form onto the floor
+    if (t === 240) this.say('sonic', 'Time to BOOST.', { dur: 90, prio: 5, big: true });
+    if (t > 290) this.flash = Math.min(1.2, (t - 290) / 25);
+    if (t === 320) { g.startEscape(); }
   }
 
   startFinale() {
@@ -1417,6 +1435,9 @@ class FinalBattle {
       if (this.t % 600 === 0) for (let i = 0; i < 3; i++) this.add(new FloatRing(this, this.ax + 100 + Math.random() * 1000, this.camY + 160, 0, 1));
     } else if (this.phase === 'rescue') {
       this.updateRescue(inp);
+    } else if (this.phase === 'collapse') {
+      this.updateCollapse();
+      if (this.phase !== 'collapse') return;
     } else if (this.phase === 'outro') {
       this.escape.x += 7; this.escape.y -= 4;
       h.x += (this.ax + 640 - h.x) * 0.03; h.y += (this.gy - 260 - h.y) * 0.03;
@@ -1538,6 +1559,11 @@ class FinalBattle {
       g.text(ctx, 'EGG COLOSSUS APPROACHING', VIEW_W / 2, 350, 18, '#fff', 'center', '#000');
     }
     if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'tbc') this.drawRage(ctx, t);
+    if (this.phase === 'collapse') {
+      const p = 0.5 + 0.5 * Math.sin(t * 0.2);
+      ctx.fillStyle = `rgba(255,0,0,${0.12 + 0.18 * p})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      if (Math.floor(this.t / 20) % 2 === 0) g.text(ctx, 'WARNING', VIEW_W / 2, 110, 48, '#ff3030', 'center', '#000');
+    }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.phase === 'tbc') this.drawTBC(ctx, t);
   }

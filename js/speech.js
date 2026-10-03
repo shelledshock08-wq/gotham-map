@@ -73,6 +73,7 @@ class SpeechSystem {
 
   speakerPos(who) {
     const g = this.g, F = g.final;
+    if (g.escape) return g.escape.speakerPos(who);
     if (who === 'eggman') {
       if (F) {
         if (F.phase === 'rise') {
@@ -94,7 +95,7 @@ class SpeechSystem {
       const pos = this.speakerPos(b.who);
       if (!pos) continue;
       const F = this.g.final;
-      const sp = F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
+      const sp = this.g.escape ? pos : F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
       this.drawBubble(ctx, b, sp.x, sp.y);
     }
   }

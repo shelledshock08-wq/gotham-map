@@ -1,7 +1,7 @@
 // Game state machine, camera, HUD and main loop.
 'use strict';
 
-// DEV ONLY: title-screen section skip menu (buttons + number keys 1-7). Turn off before release.
+// DEV ONLY: title-screen section skip menu (buttons + number keys 1-8). Turn off before release.
 const DEV_MENU = true;
 
 const FONT = '"Press Start 2P", "Courier New", monospace';
@@ -71,7 +71,7 @@ class Game {
     this.timeStopped = false;
     this.camLock = null; this.goal = null; this.goalLockX = null;
     this.boss = null; this.bossStarted = false; this.arena = null;
-    this.tally = null; this.deathHandled = false; this.final = null;
+    this.tally = null; this.deathHandled = false; this.final = null; this.endEscape();
     this.speech.clear(); this.combo = null; this.hitStop = 0;
     let start = null;
     for (const e of data.ents) {
@@ -214,6 +214,26 @@ class Game {
     this.boss = null;
     this.final = new FinalBattle(this, egg, false);
   }
+  // The 3D boost run out of the collapsing base
+  startEscape() {
+    this.endEscape();
+    this.final = null;
+    this.rings = 0; this.timeStopped = false;
+    this.speech.clear();
+    document.getElementById('touch').classList.add('super');
+    Sound.stopTrack();
+    this.escape = new EscapeStage(this);
+  }
+  endEscape() {
+    if (this.escape) this.escape.dispose();
+    this.escape = null;
+  }
+  escapeDeath() {
+    this.lives--;
+    if (this.lives <= 0) { this.endEscape(); this.gameOver('escape'); return; }
+    this.startEscape();
+  }
+
   gameOver(resume) {
     this.state = 'gameover'; this.goTimer = 0; this.resumeAt = resume;
     document.getElementById('touch').classList.remove('super');
@@ -227,7 +247,8 @@ class Game {
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000;
     this.state = 'play';
     Sound.play('oneup');
-    if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
+    if (this.resumeAt === 'escape') this.startEscape();
+    else if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
       const p = this.player;
       p.reset(this.arena.x + 300, this.arena.groundY);
       p.y = this.arena.groundY - STAND_H; p.ground = true;
@@ -250,6 +271,7 @@ class Game {
     this.bossStarted = true; this.timeStopped = true;
     this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
     this.rings = 50;
+    if (n === 8) { this.startEscape(); return; }
     if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
     else this.final = new FinalBattle(this, null, n === 7 ? 'brawl' : true);
   }
@@ -312,7 +334,7 @@ class Game {
     }
 
     // ---- play ----
-    if (inp.startPressed && !this.tally && !(this.final && this.final.phase === 'tbc')) { this.state = 'paused'; return; }
+    if (inp.startPressed && !this.tally && !(this.final && this.final.phase === 'tbc') && !(this.escape && this.escape.phase === 'tbc')) { this.state = 'paused'; return; }
     this.speech.update();
     if (this.combo && --this.combo.t <= 0) this.combo = null;
     if (this.hitStop > 0) { this.hitStop--; return; }   // impact freeze frames
@@ -325,6 +347,11 @@ class Game {
       if (--this.timers[i].t <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     }
 
+    if (this.escape) {
+      this.escape.update(inp);
+      if (this.tally) this.updateTally(inp);
+      return;
+    }
     if (this.final) {
       this.final.update(inp);
       for (const e of this.effects) e.update(this);
@@ -402,11 +429,11 @@ class Game {
     } else if (++T.wait > 150) {
       this.saveHi();
       if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
-      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
+      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
-  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; Sound.stopMusic(); Sound.stopTrack(); }
+  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); Sound.stopMusic(); Sound.stopTrack(); }
 
   saveHi() {
     if (this.score > this.hiscore) {
@@ -468,6 +495,15 @@ class Game {
   }
 
   drawPlay(ctx) {
+    if (this.escape) {
+      this.escape.draw(ctx);
+      this.speech.draw(ctx, { x: 0, y: 0 });
+      this.escape.drawHUD(ctx);
+      if (this.tally) this.drawTally(ctx);
+      if (this.state === 'paused') this.drawPause(ctx);
+      if (this.state === 'gameover') this.drawGameOver(ctx);
+      return;
+    }
     if (this.final) {
       this.final.draw(ctx, this.cam, this.t);
       this.speech.draw(ctx, this.cam);
@@ -625,7 +661,7 @@ class Game {
       this.text(ctx, 'CONTINUE?', VIEW_W / 2, 200, 48, '#fff', 'center', '#1d3fd1');
       this.text(ctx, String(left), VIEW_W / 2, 330, 72, '#ffd23f', 'center', '#000');
       drawSonicFrame(ctx, animFrame('tap', this.goTimer * 0.06), VIEW_W / 2, 520, { scale: 4 });
-      const where = this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
+      const where = this.resumeAt === 'escape' ? 'THE ESCAPE' : this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
       this.text(ctx, `RESUME AT ${where}`, VIEW_W / 2, 580, 16, '#c9d4ff', 'center');
       this.text(ctx, `CONTINUES LEFT: ${this.continues}   (SCORE RESETS)`, VIEW_W / 2, 620, 14, '#fff', 'center');
       if (Math.floor(this.goTimer / 30) % 2) this.text(ctx, 'PRESS START', VIEW_W / 2, 670, 20, '#ffd23f', 'center');
@@ -720,7 +756,7 @@ class Game {
       b.addEventListener('click', (e) => { e.stopPropagation(); if (game.state === 'title') game.devSkip(+b.dataset.skip); });
     }
     window.addEventListener('keydown', (e) => {
-      const m = /^Digit([1-7])$/.exec(e.code);
+      const m = /^Digit([1-8])$/.exec(e.code);
       if (m && game.state === 'title') game.devSkip(+m[1]);
     });
   }

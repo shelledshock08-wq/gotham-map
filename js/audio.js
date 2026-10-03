@@ -93,6 +93,20 @@ const SONGS = {
       'B5 - - - A5 - - - G5 - - - F#5 - - -',
     ],
   },
+  escape: {
+    bpm: 200, drums: 'boss', bass: 'drive', duty: 0.25,
+    chords: ['Am', 'F', 'G', 'E', 'Am', 'F', 'G', 'E'],
+    lead: [
+      'A5 - - A5 C6 - A5 - E6 - D6 - C6 - B5 -',
+      'A5 - - - F5 - A5 - C6 - - - A5 - C6 -',
+      'D6 - - D6 B5 - G5 - D6 - E6 - D6 - B5 -',
+      'G#5 - - - E5 - G#5 - B5 - - - E6 - - -',
+      'A5 A5 . A5 C6 . E6 . A6 - - - G6 - E6 -',
+      'F6 - - - C6 - A5 - F5 - A5 - C6 - F6 -',
+      'G6 - - - D6 - B5 - G5 - B5 - D6 - G6 -',
+      'G#6 - - - E6 - - - B5 - - - G#5 - - -',
+    ],
+  },
   invincible: {
     bpm: 190, drums: 'boss', bass: 'drive', duty: 0.25, arpLead: true,
     chords: ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'G'],

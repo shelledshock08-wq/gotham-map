@@ -51,7 +51,16 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Ground and pound (when he's knocked down) | Z next to him, mash Z | A | A |
 | Bite (while pinned) / haul him up by the leg | hold V / Up | hold B / Up | hold Y / ▲ |
 
-**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–7) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle or the brawl. Turn it off with `DEV_MENU = false` in `js/game.js`.
+**Egg Base Escape (3D boost run):**
+
+| Action | Keyboard | Gamepad | Touch |
+|---|---|---|---|
+| Steer | ← / → | D-pad / stick | ◀ ▶ |
+| Boost (hold; smashes crates, rubble and robots) | X | X | B |
+| Jump / homing attack in mid-air / air dash | Z / Space | A | A |
+| Slide | hold ↓ | Down | ▼ |
+
+**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–8) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl or the 3D base escape. Turn it off with `DEV_MENU = false` in `js/game.js`.
 
 ## Features
 
@@ -66,9 +75,10 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation. Counter Eggman's eye laser by holding your laser while it charges: the beams lock into a clash you win by mashing.
-- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away. TO BE CONTINUED.
+- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away.
+- **Egg Base Escape:** Eggman sets the base to self-destruct, and the game switches to a behind-the-back 3D boost stage in the style of Sonic Generations (three.js, with a low-poly Sonic built in code). You run on auto, steer, boost through crates and Egg Pawns, jump laser trip-wires, slide under laser fences, dodge falling ceiling, clear pits and chain homing attacks across drones, while the collapse chases you (the meter at the top). Rings fill the boost gauge. You burst out of the base, it explodes behind you, and TO BE CONTINUED. Dying restarts the escape.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
-- Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone), and dying in the brawl restarts the brawl. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle/brawl if you'd reached it.
+- Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone); dying in the brawl or the escape restarts that part. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle, brawl or escape if you had reached it.
 - An original chiptune soundtrack synthesized live with Web Audio: meadow, dunes, fortress, boss and invincibility themes.
 - Works with keyboard, gamepad and touch (on-screen controls appear automatically on phones and tablets).
 
@@ -88,6 +98,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/speech.js` | Speech bubbles and button prompts |
 | `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 | `js/brawl.js` | Eggman brawl, Metal Sonic, impact effects |
+| `js/escape.js` | 3D Egg Base Escape: course, low-poly Sonic, boost physics, hazards |
+| `js/lib/three.min.js` | three.js r149 (MIT), used only by the escape |
 | `js/eggframes.js` | Eggman sprite frame rects |
 | `js/eggface.js` | Eggman face anchors per frame (generated) |
 | `tools/make_egg_damage.py` | Paints the four beaten-up Eggman sheets (`eggman_d1-4.png`) and writes `js/eggface.js` |
@@ -98,6 +110,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **Sound effects / jingles:** Kenney "Digital Audio" and "Music Jingles", CC0 ([kenney.nl](https://kenney.nl)), via the [ETdoFresh/kenney.nl](https://github.com/ETdoFresh/kenney.nl) mirror. They were converted to MP3. See `assets/LICENSE-kenney.txt`.
 - **Sonic sprites:** fan-ripped 8-bit Sonic sprite sheet from [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML), downsampled to native resolution. Super Sonic is a gold recolor of the same frames.
 - **Eggman sprites:** fan-ripped frames from the same [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML) project, downsampled to native pixels. Metal Sonic is a steel recolor of the Sonic sheet.
+- **3D engine:** [three.js](https://threejs.org) r149, MIT license (`js/lib/LICENSE-three.txt`).
 - **Rings, monitors, bosses, Egg Colossus, effects, chiptune music:** drawn and composed in code for this project.
 - **Final battle songs:** the game plays `assets/music/with_me.mp3` (robot fight) and `assets/music/built_for_blame.mp3` (brawl) if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).
 - **Font:** Press Start 2P (SIL OFL), bundled in `assets/fonts` (from `@fontsource/press-start-2p`).
