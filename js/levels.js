@@ -60,6 +60,7 @@ class LevelBuilder {
 
   // ---- placement helpers (x in tiles, relative to current pen unless abs) ----
   ent(type, px, py, props = {}) { this.ents.push({ type, x: px, y: py, ...props }); return this; }
+  emerald(px, py, color) { this.emN = (this.emN || 0) + 1; return this.ent('emerald', px, py, { id: this.emN, color }); }
   on(tx, type, props = {}, upPx = 0) {   // stand an entity on the ground of column tx
     return this.ent(type, tx * TILE + TILE / 2, this.groundY(tx) - upPx, props);
   }
@@ -138,6 +139,7 @@ function buildAct1() {
   b.on(s + 6, 'spring', { dir: 'up' });
   b.platform(s + 6, 5, 6); b.platRings(s + 7, 5, 4, s + 6);
   b.on(s + 10, 'monitor', { kind: 'shoes' }, 5 * TILE);
+  b.emerald((s + 11) * TILE + 32, (b.surfRow(s + 6) - 5) * TILE - 40, 0);
   b.ent('enemy', (s + 9) * TILE, b.groundY(s + 9) - 150, { kind: 'fly' });
   b.deco(s + 5, 'mushroom_red');
   b.gap(3); b.ringArc(X() - 4, 6, 140, 44, 40);
@@ -159,6 +161,7 @@ function buildAct1() {
   b.ent('enemy', (s + 6) * TILE, b.groundY(s + 6) - 260, { kind: 'bee' });
   b.on(s + 3, 'spring', { dir: 'up', strong: true });
   b.platform(s + 4, 7, 5); b.platRings(s + 4, 7, 5, s + 3);
+  b.emerald((s + 8) * TILE + 32, (b.surfRow(s + 4) - 7) * TILE - 40, 1);
   b.on(s + 7, 'monitor', { kind: 'life' }, 7 * TILE);
   b.deco(s + 10, 'mushroom_brown');
   s = X(); b.upLong(2); b.flat(14);
@@ -192,6 +195,7 @@ function buildAct2() {
   b.ent('enemy', (s + 6) * TILE, b.groundY(s + 6) - 280, { kind: 'bee' });
   b.on(s + 9, 'spring', { dir: 'up' });
   b.platform(s + 10, 5, 4, s + 9);
+  b.emerald((s + 13) * TILE + 32, (b.surfRow(s + 9) - 5) * TILE - 40, 2);
   s = X(); b.up(3); b.flat(8);
   b.on(s + 5, 'enemy', { kind: 'saw', range: 3 * TILE }); b.on(s + 10, 'monitor', { kind: 'shield' });
   s = X(); b.gap(6);
@@ -208,6 +212,7 @@ function buildAct2() {
   b.on(s + 1, 'checkpoint'); b.on(s + 4, 'spikes'); b.on(s + 7, 'enemy', { kind: 'mouse' });
   b.on(s + 9, 'spring', { dir: 'up', strong: true });
   b.platform(s + 10, 8, 8, s + 9); b.platRings(s + 10, 8, 6, s + 9);
+  b.emerald((s + 12) * TILE + 32, (b.surfRow(s + 9) - 8) * TILE - 40, 3);
   b.ent('monitor', (s + 16) * TILE + 32, (b.surfRow(s + 9) - 8) * TILE, { kind: 'life' });
   s = X(); b.up(2); b.flat(8); b.gap(3); b.flat(8);
   b.ent('enemy', (s + 9) * TILE, b.groundY(s + 1) - 200, { kind: 'fly' });

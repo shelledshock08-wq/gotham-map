@@ -62,7 +62,11 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Spin dash: hold to rev, let go to roll (faster than running, slower than boost; busts crates and robots; no gauge; not on water) | hold C | hold Y | hold X |
 | Run on water | you MUST be boosting (floating dash panels give a short kick); stop and you drown instantly | | |
 
-**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–8) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl or the 3D base escape. Turn it off with `DEV_MENU = false` in `js/game.js`.
+**Emerald Ruins (Diamond Rush style):** arrows / D-pad move one tile at a time; walk into a boulder to push it sideways; hold Z (A) to give up and go back to the last checkpoint.
+
+**Special Stage:** ← / → run up the walls of the half-pipe, Z / A jumps.
+
+**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 0–9) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl, the 3D base escape, the Emerald Ruins (9) or the Special Stage (0). Turn it off with `DEV_MENU = false` in `js/game.js`.
 
 ## Features
 
@@ -76,6 +80,18 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Homing attack with a lock-on reticle: chain enemies in mid-air (flying badniks are placed over pits for this). Hits get impact freeze frames, screen shake and a combo counter; from the 3rd hit in a chain each kill also gives a ring.
 - Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
+- **Chaos Emeralds:** Acts 1 and 2 each hide two emeralds (the HUD shows the eight slots). The goal post won't turn until you've found the act's two.
+- **Emerald Ruins:** after Act 2, the four emeralds open a portal to a jungle temple that plays like Gameloft's *Diamond Rush*:
+  - **The grid:** Sonic walks tile by tile through tunnels and cuts through vines.
+  - **Boulders:** they fall and roll off round things, crush anything underneath (snakes too), and can be pushed sideways.
+  - **Doors:** keys open locked doors, and a padlocked gate needs 16 purple diamonds.
+  - **Hazards:** snakes and timed spike traps.
+  - **Checkpoints:** dying resets the room to how it was at the last checkpoint.
+
+  Three more emeralds are hidden in the Ruins.
+- **Special Stage:** the portal home throws Sonic into a Sonic 2 style half-pipe (3D, Generations Sonic model) and the seven emeralds scatter ahead of him:
+  - **Gates:** you clear ring-quota gates to win them back, and bombs cost 10 rings.
+  - **The eighth:** at the end he catches an **eighth emerald**, which sends him home to Act 3 and Eggman.
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation. Counter Eggman's eye laser by holding your laser while it charges: the beams lock into a clash you win by mashing.
 - **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. When his health runs out you choose: **KILL** or **SPARE**.
   - **Spare:** Metal Sonic snatches him away at the last second, as before, and Eggman smiles. *Eggman will remember that.*
@@ -111,6 +127,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/speech.js` | Speech bubbles and button prompts |
 | `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 | `js/brawl.js` | Eggman brawl, Metal Sonic, impact effects |
+| `js/ruins.js` | Emerald Ruins: the Diamond Rush style grid act (map, boulder physics, snakes, spikes, checkpoints) |
+| `js/special.js` | Sonic 2 style Special Stage (3D half-pipe, ring quotas, emeralds) |
 | `js/escape.js` | 3D Egg Base Escape: course (loops, corkscrew, building run, water), boost physics, hazards, camera |
 | `js/models3d.js` | Packed Sonic and Egg Pawn 3D models and animations (generated by `tools/convert_models`) |
 | `js/lib/three.min.js` | three.js r149 (MIT), used only by the escape |

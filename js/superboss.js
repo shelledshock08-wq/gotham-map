@@ -4,7 +4,7 @@
 // clones and ripping the robot's parts off to throw them back at it.
 'use strict';
 
-const EMERALD_COLORS = ['#3cf06e', '#ff4040', '#3d8bff', '#ffe23d', '#e4ecff', '#ff5ae0', '#43f1ff'];
+const EMERALD_COLORS = ['#3cf06e', '#ff4040', '#3d8bff', '#ffe23d', '#e4ecff', '#ff5ae0', '#43f1ff', '#2a1f3d'];   // the 8th is new
 const COLOSSUS_HP = 320;
 
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
@@ -1735,8 +1735,9 @@ class FinalBattle {
   drawEmeralds(ctx, c, t) {
     const p = this.g.player, k = Math.min(1, this.t / 160);
     const r = 260 * (1 - k) + 30, spin = this.t * (0.03 + k * 0.25);
-    for (let i = 0; i < 7; i++) {
-      const a = spin + i / 7 * Math.PI * 2;
+    const n = Math.max(7, Math.min(8, this.g.emeraldCount || 7));
+    for (let i = 0; i < n; i++) {
+      const a = spin + i / n * Math.PI * 2;
       drawEmerald(ctx, p.x - c.x + Math.cos(a) * r, p.y - c.y + Math.sin(a) * r * 0.8, EMERALD_COLORS[i], 1.2 + k * 0.4);
     }
     if (this.t > 120) drawSuperAura(ctx, p.x - c.x, p.y - c.y, t, (this.t - 120) / 30);

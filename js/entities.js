@@ -321,10 +321,38 @@ class Checkpoint {
   }
 }
 
+// A Chaos Emerald hidden in the act. Collected ones stay collected through deaths.
+class ChaosEmerald {
+  constructor(x, y, key, color) { this.x = x; this.y = y; this.key = key; this.color = color; this.t = Math.random() * 100; }
+  update(g) {
+    this.t++;
+    const p = g.player;
+    if (p.state === 'dead') return;
+    if (Math.abs(p.x - this.x) < p.wR + 22 && Math.abs(p.y - (this.y - 10)) < p.hR + 24) {
+      this.dead = true; g.collectEmerald(this);
+    }
+  }
+  draw(ctx, cam) {
+    if (!onScreen(cam, this.x, this.y, 60)) return;
+    const x = this.x - cam.x, y = this.y - cam.y + Math.sin(this.t * 0.06) * 6;
+    const gl = ctx.createRadialGradient(x, y - 10, 2, x, y - 10, 46);
+    gl.addColorStop(0, 'rgba(255,255,255,.55)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y - 10, 46, 0, Math.PI * 2); ctx.fill();
+    drawEmerald(ctx, x, y - 10, this.color, 1.6);
+    if (this.t % 40 < 20) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 10, y - 34 + (this.t % 40) * 0.3, 3, 3); }
+  }
+}
+
 class Goal {
   constructor(x, y) { this.x = x; this.y = y; this.spin = 0; this.state = 'idle'; this.t = 0; }
   update(g) {
     const p = g.player;
+    // the post won't turn until you've found this act's emeralds
+    if (this.state === 'idle' && p.x >= this.x && p.state !== 'dead' && g.missingEmeralds() > 0) {
+      const n = g.missingEmeralds();
+      g.speech.say('sonic', `Not yet! There ${n > 1 ? 'are' : 'is'} still ${n} Chaos Emerald${n > 1 ? 's' : ''} in this zone!`, { cool: 240, coolKey: 'needem', dur: 200, prio: 3 });
+      return;
+    }
     if (this.state === 'idle' && p.x >= this.x && p.state !== 'dead') {
       this.state = 'spin'; this.spinSpeed = 0.5; g.onGoal(this);
       Sound.play('checkpoint');

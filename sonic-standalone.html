@@ -78,6 +78,8 @@
     <button data-skip="6">6 Super battle</button>
     <button data-skip="7">7 Brawl</button>
     <button data-skip="8">8 Base escape (3D)</button>
+    <button data-skip="9">9 Emerald Ruins (Diamond Rush)</button>
+    <button data-skip="0">0 Special Stage</button>
   </div>
 </div>
 <div id="touch">
@@ -328,6 +330,34 @@ const SONGS = {
       'F6 - - - C6 - A5 - F5 - A5 - C6 - F6 -',
       'G6 - - - D6 - B5 - G5 - B5 - D6 - G6 -',
       'G#6 - - - E6 - - - B5 - - - G#5 - - -',
+    ],
+  },
+  ruins: {
+    bpm: 112, drums: 'shuffle', bass: 'walk', duty: 0.125,
+    chords: ['Em', 'C', 'D', 'Em', 'Am', 'C', 'B', 'B'],
+    lead: [
+      'E5 - - G5 - - B5 - A5 - G5 - F#5 - E5 -',
+      'E5 - - - C5 - E5 - G5 - - - E5 - - -',
+      'D5 - - F#5 - - A5 - G5 - F#5 - E5 - D5 -',
+      'E5 - - - - - B4 - E5 - - - G5 - - -',
+      'A5 - - - E5 - A5 - C6 - B5 - A5 - G5 -',
+      'G5 - - - E5 - C5 - E5 - - - G5 - - -',
+      'F#5 - - - D#5 - B4 - D#5 - F#5 - B5 - - -',
+      'B5 - - - A5 - - - G5 - - - F#5 - - -',
+    ],
+  },
+  special: {
+    bpm: 176, drums: 'pop', bass: 'bounce', duty: 0.25,
+    chords: ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'],
+    lead: [
+      'E5 G5 C6 . G5 . E5 . G5 . C6 . E6 - D6 -',
+      'D5 G5 B5 . G5 . D5 . G5 . B5 . D6 - C6 -',
+      'C5 E5 A5 . E5 . C5 . E5 . A5 . C6 - B5 -',
+      'A4 C5 F5 . C5 . A4 . F5 - A5 - C6 - - -',
+      'E6 - D6 - C6 - G5 - E6 - D6 - C6 - D6 -',
+      'D6 - B5 - G5 - D5 - G5 - B5 - D6 - - -',
+      'C6 - A5 - F5 - C5 - F5 - A5 - C6 - D6 -',
+      'D6 - - - B5 - - - G5 - - - D6 - - -',
     ],
   },
   invincible: {
@@ -1209,6 +1239,7 @@ class LevelBuilder {
 
   // ---- placement helpers (x in tiles, relative to current pen unless abs) ----
   ent(type, px, py, props = {}) { this.ents.push({ type, x: px, y: py, ...props }); return this; }
+  emerald(px, py, color) { this.emN = (this.emN || 0) + 1; return this.ent('emerald', px, py, { id: this.emN, color }); }
   on(tx, type, props = {}, upPx = 0) {   // stand an entity on the ground of column tx
     return this.ent(type, tx * TILE + TILE / 2, this.groundY(tx) - upPx, props);
   }
@@ -1287,6 +1318,7 @@ function buildAct1() {
   b.on(s + 6, 'spring', { dir: 'up' });
   b.platform(s + 6, 5, 6); b.platRings(s + 7, 5, 4, s + 6);
   b.on(s + 10, 'monitor', { kind: 'shoes' }, 5 * TILE);
+  b.emerald((s + 11) * TILE + 32, (b.surfRow(s + 6) - 5) * TILE - 40, 0);
   b.ent('enemy', (s + 9) * TILE, b.groundY(s + 9) - 150, { kind: 'fly' });
   b.deco(s + 5, 'mushroom_red');
   b.gap(3); b.ringArc(X() - 4, 6, 140, 44, 40);
@@ -1308,6 +1340,7 @@ function buildAct1() {
   b.ent('enemy', (s + 6) * TILE, b.groundY(s + 6) - 260, { kind: 'bee' });
   b.on(s + 3, 'spring', { dir: 'up', strong: true });
   b.platform(s + 4, 7, 5); b.platRings(s + 4, 7, 5, s + 3);
+  b.emerald((s + 8) * TILE + 32, (b.surfRow(s + 4) - 7) * TILE - 40, 1);
   b.on(s + 7, 'monitor', { kind: 'life' }, 7 * TILE);
   b.deco(s + 10, 'mushroom_brown');
   s = X(); b.upLong(2); b.flat(14);
@@ -1341,6 +1374,7 @@ function buildAct2() {
   b.ent('enemy', (s + 6) * TILE, b.groundY(s + 6) - 280, { kind: 'bee' });
   b.on(s + 9, 'spring', { dir: 'up' });
   b.platform(s + 10, 5, 4, s + 9);
+  b.emerald((s + 13) * TILE + 32, (b.surfRow(s + 9) - 5) * TILE - 40, 2);
   s = X(); b.up(3); b.flat(8);
   b.on(s + 5, 'enemy', { kind: 'saw', range: 3 * TILE }); b.on(s + 10, 'monitor', { kind: 'shield' });
   s = X(); b.gap(6);
@@ -1357,6 +1391,7 @@ function buildAct2() {
   b.on(s + 1, 'checkpoint'); b.on(s + 4, 'spikes'); b.on(s + 7, 'enemy', { kind: 'mouse' });
   b.on(s + 9, 'spring', { dir: 'up', strong: true });
   b.platform(s + 10, 8, 8, s + 9); b.platRings(s + 10, 8, 6, s + 9);
+  b.emerald((s + 12) * TILE + 32, (b.surfRow(s + 9) - 8) * TILE - 40, 3);
   b.ent('monitor', (s + 16) * TILE + 32, (b.surfRow(s + 9) - 8) * TILE, { kind: 'life' });
   s = X(); b.up(2); b.flat(8); b.gap(3); b.flat(8);
   b.ent('enemy', (s + 9) * TILE, b.groundY(s + 1) - 200, { kind: 'fly' });
@@ -2371,10 +2406,38 @@ class Checkpoint {
   }
 }
 
+// A Chaos Emerald hidden in the act. Collected ones stay collected through deaths.
+class ChaosEmerald {
+  constructor(x, y, key, color) { this.x = x; this.y = y; this.key = key; this.color = color; this.t = Math.random() * 100; }
+  update(g) {
+    this.t++;
+    const p = g.player;
+    if (p.state === 'dead') return;
+    if (Math.abs(p.x - this.x) < p.wR + 22 && Math.abs(p.y - (this.y - 10)) < p.hR + 24) {
+      this.dead = true; g.collectEmerald(this);
+    }
+  }
+  draw(ctx, cam) {
+    if (!onScreen(cam, this.x, this.y, 60)) return;
+    const x = this.x - cam.x, y = this.y - cam.y + Math.sin(this.t * 0.06) * 6;
+    const gl = ctx.createRadialGradient(x, y - 10, 2, x, y - 10, 46);
+    gl.addColorStop(0, 'rgba(255,255,255,.55)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y - 10, 46, 0, Math.PI * 2); ctx.fill();
+    drawEmerald(ctx, x, y - 10, this.color, 1.6);
+    if (this.t % 40 < 20) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 10, y - 34 + (this.t % 40) * 0.3, 3, 3); }
+  }
+}
+
 class Goal {
   constructor(x, y) { this.x = x; this.y = y; this.spin = 0; this.state = 'idle'; this.t = 0; }
   update(g) {
     const p = g.player;
+    // the post won't turn until you've found this act's emeralds
+    if (this.state === 'idle' && p.x >= this.x && p.state !== 'dead' && g.missingEmeralds() > 0) {
+      const n = g.missingEmeralds();
+      g.speech.say('sonic', `Not yet! There ${n > 1 ? 'are' : 'is'} still ${n} Chaos Emerald${n > 1 ? 's' : ''} in this zone!`, { cool: 240, coolKey: 'needem', dur: 200, prio: 3 });
+      return;
+    }
     if (this.state === 'idle' && p.x >= this.x && p.state !== 'dead') {
       this.state = 'spin'; this.spinSpeed = 0.5; g.onGoal(this);
       Sound.play('checkpoint');
@@ -2553,7 +2616,7 @@ class Boss {
 // clones and ripping the robot's parts off to throw them back at it.
 'use strict';
 
-const EMERALD_COLORS = ['#3cf06e', '#ff4040', '#3d8bff', '#ffe23d', '#e4ecff', '#ff5ae0', '#43f1ff'];
+const EMERALD_COLORS = ['#3cf06e', '#ff4040', '#3d8bff', '#ffe23d', '#e4ecff', '#ff5ae0', '#43f1ff', '#2a1f3d'];   // the 8th is new
 const COLOSSUS_HP = 320;
 
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
@@ -4284,8 +4347,9 @@ class FinalBattle {
   drawEmeralds(ctx, c, t) {
     const p = this.g.player, k = Math.min(1, this.t / 160);
     const r = 260 * (1 - k) + 30, spin = this.t * (0.03 + k * 0.25);
-    for (let i = 0; i < 7; i++) {
-      const a = spin + i / 7 * Math.PI * 2;
+    const n = Math.max(7, Math.min(8, this.g.emeraldCount || 7));
+    for (let i = 0; i < n; i++) {
+      const a = spin + i / n * Math.PI * 2;
       drawEmerald(ctx, p.x - c.x + Math.cos(a) * r, p.y - c.y + Math.sin(a) * r * 0.8, EMERALD_COLORS[i], 1.2 + k * 0.4);
     }
     if (this.t > 120) drawSuperAura(ctx, p.x - c.x, p.y - c.y, t, (this.t - 120) / 30);
@@ -6266,6 +6330,825 @@ class EscapeStage {
 
 </script>
 <script>
+// Emerald Ruins: Diamond Rush (Gameloft, 2006) with Sonic. A side-view grid
+// adventure: Sonic walks in four directions through jungle-temple tunnels,
+// cuts through vines, and gravity works on the boulders. They fall, roll off
+// round things and crush whatever is underneath. Push boulders sideways,
+// collect purple diamonds to open the padlocked gate, find keys for locked
+// doors, dodge snakes and spike traps, and touch checkpoints (a death resets
+// everything to how it was at the last one). Three Chaos Emeralds are hidden here.
+'use strict';
+
+const RU_T = 64;              // tile size in pixels
+const RU_NEED = 16;           // purple diamonds needed to open the gate
+const RU_STEP = 7;            // frames for Sonic to cross one tile
+const RU_FALL = 6;            // frames for a boulder to fall one tile
+const RU_ROLL = 8;            // frames for a boulder to roll / be pushed one tile
+
+// # wall   . floor   : vines (cut by walking through)   O boulder   * diamond
+// k key    D locked door   X diamond gate   C checkpoint   ^ spike trap
+// E Chaos Emerald   s snake   P portal   @ start
+const RUINS_MAP = [
+  '##########################',
+  '#@...::::*:::::::::::*:..#',
+  '#....::::O::::::::::O::..#',
+  '#.*..::::::::*::::::::::.#',
+  '#....::*::::::::::::::*:.#',
+  '#C.......:::::::::::::...#',
+  '##################.#######',
+  '##################.#######',
+  '####.###k###.###.#.#######',
+  '#.....*...s.*.....*......#',
+  '####D#####################',
+  '#...:..^^^^^^^^^^..*.....#',
+  '#.#####################..#',
+  '#E....^.^.^.^.^.^.*....*.#',
+  '######################.###',
+  '#...................*C:..#',
+  '#.####################:..#',
+  '#.#*.*.*.*O.........:#:..#',
+  '#.#:::::::::::::::::.#:..#',
+  '#.#:::::::::::::::::.#...#',
+  '#.#:::::::::::::::::.##.##',
+  '#...................E#...#',
+  '######################.###',
+  '#....O......:...s...:....#',
+  '#....:......:.......:....#',
+  '#.OOO:.....OOO......:OO..#',
+  '#.:::......:::......:::..#',
+  '#*:::*....*:::*....*:::*.#',
+  '##.####################.##',
+  '#C.......................#',
+  '#.###.###############.####',
+  '#.#k#.#....*...*....#.#E.#',
+  '#.#.#.#..O.....O....#.##.#',
+  '#.#.#...:::::::::...#...D#',
+  '#...########.########....#',
+  '############X#############',
+  '#......*....P....*.......#',
+  '##########################',
+];
+
+// --------------------------------------------------------------- drawing
+function ruTile(ctx, ch, x, y, t, ru) {
+  const T = RU_T;
+  switch (ch) {
+    case '#': {
+      ctx.fillStyle = '#4e4636'; ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = '#5f5642'; ctx.fillRect(x + 3, y + 3, T / 2 - 4, T / 2 - 4); ctx.fillRect(x + T / 2 + 1, y + T / 2 + 1, T / 2 - 4, T / 2 - 4);
+      ctx.fillStyle = '#6e6550'; ctx.fillRect(x + T / 2 + 1, y + 3, T / 2 - 4, T / 2 - 4); ctx.fillRect(x + 3, y + T / 2 + 1, T / 2 - 4, T / 2 - 4);
+      ctx.fillStyle = 'rgba(70,110,40,.55)'; if (((x * 7 + y * 13) / T) % 5 < 1) ctx.fillRect(x, y, T, 8);
+      break;
+    }
+    case ':': {
+      ctx.fillStyle = '#244a17'; ctx.fillRect(x, y, T, T);
+      for (let i = 0; i < 7; i++) {
+        const lx = x + ((i * 23 + x / 3) % (T - 12)) + 6, ly = y + ((i * 17 + y / 5) % (T - 12)) + 6;
+        ctx.fillStyle = i % 2 ? '#3f7d24' : '#2f6420';
+        ctx.beginPath(); ctx.ellipse(lx, ly, 10, 6, (i * 0.9) % 3, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'D': {
+      ctx.fillStyle = '#6b4320'; ctx.fillRect(x + 4, y + 2, T - 8, T - 4);
+      ctx.fillStyle = '#4e2f14'; for (let i = 1; i < 4; i++) ctx.fillRect(x + 4 + i * 14, y + 2, 2, T - 4);
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + T / 2 - 8, y + T / 2 - 6, 16, 14);
+      ctx.fillStyle = '#3a2a08'; ctx.fillRect(x + T / 2 - 2, y + T / 2 - 1, 4, 7);
+      break;
+    }
+    case 'X': {
+      ctx.fillStyle = '#5c5246'; ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = '#8a7f6a'; ctx.fillRect(x + 6, y + 6, T - 12, T - 12);
+      ctx.fillStyle = '#b07cff'; ctx.beginPath(); ctx.moveTo(x + T / 2, y + 12); ctx.lineTo(x + T / 2 + 12, y + 24); ctx.lineTo(x + T / 2, y + 40); ctx.lineTo(x + T / 2 - 12, y + 24); ctx.fill();
+      ctx.font = `12px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+      ctx.fillText(String(Math.max(0, RU_NEED - ru.diamonds)), x + T / 2, y + T - 10);
+      break;
+    }
+    case 'C': {
+      ctx.fillStyle = '#5a5244'; ctx.fillRect(x + 14, y + 34, T - 28, T - 34);
+      const on = ru.checkpoint && ru.checkpoint.x === x / T && ru.checkpoint.y === y / T;
+      const g = ctx.createRadialGradient(x + T / 2, y + 24, 2, x + T / 2, y + 24, 22);
+      g.addColorStop(0, on ? '#e8fbff' : '#9aa4b0'); g.addColorStop(1, on ? 'rgba(60,180,255,0)' : 'rgba(80,90,110,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + T / 2, y + 24, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = on ? '#4fd0ff' : '#6b7480'; ctx.beginPath(); ctx.arc(x + T / 2, y + 24, 9, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case '^': {
+      ctx.fillStyle = '#3a342a'; ctx.fillRect(x + 2, y + T - 12, T - 4, 10);
+      const k = ru.spikeLevel(x / T, y / T);
+      if (k > 0) {
+        ctx.fillStyle = '#c9d0da';
+        for (let i = 0; i < 4; i++) {
+          const sx = x + 6 + i * 14;
+          ctx.beginPath(); ctx.moveTo(sx, y + T - 10); ctx.lineTo(sx + 7, y + T - 10 - 44 * k); ctx.lineTo(sx + 14, y + T - 10); ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = '#1a1712'; for (let i = 0; i < 4; i++) ctx.fillRect(x + 9 + i * 14, y + T - 9, 6, 3);
+        if (ru.spikeWarn(x / T, y / T)) { ctx.fillStyle = '#c9d0da'; for (let i = 0; i < 4; i++) ctx.fillRect(x + 10 + i * 14, y + T - 14, 4, 5); }
+      }
+      break;
+    }
+    case 'P': {
+      const cx = x + T / 2, cy = y + T / 2;
+      for (let i = 4; i >= 0; i--) {
+        ctx.strokeStyle = `hsla(${(t * 3 + i * 40) % 360},90%,${55 + i * 6}%,.9)`; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 8 + i * 6, 12 + i * 8, t * 0.05 + i, 0, Math.PI * 2); ctx.stroke();
+      }
+      break;
+    }
+  }
+}
+
+function ruBoulder(ctx, x, y, rot) {
+  const r = RU_T / 2 - 4;
+  ctx.save(); ctx.translate(x + RU_T / 2, y + RU_T / 2); ctx.rotate(rot);
+  const g = ctx.createRadialGradient(-8, -10, 4, 0, 0, r);
+  g.addColorStop(0, '#f1dfb4'); g.addColorStop(0.6, '#c9ad78'); g.addColorStop(1, '#7d6740');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,60,30,.6)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-10, -4); ctx.lineTo(0, 2); ctx.lineTo(8, -8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-4, 12); ctx.lineTo(6, 8); ctx.stroke();
+  ctx.restore();
+}
+
+function ruDiamond(ctx, x, y, t) {
+  const cx = x + RU_T / 2, cy = y + RU_T / 2 + Math.sin(t * 0.08 + x) * 2;
+  ctx.fillStyle = '#7a2bd6';
+  ctx.beginPath(); ctx.moveTo(cx, cy - 18); ctx.lineTo(cx + 15, cy - 4); ctx.lineTo(cx, cy + 18); ctx.lineTo(cx - 15, cy - 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#c38bff'; ctx.beginPath(); ctx.moveTo(cx, cy - 18); ctx.lineTo(cx + 15, cy - 4); ctx.lineTo(cx, cy - 1); ctx.lineTo(cx - 15, cy - 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fff'; if ((t + x) % 70 < 10) ctx.fillRect(cx - 7, cy - 10, 3, 3);
+}
+
+function ruKey(ctx, x, y, t) {
+  const cx = x + RU_T / 2, cy = y + RU_T / 2 + Math.sin(t * 0.07) * 3;
+  ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(cx - 10, cy, 9, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#ffd23f'; ctx.fillRect(cx - 2, cy - 3, 22, 6); ctx.fillRect(cx + 12, cy + 2, 4, 8); ctx.fillRect(cx + 4, cy + 2, 4, 6);
+}
+
+function ruSnake(ctx, x, y, dir, t) {
+  ctx.save(); ctx.translate(x + RU_T / 2, y + RU_T - 14); ctx.scale(dir, 1);
+  ctx.fillStyle = '#3f9a2e';
+  for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(-20 + i * 8, Math.sin(t * 0.3 + i) * 4, 7, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#4fbf3a'; ctx.beginPath(); ctx.ellipse(18, -4, 11, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffeb3b'; ctx.fillRect(20, -8, 4, 4);
+  if (t % 30 < 12) { ctx.strokeStyle = '#e03030'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(28, -2); ctx.lineTo(36, -2); ctx.lineTo(40, -6); ctx.moveTo(36, -2); ctx.lineTo(40, 2); ctx.stroke(); }
+  ctx.restore();
+}
+
+// --------------------------------------------------------------- the act
+class Ruins {
+  constructor(game) {
+    this.g = game;
+    this.t = 0; this.phase = 'intro';
+    this.load();
+    this.save();                       // the start counts as the first checkpoint
+    this.cam = { x: 0, y: 0 };
+    this.retryT = 0; this.msg = null;
+    this.centerCam(true);
+  }
+
+  load() {
+    this.grid = RUINS_MAP.map((r) => r.split(''));
+    this.H = this.grid.length; this.W = this.grid[0].length;
+    this.boulders = []; this.items = new Map(); this.snakes = [];
+    this.diamonds = 0; this.keys = 0; this.emeralds = 0;
+    for (let y = 0; y < this.H; y++) for (let x = 0; x < this.W; x++) {
+      const c = this.grid[y][x];
+      if (c === '@') { this.sx = x; this.sy = y; this.grid[y][x] = '.'; }
+      else if (c === 'O') { this.boulders.push({ x, y, ox: 0, oy: 0, mv: null, falling: false, rot: 0 }); this.grid[y][x] = '.'; }
+      else if (c === '*' || c === 'k' || c === 'E') { this.items.set(x + ',' + y, c); this.grid[y][x] = '.'; }
+      else if (c === 's') { this.snakes.push({ x, y, dir: -1, step: 0, ox: 0, alive: true }); this.grid[y][x] = '.'; }
+    }
+    this.sonic = { x: this.sx, y: this.sy, mv: null, facing: 1, pushT: 0, anim: 0, dead: 0 };
+    this.checkpoint = { x: this.sx, y: this.sy };
+  }
+
+  // checkpoints snapshot the whole room state
+  save() {
+    this.snap = JSON.stringify({
+      grid: this.grid, boulders: this.boulders.map((b) => ({ x: b.x, y: b.y })), items: [...this.items],
+      snakes: this.snakes.filter((s) => s.alive).map((s) => ({ x: s.x, y: s.y, dir: s.dir })),
+      diamonds: this.diamonds, keys: this.keys, emeralds: this.emeralds, cp: this.checkpoint,
+    });
+  }
+  restore() {
+    const S = JSON.parse(this.snap);
+    this.grid = S.grid; this.items = new Map(S.items);
+    this.boulders = S.boulders.map((b) => ({ ...b, ox: 0, oy: 0, mv: null, falling: false, rot: 0 }));
+    this.snakes = S.snakes.map((s) => ({ ...s, step: 0, ox: 0, alive: true }));
+    this.diamonds = S.diamonds; this.keys = S.keys; this.emeralds = S.emeralds; this.checkpoint = S.cp;
+    this.sonic = { x: S.cp.x, y: S.cp.y, mv: null, facing: 1, pushT: 0, anim: 0, dead: 0 };
+    this.g.emeraldCount = 4 + this.emeralds;
+  }
+
+  // ------------------------------------------------------------ queries
+  cell(x, y) { return y < 0 || y >= this.H || x < 0 || x >= this.W ? '#' : this.grid[y][x]; }
+  boulderAt(x, y) { return this.boulders.find((b) => b.x === x && b.y === y); }
+  snakeAt(x, y) { return this.snakes.find((s) => s.alive && s.x === x && s.y === y); }
+  sonicIn(x, y) {
+    const S = this.sonic;
+    if (S.dead) return false;
+    return (S.x === x && S.y === y) || (S.mv && S.mv.tx === x && S.mv.ty === y);
+  }
+  // can a boulder move into this cell?
+  freeForBoulder(x, y) {
+    const c = this.cell(x, y);
+    return (c === '.' || c === '^') && !this.boulderAt(x, y) && !this.items.has(x + ',' + y);
+  }
+  isRound(x, y) { return !!this.boulderAt(x, y) || this.items.get(x + ',' + y) === '*'; }
+  spikePhase(x, y) { return (this.t + y * 53) % 150; }
+  spikeLevel(x, y) { const p = this.spikePhase(x, y); return p < 60 ? Math.min(1, p / 4, (60 - p) / 4) : 0; }
+  spikeUp(x, y) { return this.cell(x, y) === '^' && this.spikePhase(x, y) < 60; }
+  spikeWarn(x, y) { return this.spikePhase(x, y) > 130; }
+
+  say(text, cool = 200) { this.g.speech.say('sonic', text, { dur: 170, prio: 3, cool, coolKey: text }); }
+
+  // ------------------------------------------------------------ update
+  update(inp) {
+    const g = this.g;
+    this.t++;
+    if (this.flash > 0) this.flash -= 0.04;
+    if (this.phase === 'intro') {
+      if (this.t === 1) { Sound.playMusic('ruins'); Sound.play('boom', { rate: 1.6, vol: 0.5 }); this.flash = 1; }
+      if (this.t === 70) g.speech.say('sonic', 'Whoa! The emeralds pulled me... where IS this place?', { dur: 200, prio: 4 });
+      if (this.t === 200) g.speech.say('sonic', `Three more emeralds, and I need ${RU_NEED} of those purple diamonds for the gate.`, { dur: 220, prio: 4 });
+      if (this.t > 150 || inp.startPressed) { this.phase = 'play'; }
+      this.updateWorld();
+      this.centerCam(); return;
+    }
+    if (this.phase === 'warp') {
+      if (this.t === 1) { Sound.play('release', { rate: 0.5 }); g.speech.say('sonic', 'Seven! Time to go home!', { dur: 120, prio: 5 }); }
+      if (this.t > 120) g.startSpecial();
+      return;
+    }
+    if (!g.timeStopped) g.time++;
+    this.updateWorld();
+    const S = this.sonic;
+    if (S.dead) {
+      S.dead++;
+      if (S.dead === 90) {
+        g.lives--;
+        if (g.lives <= 0) { g.gameOver('ruins'); return; }
+        this.restore(); Sound.play('select');
+      }
+      this.centerCam(); return;
+    }
+    // hold jump to give up and go back to the checkpoint (like Diamond Rush's * key)
+    if (inp.punch || inp.jump) { if (++this.retryT === 70) { this.kill('retry'); } } else this.retryT = 0;
+    this.moveSonic(inp);
+    this.centerCam();
+  }
+
+  kill(why) {
+    const S = this.sonic;
+    if (S.dead) return;
+    S.dead = 1; S.why = why;
+    Sound.play(why === 'crush' ? 'boom' : 'death', { rate: why === 'crush' ? 0.7 : 1 });
+    this.shake = why === 'crush' ? 14 : 6;
+    this.msg = { text: why === 'crush' ? 'CRUSHED!' : why === 'snake' ? 'SNAKEBITE!' : why === 'spike' ? 'SPIKED!' : 'RETRY', t: 0 };
+  }
+
+  moveSonic(inp) {
+    const S = this.sonic;
+    if (S.mv) {
+      S.mv.t++;
+      if (S.mv.t >= S.mv.dur) { S.x = S.mv.tx; S.y = S.mv.ty; S.mv = null; this.arrive(); }
+      else return;
+    }
+    // standing on raised spikes
+    if (this.spikeUp(S.x, S.y)) { this.kill('spike'); return; }
+    let dx = 0, dy = 0;
+    if (inp.left) dx = -1; else if (inp.right) dx = 1; else if (inp.up) dy = -1; else if (inp.down) dy = 1;
+    if (!dx && !dy) { S.pushT = 0; return; }
+    if (dx) S.facing = dx;
+    const tx = S.x + dx, ty = S.y + dy, c = this.cell(tx, ty);
+    if (c === '#') { S.pushT = 0; return; }
+    if (c === 'D') {
+      if (this.keys > 0) { this.keys--; this.grid[ty][tx] = '.'; Sound.play('monitor'); }
+      else { this.say("It's locked. There's a key somewhere..."); return; }
+    }
+    if (c === 'X') {
+      if (this.diamonds >= RU_NEED) { this.grid[ty][tx] = '.'; Sound.play('checkpoint'); this.flash = 0.5; }
+      else { this.say(`The gate needs ${RU_NEED} diamonds. I've got ${this.diamonds}.`); return; }
+    }
+    const b = this.boulderAt(tx, ty);
+    if (b) {
+      // push sideways if the far side is free and nothing is moving it
+      if (!dy && !b.mv && !b.falling && this.freeForBoulder(tx + dx, ty) && !this.snakeAt(tx + dx, ty)) {
+        if (++S.pushT >= 8) {
+          S.pushT = 0;
+          b.mv = { dx, dy: 0, t: 0, dur: RU_ROLL }; b.x += dx; b.ox = -dx;
+          Sound.play('roll', { vol: 0.5, rate: 0.7 });
+          S.mv = { tx, ty, t: 0, dur: RU_ROLL };
+        }
+      }
+      return;
+    }
+    S.pushT = 0;
+    if (this.snakeAt(tx, ty)) { this.kill('snake'); return; }
+    S.mv = { tx, ty, t: 0, dur: c === ':' ? RU_STEP + 3 : RU_STEP };
+    if (c === ':') { Sound.play('skid', { vol: 0.25, rate: 1.6 }); }
+  }
+
+  arrive() {
+    const S = this.sonic, x = S.x, y = S.y, c = this.cell(x, y), key = x + ',' + y, g = this.g;
+    if (c === ':') this.grid[y][x] = '.';
+    const it = this.items.get(key);
+    if (it) {
+      this.items.delete(key);
+      if (it === '*') {
+        this.diamonds++; g.addScore(100); Sound.ring();
+        if (this.diamonds === RU_NEED) this.say('That\'s enough diamonds for the gate!', 9999);
+      } else if (it === 'k') { this.keys++; Sound.play('monitor'); this.say('A key!'); }
+      else if (it === 'E') {
+        this.emeralds++; g.emeraldCount = 4 + this.emeralds; g.addScore(5000); Sound.play('oneup'); this.flash = 0.6;
+        g.speech.say('sonic', this.emeralds < 3 ? `A Chaos Emerald! ${3 - this.emeralds} to go.` : 'That makes seven!', { dur: 160, prio: 4 });
+      }
+    }
+    if (c === 'C' && !(this.checkpoint.x === x && this.checkpoint.y === y)) {
+      this.checkpoint = { x, y }; this.save(); Sound.play('checkpoint');
+      this.msg = { text: 'CHECKPOINT', t: 0 };
+    }
+    if (c === 'P') {
+      if (this.emeralds >= 3) { this.phase = 'warp'; this.t = 0; }
+      else this.say('The portal won\'t open... I\'m missing an emerald.');
+    }
+    if (this.spikeUp(x, y)) this.kill('spike');
+  }
+
+  // boulders and snakes
+  updateWorld() {
+    if (this.shake > 0) this.shake *= 0.85;
+    const S = this.sonic;
+    // boulders: sort bottom-up so stacks settle cleanly
+    this.boulders.sort((a, b) => b.y - a.y);
+    for (const b of this.boulders) {
+      if (b.mv) {
+        b.mv.t++;
+        const k = b.mv.t / b.mv.dur;
+        b.ox = -b.mv.dx * (1 - k); b.oy = -b.mv.dy * (1 - k);
+        if (b.mv.dx) b.rot += b.mv.dx * 0.2;
+        if (b.mv.t >= b.mv.dur) { b.mv = null; b.ox = 0; b.oy = 0; }
+        continue;
+      }
+      const bx = b.x, by = b.y;
+      // fall
+      const belowFree = this.freeForBoulder(bx, by + 1);
+      const snake = this.snakeAt(bx, by + 1);
+      if (belowFree && (!this.sonicIn(bx, by + 1) || b.falling)) {
+        if (this.sonicIn(bx, by + 1) && b.falling) this.kill('crush');
+        if (snake && b.falling) { snake.alive = false; Sound.play('pop'); this.g.addScore(200); }
+        if (snake && !b.falling) continue;
+        b.y++; b.falling = true; b.mv = { dx: 0, dy: 1, t: 0, dur: RU_FALL }; b.oy = -1;
+        continue;
+      }
+      if (b.falling && (this.cell(bx, by + 1) !== '.' || !belowFree)) { Sound.play('boom', { vol: 0.25, rate: 1.4 }); this.shake = Math.max(this.shake || 0, 3); }
+      // roll off round things (boulders, diamonds)
+      if (this.isRound(bx, by + 1)) {
+        for (const d of [-1, 1]) {
+          if (this.freeForBoulder(bx + d, by) && this.freeForBoulder(bx + d, by + 1) && !this.sonicIn(bx + d, by) && !this.sonicIn(bx + d, by + 1)
+            && !this.snakeAt(bx + d, by)) {
+            b.x += d; b.mv = { dx: d, dy: 0, t: 0, dur: RU_ROLL }; b.ox = -d; b.falling = true;
+            break;
+          }
+        }
+        if (b.mv) continue;
+      }
+      b.falling = false;
+    }
+    // snakes slither back and forth
+    for (const s of this.snakes) {
+      if (!s.alive) continue;
+      if (++s.step >= 18) {
+        s.step = 0;
+        const nx = s.x + s.dir;
+        const c = this.cell(nx, s.y);
+        if ((c === '.' || c === '^' || c === 'C') && !this.boulderAt(nx, s.y) && !this.items.has(nx + ',' + s.y) && !this.snakeAt(nx, s.y)) s.x = nx;
+        else s.dir = -s.dir;
+      }
+      s.ox = s.step / 18;
+      if (!S.dead && (this.sonicIn(s.x, s.y))) this.kill('snake');
+    }
+    this.snakes = this.snakes.filter((s) => s.alive);
+  }
+
+  // ------------------------------------------------------------ camera / draw
+  sonicPx() {
+    const S = this.sonic;
+    let x = S.x, y = S.y;
+    if (S.mv) { const k = S.mv.t / S.mv.dur; x += (S.mv.tx - S.x) * k; y += (S.mv.ty - S.y) * k; }
+    return { x: x * RU_T, y: y * RU_T };
+  }
+  centerCam(snap) {
+    const p = this.sonicPx();
+    const tx = Math.max(0, Math.min(this.W * RU_T - VIEW_W, p.x + RU_T / 2 - VIEW_W / 2));
+    const ty = Math.max(0, Math.min(this.H * RU_T - VIEW_H, p.y + RU_T / 2 - VIEW_H / 2));
+    if (snap) { this.cam.x = tx; this.cam.y = ty; return; }
+    this.cam.x += (tx - this.cam.x) * 0.15; this.cam.y += (ty - this.cam.y) * 0.15;
+  }
+  speakerPos() { const p = this.sonicPx(); return { x: p.x - this.cam.x + RU_T / 2, y: p.y - this.cam.y }; }
+
+  draw(ctx) {
+    const t = this.g.t, T = RU_T;
+    let cx = Math.round(this.cam.x), cy = Math.round(this.cam.y);
+    if (this.shake > 0.5) { cx += Math.round((Math.random() - 0.5) * this.shake * 2); cy += Math.round((Math.random() - 0.5) * this.shake * 2); }
+    // temple interior backdrop
+    ctx.fillStyle = '#1d1810'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = '#251f15';
+    for (let y = -((cy * 0.5) % 48); y < VIEW_H; y += 48) for (let x = -((cx * 0.5) % 96) - (Math.floor((y + cy * 0.5) / 48) % 2) * 48; x < VIEW_W; x += 96) ctx.fillRect(x + 2, y + 2, 92, 44);
+    const x0 = Math.floor(cx / T), y0 = Math.floor(cy / T), x1 = Math.ceil((cx + VIEW_W) / T), y1 = Math.ceil((cy + VIEW_H) / T);
+    for (let y = Math.max(0, y0); y < Math.min(this.H, y1 + 1); y++) {
+      for (let x = Math.max(0, x0); x < Math.min(this.W, x1 + 1); x++) {
+        const px = x * T - cx, py = y * T - cy, c = this.grid[y][x];
+        if (c !== '.') ruTile(ctx, c, px, py, t, this);
+        const it = this.items.get(x + ',' + y);
+        if (it === '*') ruDiamond(ctx, px, py, t);
+        else if (it === 'k') ruKey(ctx, px, py, t);
+        else if (it === 'E') {
+          const gl = ctx.createRadialGradient(px + T / 2, py + T / 2, 2, px + T / 2, py + T / 2, 40);
+          gl.addColorStop(0, 'rgba(255,255,255,.6)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = gl; ctx.fillRect(px - 8, py - 8, T + 16, T + 16);
+          drawEmerald(ctx, px + T / 2, py + T / 2 + Math.sin(t * 0.06) * 4, EMERALD_COLORS[4 + Math.min(2, this.emeraldIndex(x, y))], 1.5);
+        }
+      }
+    }
+    for (const b of this.boulders) ruBoulder(ctx, (b.x + b.ox) * T - cx, (b.y + b.oy) * T - cy, b.rot);
+    for (const s of this.snakes) ruSnake(ctx, (s.x + (s.step / 18) * 0) * T - cx, s.y * T - cy, s.dir, t);
+    // Sonic
+    const S = this.sonic, p = this.sonicPx();
+    let pose = 'idle';
+    if (S.dead) pose = S.why === 'crush' ? 'dead' : 'hurt';
+    else if (S.pushT > 0) pose = 'push';
+    else if (S.mv) pose = S.mv.ty < S.y ? 'spring' : 'walk';
+    S.anim += S.mv ? 0.25 : 0.05;
+    if (!(S.dead > 0 && S.dead % 6 < 3 && S.dead > 40)) {
+      const sq = S.dead && S.why === 'crush' ? 0.35 : 1;
+      ctx.save(); ctx.translate(p.x - cx + T / 2, p.y - cy + T); ctx.scale(1, sq);
+      drawSonicFrame(ctx, animFrame(pose, S.anim), 0, 0, { scale: 2, flip: S.facing < 0 });
+      ctx.restore();
+    }
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    if (this.phase === 'warp') {
+      const k = Math.min(1, this.t / 110);
+      ctx.save(); ctx.translate(p.x - cx + T / 2, p.y - cy + T / 2);
+      for (let i = 0; i < 7; i++) {
+        const a = this.t * 0.15 + i / 7 * Math.PI * 2, r = 120 * (1 - k) + 20;
+        drawEmerald(ctx, Math.cos(a) * r, Math.sin(a) * r, EMERALD_COLORS[i], 1.2);
+      }
+      ctx.restore();
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(0, (this.t - 70) / 50)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+  }
+
+  emeraldIndex(x, y) {
+    // which of the three ruin emeralds this is (by order in the map)
+    const list = [];
+    RUINS_MAP.forEach((r, yy) => r.split('').forEach((c, xx) => { if (c === 'E') list.push(xx + ',' + yy); }));
+    return list.indexOf(x + ',' + y);
+  }
+
+  drawHUD(ctx) {
+    const g = this.g;
+    g.text(ctx, 'SCORE', 32, 52, 22, '#ffd23f'); g.text(ctx, String(g.score), 330, 52, 22, '#fff', 'right');
+    g.text(ctx, 'TIME', 32, 90, 22, '#ffd23f'); g.text(ctx, g.fmtTime(g.time), 330, 90, 22, '#fff', 'right');
+    // diamonds
+    ruDiamond(ctx, 16, 104, 0);
+    g.text(ctx, `${this.diamonds}/${RU_NEED}`, 92, 146, 20, this.diamonds >= RU_NEED ? '#7dff9a' : '#fff');
+    if (this.keys) { ruKey(ctx, 190, 104, 0); g.text(ctx, `x${this.keys}`, 262, 146, 16, '#fff'); }
+    g.drawEmeraldSlots(ctx, 32, 172);
+    ctx.save(); ctx.translate(52, VIEW_H - 46); drawHeroHead(ctx, 0.9); ctx.restore();
+    g.text(ctx, 'SONIC', 86, VIEW_H - 52, 14, '#ffd23f'); g.text(ctx, `x ${g.lives}`, 86, VIEW_H - 28, 16, '#fff');
+    if (this.retryT > 10) {
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(VIEW_W / 2 - 160, VIEW_H - 70, 320, 34);
+      ctx.fillStyle = '#ff5a3a'; ctx.fillRect(VIEW_W / 2 - 156, VIEW_H - 66, 312 * this.retryT / 70, 26);
+      g.text(ctx, 'RETRY FROM CHECKPOINT', VIEW_W / 2, VIEW_H - 46, 12, '#fff', 'center');
+    } else g.text(ctx, `HOLD ${keyLabel('jump')}: RETRY FROM CHECKPOINT`, VIEW_W - 24, VIEW_H - 24, 10, '#c9d4ff', 'right');
+    if (this.msg) {
+      const m = this.msg; m.t++;
+      if (m.t > 90) this.msg = null;
+      else g.text(ctx, m.text, VIEW_W / 2, 140, 36, m.text === 'CHECKPOINT' ? '#4fd0ff' : '#ff4a3a', 'center', '#000');
+    }
+    if (this.phase === 'intro' && this.t < 150) {
+      const k = Math.min(1, this.t / 20, (150 - this.t) / 20);
+      ctx.globalAlpha = k;
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, VIEW_H / 2 - 70, VIEW_W, 140);
+      g.text(ctx, 'EMERALD RUINS', VIEW_W / 2, VIEW_H / 2, 44, '#7dff9a', 'center', '#103010');
+      g.text(ctx, 'FIND THREE EMERALDS AND OPEN THE GATE', VIEW_W / 2, VIEW_H / 2 + 44, 16, '#fff', 'center', '#000');
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+</script>
+<script>
+// Special Stage, Sonic 2 style: run down a twisting half-pipe in 3D (the
+// Generations Sonic model), slide left/right up its walls, jump, grab rings,
+// dodge bombs (-10 rings). Each checkpoint gate has a ring quota. The seven
+// emeralds Sonic lost in the warp fly ahead of him; every gate he clears wins
+// some back. At the end waits an eighth emerald nobody knew existed.
+'use strict';
+
+const SS_R = 7;              // half-pipe radius
+const SS_GATES = [{ s: 330, need: 28, give: 2 }, { s: 680, need: 85, give: 2 }, { s: 1040, need: 150, give: 3 }];
+const SS_END = 1330;
+
+class SpecialStage {
+  constructor(game) {
+    this.g = game;
+    this.t = 0; this.phase = 'intro';
+    this.s = 0; this.a = 0; this.va = 0; this.h = 0; this.vh = 0; this.air = false;
+    this.speed = 0; this.rings = 0; this.gate = 0; this.recovered = 0; this.invuln = 0; this.hitT = 0;
+    this.flash = 0; this.redFlash = 0; this.msg = null;
+    game.emeraldCount = 0;          // they're gone... (won back gate by gate)
+    try { this.build(); } catch (e) { console.warn('special stage unavailable', e); this.failed = true; }
+  }
+
+  // ------------------------------------------------------------ course
+  path() {
+    const segs = [[120, 0, 0], [140, 0.5, 0.12], [140, -0.6, -0.15], [160, 0.7, 0.08], [160, -0.5, -0.1], [150, 0.6, 0.14], [180, -0.8, -0.12], [160, 0.5, 0.05], [200, 0, 0]];
+    const pts = [], up = new THREE.Vector3(0, 1, 0);
+    let pos = new THREE.Vector3(), yaw = 0, pitch = 0;
+    for (const [len, turn, pt] of segs) {
+      for (let i = 0; i < len; i++) {
+        yaw += turn / len; pitch += (pt - pitch) * 0.03;
+        const f = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+        const r = new THREE.Vector3().crossVectors(f, up).normalize();
+        const n = new THREE.Vector3().crossVectors(r, f).normalize();
+        pts.push({ p: pos.clone(), f, r, n });
+        pos.addScaledVector(f, 1);
+      }
+    }
+    this.pts = pts;
+  }
+  frame(s) { return this.pts[Math.max(0, Math.min(this.pts.length - 1, Math.floor(s)))]; }
+  // world position on the pipe: s along it, angle a (0 = bottom), height h off the surface toward the middle
+  at(s, a, h = 0, out = new THREE.Vector3()) {
+    const n = this.pts.length, i = Math.max(0, Math.min(n - 2, Math.floor(s))), k = Math.max(0, Math.min(1, s - i));
+    const A = this.pts[i], B = this.pts[i + 1];
+    out.copy(A.p).lerp(B.p, k);
+    const rr = A.r.clone().lerp(B.r, k), nn = A.n.clone().lerp(B.n, k);
+    const rad = SS_R - h;
+    return out.addScaledVector(nn, SS_R - Math.cos(a) * rad).addScaledVector(rr, Math.sin(a) * rad);
+  }
+  upAt(s, a) { const F = this.frame(s); return F.n.clone().multiplyScalar(Math.cos(a)).addScaledVector(F.r, -Math.sin(a)).normalize(); }
+  basis(s, a, m4 = new THREE.Matrix4()) {
+    const F = this.frame(s), u = this.upAt(s, a), r = new THREE.Vector3().crossVectors(F.f, u).normalize();
+    return m4.makeBasis(r.negate(), u, F.f);
+  }
+
+  layout() {
+    // deterministic patterns of rings and bombs
+    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const objs = [];
+    const ring = (s, a) => objs.push({ type: 'ring', s, a });
+    const bomb = (s, a) => objs.push({ type: 'bomb', s, a });
+    let prev = 0;
+    for (let s = 36; s < SS_END - 30; s += 26) {
+      const kind = Math.floor(rnd() * 5);
+      const a0 = Math.max(-1.1, Math.min(1.1, prev + (rnd() - 0.5) * 1.2)); prev = a0;   // patterns drift, no wild jumps
+      if (SS_GATES.some((g) => Math.abs(g.s - s) < 14)) continue;
+      if (kind === 0) for (let i = 0; i < 8; i++) ring(s + i * 2.6, a0);                                  // a line
+      else if (kind === 1) for (let i = 0; i < 8; i++) ring(s + i * 2.8, a0 + Math.sin(i * 0.45) * 0.6);   // a lazy weave
+      else if (kind === 2) { for (let i = 0; i < 7; i++) ring(s + i * 2.6, a0); bomb(s + 9, a0 + 0.6); bomb(s + 9, a0 - 0.6); }
+      else if (kind === 3) { for (const d of [-0.45, 0, 0.45]) ring(s + 3, a0 + d); bomb(s + 10, a0); for (let i = 0; i < 5; i++) ring(s + 14 + i * 2.4, a0 + 0.5); }
+      else { for (const d of [-0.9, -0.45, 0.45, 0.9]) bomb(s + 5, a0 + d); for (let i = 0; i < 7; i++) ring(s + 9 + i * 2.4, a0); }
+      if (s > 420 && rnd() < 0.55) bomb(s + 23, a0 + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5));
+    }
+    return objs;
+  }
+
+  build() {
+    this.renderer = EscapeStage.renderer();
+    this.path();
+    const scene = this.scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060a2a);
+    scene.fog = new THREE.Fog(0x060a2a, 60, 260);
+    this.camera = new THREE.PerspectiveCamera(70, VIEW_W / VIEW_H, 0.1, 2000);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x203060, 1.0));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(0.3, 1, -0.4); scene.add(sun);
+    // the half-pipe: checkered blue and white with orange rims, like Sonic 2
+    const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.fillStyle = (i + j) % 2 ? '#2f63e8' : '#d8e4ff'; g.fillRect(i * 32, j * 32, 32, 32); }
+    const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 4; this.pipeTex = tex;
+    const N = this.pts.length, segA = 24, A0 = -1.75, A1 = 1.75;
+    const P = [], U = [], idx = [];
+    for (let s = 0; s < N; s += 2) for (let j = 0; j <= segA; j++) {
+      const a = A0 + (A1 - A0) * j / segA, v = this.at(s, a, 0);
+      P.push(v.x, v.y, v.z); U.push(j / segA * 4, s / 8);
+    }
+    const rows = Math.floor((N - 1) / 2) + 1;
+    for (let i = 0; i < rows - 1; i++) for (let j = 0; j < segA; j++) {
+      const a = i * (segA + 1) + j, b = a + segA + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide })));
+    // orange rims
+    for (const a of [A0, A1]) {
+      const pts = []; for (let s = 0; s < N; s += 4) pts.push(this.at(s, a, -0.2));
+      const curve = new THREE.CatmullRomCurve3(pts);
+      scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.floor(N / 4), 0.35, 6, false), new THREE.MeshBasicMaterial({ color: 0xff8a1c })));
+    }
+    // stars
+    const sv = [];
+    for (let i = 0; i < 1500; i++) { const v = new THREE.Vector3().randomDirection().multiplyScalar(700 + Math.random() * 600); const c0 = this.pts[Math.floor(Math.random() * N)].p; sv.push(c0.x + v.x, c0.y + v.y, c0.z + v.z); }
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
+    scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.4, fog: false })));
+    // checkpoint gates
+    this.gateMeshes = SS_GATES.map((gt, i) => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(SS_R + 0.4, 0.35, 8, 40), new THREE.MeshBasicMaterial({ color: [0xffd23f, 0xff5ae0, 0x43f1ff][i] }));
+      m.position.copy(this.frame(gt.s).p).addScaledVector(this.frame(gt.s).n, SS_R);
+      m.lookAt(m.position.clone().add(this.frame(gt.s).f)); scene.add(m); return m;
+    });
+    // rings and bombs
+    this.objs = this.layout();
+    const ringGeo = new THREE.TorusGeometry(0.5, 0.11, 8, 20), ringMat = new THREE.MeshPhongMaterial({ color: 0xffc41f, emissive: 0x6a4400, shininess: 90, specular: 0xffffff });
+    const bombGeo = new THREE.SphereGeometry(0.65, 14, 10), bombMat = new THREE.MeshPhongMaterial({ color: 0x15151c, shininess: 80, specular: 0x666666 });
+    const spikeGeo = new THREE.ConeGeometry(0.14, 0.4, 6), fuseMat = new THREE.MeshBasicMaterial({ color: 0xff5020 });
+    for (const o of this.objs) {
+      let m;
+      if (o.type === 'ring') { m = new THREE.Mesh(ringGeo, ringMat); m.position.copy(this.at(o.s, o.a, 1.1)); }
+      else {
+        m = new THREE.Group(); m.add(new THREE.Mesh(bombGeo, bombMat));
+        for (let i = 0; i < 6; i++) { const sp = new THREE.Mesh(spikeGeo, bombMat); const d = new THREE.Vector3().randomDirection(); sp.position.copy(d).multiplyScalar(0.7); sp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d); m.add(sp); }
+        const fuse = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), fuseMat); fuse.position.y = 0.8; m.add(fuse);
+        m.position.copy(this.at(o.s, o.a, 0.75)); this.basis(o.s, o.a, new THREE.Matrix4()); m.quaternion.setFromRotationMatrix(this.basis(o.s, o.a));
+      }
+      scene.add(m); o.mesh = m;
+    }
+    // the seven runaway emeralds, and the eighth
+    const emGeo = new THREE.OctahedronGeometry(0.8, 0);
+    this.ems = EMERALD_COLORS.slice(0, 7).map((col, i) => {
+      const m = new THREE.Mesh(emGeo, new THREE.MeshPhongMaterial({ color: col, emissive: new THREE.Color(col).multiplyScalar(0.4), shininess: 100, specular: 0xffffff }));
+      m.scale.set(1, 1.3, 1); scene.add(m); return { m, i, got: false, fly: 0 };
+    });
+    const e8 = new THREE.Group();
+    e8.add(new THREE.Mesh(new THREE.OctahedronGeometry(1.4, 0), new THREE.MeshPhongMaterial({ color: 0x2a1f3d, emissive: 0x3a1060, shininess: 120, specular: 0xffffff })));
+    e8.add(new THREE.Mesh(new THREE.SphereGeometry(2.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xb080ff, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })));
+    e8.position.copy(this.at(SS_END, 0, 2.5)); scene.add(e8); this.e8 = e8;
+    // Sonic
+    this.sonic = escSonicModel(); scene.add(this.sonic.root);
+    this.m4 = new THREE.Matrix4();
+  }
+
+  // ------------------------------------------------------------ update
+  update(inp) {
+    const g = this.g;
+    this.t++;
+    if (this.flash > 0) this.flash -= 0.03;
+    if (this.redFlash > 0) this.redFlash -= 0.05;
+    if (this.failed) { if (this.t > 60) g.finishSpecial(); return; }
+    if (this.phase === 'intro') {
+      if (this.t === 1) { Sound.playMusic('special'); this.flash = 1; }
+      if (this.t === 40) { Sound.play('ringloss'); g.speech.say('sonic', 'Wait-- the emeralds! They\'re getting away!', { dur: 160, prio: 5 }); }
+      if (this.t === 150) g.speech.say('sonic', `${SS_GATES[0].need} rings by the first gate. Let\'s go!`, { dur: 140, prio: 4 });
+      if (this.t > 120) { this.phase = 'run'; this.t = 0; }
+      this.pose(); return;
+    }
+    if (this.phase === 'fail') {
+      if (this.t > 170) { g.special = new SpecialStage(g); }   // try again
+      return;
+    }
+    if (this.phase === 'eighth') {
+      if (this.t === 1) { Sound.play('oneup', { rate: 0.7 }); this.flash = 1.2; g.emeraldCount = 8; }
+      if (this.t === 40) g.speech.say('sonic', 'An EIGHTH emerald?! There\'s only supposed to be seven...', { dur: 200, prio: 5 });
+      if (this.t === 260) g.speech.say('sonic', 'Whatever it is, it\'s sending me back. Eggman, here I come!', { dur: 180, prio: 5 });
+      if (this.t > 440) g.finishSpecial();
+      this.pose(); return;
+    }
+    // ---- run
+    if (!g.timeStopped) g.time++;
+    if (this.invuln > 0) this.invuln--;
+    if (this.hitT > 0) this.hitT--;
+    this.speed += ((36 + this.s / 80) - this.speed) * 0.02;
+    this.s += this.speed / 60;
+    const steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    this.va += (steer * 2.9 - this.va) * 0.2;
+    this.a = Math.max(-1.55, Math.min(1.55, this.a + this.va / 60));
+    if (!this.air && (inp.punchPressed || inp.jumpPressed)) { this.air = true; this.vh = 11; Sound.play('jump'); }
+    if (this.air) { this.vh -= 32 / 60; this.h += this.vh / 60; if (this.h <= 0) { this.h = 0; this.air = false; } }
+    // rings and bombs
+    for (const o of this.objs) {
+      if (o.dead || Math.abs(o.s - this.s) > 1.4) continue;
+      const da = Math.abs(o.a - this.a) * SS_R;
+      if (o.type === 'ring' && da < 1.8 && Math.abs(1.1 - (this.h + 1)) < 1.8) { o.dead = true; o.mesh.visible = false; this.rings++; Sound.ring(); g.addScore(10); }
+      if (o.type === 'bomb' && da < 1.2 && this.h < 1.3 && this.invuln <= 0) {
+        o.dead = true; o.mesh.visible = false;
+        this.rings = Math.max(0, this.rings - 10); this.invuln = 60; this.hitT = 30; this.redFlash = 1;
+        Sound.play('boom'); Sound.play('ringloss');
+      }
+    }
+    // checkpoint gates
+    const G = SS_GATES[this.gate];
+    if (G && this.s >= G.s) {
+      if (this.rings >= G.need) {
+        this.gate++; Sound.play('checkpoint'); this.msg = { text: 'COOL!', t: 0 };
+        let n = G.give;
+        for (const e of this.ems) if (!e.got && n > 0) { e.got = true; e.fly = 1; n--; }
+        const nx = SS_GATES[this.gate];
+        g.speech.say('sonic', nx ? `Got ${G.give} back! Next gate: ${nx.need} rings.` : 'All seven! But what\'s that up ahead...?', { dur: 160, prio: 4 });
+      } else {
+        this.phase = 'fail'; this.t = 0; Sound.play('death');
+        this.msg = { text: 'NOT ENOUGH RINGS...', t: 0 };
+        g.speech.say('sonic', 'No! They got away... One more try!', { dur: 160, prio: 5 });
+        return;
+      }
+    }
+    if (this.s >= SS_END - 2) { this.phase = 'eighth'; this.t = 0; this.e8.visible = false; return; }
+    this.pose();
+  }
+
+  // ------------------------------------------------------------ visuals
+  pose() {
+    const M = this.sonic;
+    M.root.position.copy(this.at(this.s, this.a, this.h));
+    M.root.quaternion.setFromRotationMatrix(this.basis(this.s, this.a, this.m4));
+    const ball = this.air;
+    M.body.visible = !ball; M.ball.visible = ball;
+    if (ball) M.ball.rotation.x += 0.5;
+    if (M.mixer) {
+      const name = this.phase === 'intro' || this.phase === 'eighth' ? 'idle' : this.hitT > 0 ? 'hit' : this.speed > 50 ? 'sprint' : 'run';
+      const a = M.actions[name];
+      if (a && M.cur !== name) { const prev = M.cur && M.actions[M.cur]; a.reset(); a.play(); if (prev) prev.crossFadeTo(a, 0.15, false); M.cur = name; }
+      if (a) a.timeScale = name === 'run' ? 0.6 + this.speed / 50 : 1;
+      M.mixer.update(1 / 60);
+    }
+    M.root.visible = !(this.invuln > 0 && this.t % 6 < 3);
+    // runaway emeralds weave ahead; won-back ones fly into Sonic
+    const t = this.g.t;
+    for (const e of this.ems) {
+      if (e.got && e.fly > 0) {
+        e.fly -= 0.03;
+        const from = this.at(this.s + 10 + e.i * 2, Math.sin(e.i) * 0.8, 3), to = this.at(this.s, this.a, 1);
+        e.m.position.copy(from.lerp(to, 1 - e.fly));
+        if (e.fly <= 0) { e.m.visible = false; this.g.emeraldCount = Math.min(7, (this.g.emeraldCount || 0) + 1); Sound.play('oneup', { rate: 1.4, vol: 0.6 }); this.flash = 0.4; }
+      } else if (!e.got) {
+        const ahead = this.phase === 'intro' ? 4 + this.t * 0.25 + e.i * 1.5 : 26 + e.i * 5 + Math.sin(t * 0.03 + e.i) * 3;
+        e.m.position.copy(this.at(this.s + ahead, Math.sin(t * 0.02 + e.i * 1.3) * 1.1, 2.5 + Math.sin(t * 0.05 + e.i) * 0.6));
+      }
+      e.m.rotation.y = t * 0.05 + e.i;
+    }
+    this.e8.rotation.y = t * 0.02; this.e8.children[1].scale.setScalar(1 + Math.sin(t * 0.1) * 0.08);
+    for (const o of this.objs) if (o.type === 'ring' && !o.dead && Math.abs(o.s - this.s) < 120) o.mesh.rotation.y = t * 0.08;
+  }
+
+  draw(ctx) {
+    if (this.failed) { ctx.fillStyle = '#060a2a'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); return; }
+    const cam = this.camera;
+    const camS = this.phase === 'intro' ? this.s - 5 - 6 * Math.min(1, this.t / 100) : this.s - 9;
+    const pos = this.at(camS, this.a * 0.5, SS_R * 0.5);
+    const look = this.at(this.s + 5, this.a * 0.85, 1.3);
+    if (!this.cp) { this.cp = pos.clone(); this.cl = look.clone(); }
+    this.cp.lerp(pos, 0.3); this.cl.lerp(look, 0.3);
+    cam.position.copy(this.cp); cam.up.copy(this.frame(this.s).n); cam.lookAt(this.cl);
+    this.renderer.render(this.scene, cam);
+    ctx.drawImage(this.renderer.domElement, 0, 0, VIEW_W, VIEW_H);
+    if (this.redFlash > 0) { ctx.fillStyle = `rgba(255,30,30,${0.35 * this.redFlash})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    if (this.phase === 'eighth' && this.t > 300) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, (this.t - 300) / 120)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+  }
+
+  speakerPos() {
+    if (this.failed) return { x: VIEW_W / 2, y: VIEW_H / 2 };
+    const v = this.at(this.s, this.a, this.h + 2.2).project(this.camera);
+    return { x: (v.x + 1) / 2 * VIEW_W, y: (1 - v.y) / 2 * VIEW_H };
+  }
+
+  drawHUD(ctx) {
+    const g = this.g;
+    g.text(ctx, 'SCORE', 32, 52, 22, '#ffd23f'); g.text(ctx, String(g.score), 330, 52, 22, '#fff', 'right');
+    g.drawEmeraldSlots(ctx, 32, 70);
+    // ring count vs the next gate's quota
+    const G = SS_GATES[this.gate];
+    ctx.fillStyle = 'rgba(0,0,40,.6)'; ctx.fillRect(VIEW_W / 2 - 170, 18, 340, 74);
+    drawRing(ctx, VIEW_W / 2 - 130, 52, g.t * 0.09);
+    g.text(ctx, String(this.rings), VIEW_W / 2 - 90, 66, 34, '#fff');
+    if (G) {
+      const ok = this.rings >= G.need;
+      g.text(ctx, `/ ${G.need}`, VIEW_W / 2 + 10, 66, 26, ok ? '#7dff9a' : '#ffd23f');
+      g.text(ctx, ok ? 'COOL!' : `GATE ${this.gate + 1} IN ${Math.max(0, Math.round(G.s - this.s))}`, VIEW_W / 2, 86, 11, '#c9d4ff', 'center');
+    } else g.text(ctx, 'CATCH IT!', VIEW_W / 2 + 10, 66, 22, '#b080ff');
+    if (this.msg) {
+      const m = this.msg; m.t++;
+      if (m.t > 120) this.msg = null;
+      else g.text(ctx, m.text, VIEW_W / 2, VIEW_H / 2 - 60, 40, m.text === 'COOL!' ? '#7dff9a' : '#ff5a3a', 'center', '#000');
+    }
+    if (this.phase === 'intro' && this.t < 120) g.text(ctx, 'SPECIAL STAGE', VIEW_W / 2, VIEW_H / 2 + 120, 40, '#fff', 'center', '#1d3fd1');
+  }
+
+  dispose() {
+    if (!this.scene) return;
+    this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    if (this.pipeTex) this.pipeTex.dispose();
+  }
+}
+
+</script>
+<script>
 // Speech bubbles for Sonic and Eggman, with button prompts that match the
 // player's current input device. Text tokens like {grab} become key caps.
 'use strict';
@@ -6342,6 +7225,7 @@ class SpeechSystem {
   speakerPos(who) {
     const g = this.g, F = g.final;
     if (g.escape) return g.escape.speakerPos(who);
+    if (g.ruins || g.special) return (g.ruins || g.special).speakerPos(who);
     if (who === 'eggman') {
       if (F) {
         if (F.phase === 'rise') {
@@ -6364,7 +7248,7 @@ class SpeechSystem {
       const pos = this.speakerPos(b.who);
       if (!pos) continue;
       const F = this.g.final;
-      const sp = this.g.escape ? pos : F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
+      const sp = this.g.escape || this.g.ruins || this.g.special ? pos : F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
       this.drawBubble(ctx, b, sp.x, sp.y);
     }
   }
@@ -6605,6 +7489,7 @@ class Game {
     document.getElementById('dev').classList.remove('on', 'open');
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
     this.continues = 2;
+    this.emeraldsGot = new Set(); this.emeraldCount = 0;
     this.speech.reset();
     this.loadLevel(0);
   }
@@ -6630,7 +7515,7 @@ class Game {
     this.timeStopped = false;
     this.camLock = null; this.goal = null; this.goalLockX = null;
     this.boss = null; this.bossStarted = false; this.arena = null;
-    this.tally = null; this.deathHandled = false; this.final = null; this.endEscape();
+    this.tally = null; this.deathHandled = false; this.final = null; this.endEscape(); this.endSpecialModes();
     this.speech.clear(); this.combo = null; this.hitStop = 0;
     let start = null;
     for (const e of data.ents) {
@@ -6646,6 +7531,11 @@ class Game {
           this.objs.push(c); break;
         }
         case 'goal': this.goal = new Goal(e.x, e.y); this.objs.push(this.goal); break;
+        case 'emerald': {
+          const key = this.levelIndex + '-' + e.id;
+          if (!this.emeraldsGot.has(key)) this.objs.push(new ChaosEmerald(e.x, e.y, key, EMERALD_COLORS[e.color]));
+          break;
+        }
         case 'enemy': this.enemies.push(new Enemy(e.kind, e.x, e.y, e)); break;
         case 'deco': this.decor.push(new Deco(e.x, e.y, e.img)); break;
         case 'loop': this.loops.push(new LoopObj(e.x, e.y, e.R, data.theme)); break;
@@ -6762,6 +7652,17 @@ class Game {
 
   onPlayerDeath() { this.timeStopped = true; }
 
+  // Chaos Emeralds: two in each of the first two acts
+  levelEmeralds() { return this.level ? this.level.ents.filter((e) => e.type === 'emerald') : []; }
+  missingEmeralds() { return this.levelEmeralds().filter((e) => !this.emeraldsGot.has(this.levelIndex + '-' + e.id)).length; }
+  collectEmerald(em) {
+    this.emeraldsGot.add(em.key); this.emeraldCount = this.emeraldsGot.size;
+    Sound.play('oneup', { rate: 1.1 }); this.addScore(5000);
+    for (let i = 0; i < 10; i++) this.effects.push(new Effect('sparkle', em.x + (Math.random() - 0.5) * 50, em.y - 10 + (Math.random() - 0.5) * 50));
+    const left = this.missingEmeralds();
+    this.speech.say('sonic', left ? `A Chaos Emerald! ${left} more in this zone.` : this.emeraldCount >= 4 ? 'Four emeralds! I can feel them pulling... toward the goal!' : 'Got this zone\'s emeralds!', { dur: 170, prio: 3 });
+  }
+
   onGoal(goal) {
     this.timeStopped = true;
     this.goalLockX = goal.x - VIEW_W / 2;
@@ -6786,6 +7687,28 @@ class Game {
     if (this.escape) this.escape.dispose();
     this.escape = null;
   }
+  // Emerald Ruins (Diamond Rush) and the Special Stage, between Act 2 and Act 3
+  startRuins() {
+    this.endSpecialModes(); this.endEscape(); this.final = null; this.tally = null;
+    this.emeraldCount = Math.max(4, Math.min(4, this.emeraldCount || 4));
+    this.speech.clear(); Sound.stopTrack(); Sound.stopMusic();
+    this.ruins = new Ruins(this);
+  }
+  startSpecial() {
+    this.endSpecialModes(); this.tally = null;
+    this.speech.clear(); Sound.stopMusic();
+    this.special = new SpecialStage(this);
+  }
+  finishSpecial() {
+    this.endSpecialModes(); this.emeraldCount = 8;
+    this.loadLevel(2);                       // back home: Act 3 and Eggman
+    this.speech.say('sonic', 'Home! And Eggman\'s fortress is right ahead.', { dur: 180, prio: 3 });
+  }
+  endSpecialModes() {
+    if (this.special) this.special.dispose();
+    this.special = null; this.ruins = null;
+  }
+
   escapeDeath() {
     this.lives--;
     if (this.lives <= 0) { this.endEscape(); this.gameOver('escape'); return; }
@@ -6806,6 +7729,8 @@ class Game {
     this.state = 'play';
     Sound.play('oneup');
     if (this.resumeAt === 'escape') this.startEscape();
+    else if (this.resumeAt === 'ruins') this.startRuins();
+    else if (this.resumeAt === 'special') this.startSpecial();
     else if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
       const p = this.player;
       p.reset(this.arena.x + 300, this.arena.groundY);
@@ -6820,7 +7745,8 @@ class Game {
     Sound.init(); Sound.stopMusic(); Sound.stopTrack();
     document.getElementById('dev').classList.remove('on', 'open');
     this.newGame();
-    if (n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    if (n >= 1 && n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    if (n === 9 || n === 0) { this.loadLevel(1); this.card = 0; this.lives = 9; if (n === 9) { this.emeraldCount = 4; this.startRuins(); } else { this.emeraldCount = 7; this.startSpecial(); } return; }
     this.loadLevel(2);
     this.card = 0; this.lives = 9;
     const a = this.arena, p = this.player;
@@ -6830,6 +7756,8 @@ class Game {
     this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
     this.rings = 50;
     if (n === 8) { this.startEscape(); return; }
+    if (n === 9) { this.emeraldCount = 4; this.startRuins(); return; }
+    if (n === 0) { this.emeraldCount = 7; this.startSpecial(); return; }
     if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
     else this.final = new FinalBattle(this, null, n === 7 ? 'brawl' : true);
   }
@@ -6910,6 +7838,8 @@ class Game {
       if (this.tally) this.updateTally(inp);
       return;
     }
+    const mode = this.ruins || this.special;
+    if (mode) { mode.update(inp); return; }
     if (this.final) {
       this.final.update(inp);
       for (const e of this.effects) e.update(this);
@@ -6972,6 +7902,17 @@ class Game {
     if (this.shake < 0.5) this.shake = 0;
   }
 
+  // the eight emerald slots under the score
+  drawEmeraldSlots(ctx, x, y) {
+    const n = this.emeraldCount || 0;
+    if (!n && !(this.level && this.levelEmeralds().length) && !this.ruins && !this.special) return;
+    for (let i = 0; i < 8; i++) {
+      ctx.globalAlpha = i < n ? 1 : 0.25;
+      drawEmerald(ctx, x + 12 + i * 30, y + 12, i < n ? EMERALD_COLORS[i] : '#555a70', 0.9);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   updateTally(inp) {
     const T = this.tally;
     T.t++;
@@ -6986,12 +7927,13 @@ class Game {
       if (T.timeBonus === 0 && T.ringBonus === 0) { T.done = true; Sound.play('checkpoint'); }
     } else if (++T.wait > 150) {
       this.saveHi();
-      if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
+      if (this.levelIndex === 1) this.startRuins();      // the four emeralds open a portal
+      else if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
       else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
-  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); Sound.stopMusic(); Sound.stopTrack(); }
+  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); this.endSpecialModes(); Sound.stopMusic(); Sound.stopTrack(); }
 
   saveHi() {
     if (this.score > this.hiscore) {
@@ -7053,6 +7995,15 @@ class Game {
   }
 
   drawPlay(ctx) {
+    const mode = this.ruins || this.special;
+    if (mode) {
+      mode.draw(ctx);
+      this.speech.draw(ctx, { x: 0, y: 0 });
+      mode.drawHUD(ctx);
+      if (this.state === 'paused') this.drawPause(ctx);
+      if (this.state === 'gameover') this.drawGameOver(ctx);
+      return;
+    }
     if (this.escape) {
       this.escape.draw(ctx);
       this.speech.draw(ctx, { x: 0, y: 0 });
@@ -7154,6 +8105,11 @@ class Game {
       px -= 56;
     }
     if (Sound.muted) this.text(ctx, 'MUTED (M)', VIEW_W - 24, VIEW_H - 24, 12, '#fff', 'right');
+    this.drawEmeraldSlots(ctx, 32, 162);
+    if (this.level && !this.final && !this.escape && this.levelEmeralds().length) {
+      const tot = this.levelEmeralds().length;
+      this.text(ctx, `ZONE EMERALDS ${tot - this.missingEmeralds()}/${tot}`, 32, 206, 12, this.missingEmeralds() ? '#c9d4ff' : '#7dff9a');
+    }
     if (this.boss && this.boss.state === 'fight') {
       const w = 300, x = VIEW_W / 2 - w / 2, y = 30;
       ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(x - 4, y - 4, w + 8, 22);
@@ -7219,7 +8175,7 @@ class Game {
       this.text(ctx, 'CONTINUE?', VIEW_W / 2, 200, 48, '#fff', 'center', '#1d3fd1');
       this.text(ctx, String(left), VIEW_W / 2, 330, 72, '#ffd23f', 'center', '#000');
       drawSonicFrame(ctx, animFrame('tap', this.goTimer * 0.06), VIEW_W / 2, 520, { scale: 4 });
-      const where = this.resumeAt === 'escape' ? 'THE ESCAPE' : this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
+      const where = this.resumeAt === 'ruins' ? 'THE EMERALD RUINS' : this.resumeAt === 'special' ? 'THE SPECIAL STAGE' : this.resumeAt === 'escape' ? 'THE ESCAPE' : this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
       this.text(ctx, `RESUME AT ${where}`, VIEW_W / 2, 580, 16, '#c9d4ff', 'center');
       this.text(ctx, `CONTINUES LEFT: ${this.continues}   (SCORE RESETS)`, VIEW_W / 2, 620, 14, '#fff', 'center');
       if (Math.floor(this.goTimer / 30) % 2) this.text(ctx, 'PRESS START', VIEW_W / 2, 670, 20, '#ffd23f', 'center');
@@ -7314,7 +8270,7 @@ class Game {
       b.addEventListener('click', (e) => { e.stopPropagation(); if (game.state === 'title') game.devSkip(+b.dataset.skip); });
     }
     window.addEventListener('keydown', (e) => {
-      const m = /^Digit([1-8])$/.exec(e.code);
+      const m = /^Digit([0-9])$/.exec(e.code);
       if (m && game.state === 'title') game.devSkip(+m[1]);
     });
   }

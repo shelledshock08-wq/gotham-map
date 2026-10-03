@@ -46,6 +46,7 @@ class Game {
     document.getElementById('dev').classList.remove('on', 'open');
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
     this.continues = 2;
+    this.emeraldsGot = new Set(); this.emeraldCount = 0;
     this.speech.reset();
     this.loadLevel(0);
   }
@@ -71,7 +72,7 @@ class Game {
     this.timeStopped = false;
     this.camLock = null; this.goal = null; this.goalLockX = null;
     this.boss = null; this.bossStarted = false; this.arena = null;
-    this.tally = null; this.deathHandled = false; this.final = null; this.endEscape();
+    this.tally = null; this.deathHandled = false; this.final = null; this.endEscape(); this.endSpecialModes();
     this.speech.clear(); this.combo = null; this.hitStop = 0;
     let start = null;
     for (const e of data.ents) {
@@ -87,6 +88,11 @@ class Game {
           this.objs.push(c); break;
         }
         case 'goal': this.goal = new Goal(e.x, e.y); this.objs.push(this.goal); break;
+        case 'emerald': {
+          const key = this.levelIndex + '-' + e.id;
+          if (!this.emeraldsGot.has(key)) this.objs.push(new ChaosEmerald(e.x, e.y, key, EMERALD_COLORS[e.color]));
+          break;
+        }
         case 'enemy': this.enemies.push(new Enemy(e.kind, e.x, e.y, e)); break;
         case 'deco': this.decor.push(new Deco(e.x, e.y, e.img)); break;
         case 'loop': this.loops.push(new LoopObj(e.x, e.y, e.R, data.theme)); break;
@@ -203,6 +209,17 @@ class Game {
 
   onPlayerDeath() { this.timeStopped = true; }
 
+  // Chaos Emeralds: two in each of the first two acts
+  levelEmeralds() { return this.level ? this.level.ents.filter((e) => e.type === 'emerald') : []; }
+  missingEmeralds() { return this.levelEmeralds().filter((e) => !this.emeraldsGot.has(this.levelIndex + '-' + e.id)).length; }
+  collectEmerald(em) {
+    this.emeraldsGot.add(em.key); this.emeraldCount = this.emeraldsGot.size;
+    Sound.play('oneup', { rate: 1.1 }); this.addScore(5000);
+    for (let i = 0; i < 10; i++) this.effects.push(new Effect('sparkle', em.x + (Math.random() - 0.5) * 50, em.y - 10 + (Math.random() - 0.5) * 50));
+    const left = this.missingEmeralds();
+    this.speech.say('sonic', left ? `A Chaos Emerald! ${left} more in this zone.` : this.emeraldCount >= 4 ? 'Four emeralds! I can feel them pulling... toward the goal!' : 'Got this zone\'s emeralds!', { dur: 170, prio: 3 });
+  }
+
   onGoal(goal) {
     this.timeStopped = true;
     this.goalLockX = goal.x - VIEW_W / 2;
@@ -227,6 +244,28 @@ class Game {
     if (this.escape) this.escape.dispose();
     this.escape = null;
   }
+  // Emerald Ruins (Diamond Rush) and the Special Stage, between Act 2 and Act 3
+  startRuins() {
+    this.endSpecialModes(); this.endEscape(); this.final = null; this.tally = null;
+    this.emeraldCount = Math.max(4, Math.min(4, this.emeraldCount || 4));
+    this.speech.clear(); Sound.stopTrack(); Sound.stopMusic();
+    this.ruins = new Ruins(this);
+  }
+  startSpecial() {
+    this.endSpecialModes(); this.tally = null;
+    this.speech.clear(); Sound.stopMusic();
+    this.special = new SpecialStage(this);
+  }
+  finishSpecial() {
+    this.endSpecialModes(); this.emeraldCount = 8;
+    this.loadLevel(2);                       // back home: Act 3 and Eggman
+    this.speech.say('sonic', 'Home! And Eggman\'s fortress is right ahead.', { dur: 180, prio: 3 });
+  }
+  endSpecialModes() {
+    if (this.special) this.special.dispose();
+    this.special = null; this.ruins = null;
+  }
+
   escapeDeath() {
     this.lives--;
     if (this.lives <= 0) { this.endEscape(); this.gameOver('escape'); return; }
@@ -247,6 +286,8 @@ class Game {
     this.state = 'play';
     Sound.play('oneup');
     if (this.resumeAt === 'escape') this.startEscape();
+    else if (this.resumeAt === 'ruins') this.startRuins();
+    else if (this.resumeAt === 'special') this.startSpecial();
     else if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
       const p = this.player;
       p.reset(this.arena.x + 300, this.arena.groundY);
@@ -261,7 +302,8 @@ class Game {
     Sound.init(); Sound.stopMusic(); Sound.stopTrack();
     document.getElementById('dev').classList.remove('on', 'open');
     this.newGame();
-    if (n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    if (n >= 1 && n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    if (n === 9 || n === 0) { this.loadLevel(1); this.card = 0; this.lives = 9; if (n === 9) { this.emeraldCount = 4; this.startRuins(); } else { this.emeraldCount = 7; this.startSpecial(); } return; }
     this.loadLevel(2);
     this.card = 0; this.lives = 9;
     const a = this.arena, p = this.player;
@@ -271,6 +313,8 @@ class Game {
     this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
     this.rings = 50;
     if (n === 8) { this.startEscape(); return; }
+    if (n === 9) { this.emeraldCount = 4; this.startRuins(); return; }
+    if (n === 0) { this.emeraldCount = 7; this.startSpecial(); return; }
     if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
     else this.final = new FinalBattle(this, null, n === 7 ? 'brawl' : true);
   }
@@ -351,6 +395,8 @@ class Game {
       if (this.tally) this.updateTally(inp);
       return;
     }
+    const mode = this.ruins || this.special;
+    if (mode) { mode.update(inp); return; }
     if (this.final) {
       this.final.update(inp);
       for (const e of this.effects) e.update(this);
@@ -413,6 +459,17 @@ class Game {
     if (this.shake < 0.5) this.shake = 0;
   }
 
+  // the eight emerald slots under the score
+  drawEmeraldSlots(ctx, x, y) {
+    const n = this.emeraldCount || 0;
+    if (!n && !(this.level && this.levelEmeralds().length) && !this.ruins && !this.special) return;
+    for (let i = 0; i < 8; i++) {
+      ctx.globalAlpha = i < n ? 1 : 0.25;
+      drawEmerald(ctx, x + 12 + i * 30, y + 12, i < n ? EMERALD_COLORS[i] : '#555a70', 0.9);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   updateTally(inp) {
     const T = this.tally;
     T.t++;
@@ -427,12 +484,13 @@ class Game {
       if (T.timeBonus === 0 && T.ringBonus === 0) { T.done = true; Sound.play('checkpoint'); }
     } else if (++T.wait > 150) {
       this.saveHi();
-      if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
+      if (this.levelIndex === 1) this.startRuins();      // the four emeralds open a portal
+      else if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
       else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
-  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); Sound.stopMusic(); Sound.stopTrack(); }
+  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); this.endSpecialModes(); Sound.stopMusic(); Sound.stopTrack(); }
 
   saveHi() {
     if (this.score > this.hiscore) {
@@ -494,6 +552,15 @@ class Game {
   }
 
   drawPlay(ctx) {
+    const mode = this.ruins || this.special;
+    if (mode) {
+      mode.draw(ctx);
+      this.speech.draw(ctx, { x: 0, y: 0 });
+      mode.drawHUD(ctx);
+      if (this.state === 'paused') this.drawPause(ctx);
+      if (this.state === 'gameover') this.drawGameOver(ctx);
+      return;
+    }
     if (this.escape) {
       this.escape.draw(ctx);
       this.speech.draw(ctx, { x: 0, y: 0 });
@@ -595,6 +662,11 @@ class Game {
       px -= 56;
     }
     if (Sound.muted) this.text(ctx, 'MUTED (M)', VIEW_W - 24, VIEW_H - 24, 12, '#fff', 'right');
+    this.drawEmeraldSlots(ctx, 32, 162);
+    if (this.level && !this.final && !this.escape && this.levelEmeralds().length) {
+      const tot = this.levelEmeralds().length;
+      this.text(ctx, `ZONE EMERALDS ${tot - this.missingEmeralds()}/${tot}`, 32, 206, 12, this.missingEmeralds() ? '#c9d4ff' : '#7dff9a');
+    }
     if (this.boss && this.boss.state === 'fight') {
       const w = 300, x = VIEW_W / 2 - w / 2, y = 30;
       ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(x - 4, y - 4, w + 8, 22);
@@ -660,7 +732,7 @@ class Game {
       this.text(ctx, 'CONTINUE?', VIEW_W / 2, 200, 48, '#fff', 'center', '#1d3fd1');
       this.text(ctx, String(left), VIEW_W / 2, 330, 72, '#ffd23f', 'center', '#000');
       drawSonicFrame(ctx, animFrame('tap', this.goTimer * 0.06), VIEW_W / 2, 520, { scale: 4 });
-      const where = this.resumeAt === 'escape' ? 'THE ESCAPE' : this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
+      const where = this.resumeAt === 'ruins' ? 'THE EMERALD RUINS' : this.resumeAt === 'special' ? 'THE SPECIAL STAGE' : this.resumeAt === 'escape' ? 'THE ESCAPE' : this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
       this.text(ctx, `RESUME AT ${where}`, VIEW_W / 2, 580, 16, '#c9d4ff', 'center');
       this.text(ctx, `CONTINUES LEFT: ${this.continues}   (SCORE RESETS)`, VIEW_W / 2, 620, 14, '#fff', 'center');
       if (Math.floor(this.goTimer / 30) % 2) this.text(ctx, 'PRESS START', VIEW_W / 2, 670, 20, '#ffd23f', 'center');
@@ -755,7 +827,7 @@ class Game {
       b.addEventListener('click', (e) => { e.stopPropagation(); if (game.state === 'title') game.devSkip(+b.dataset.skip); });
     }
     window.addEventListener('keydown', (e) => {
-      const m = /^Digit([1-8])$/.exec(e.code);
+      const m = /^Digit([0-9])$/.exec(e.code);
       if (m && game.state === 'title') game.devSkip(+m[1]);
     });
   }
