@@ -575,7 +575,11 @@ class Game {
   Assets.load((p) => { game.loadProgress = p; }).then(() => {
     // wait briefly for the pixel font so the first frames render correctly
     const ready = document.fonts && document.fonts.load ? document.fonts.load(`20px ${FONT}`).catch(() => {}) : Promise.resolve();
-    Promise.race([ready, new Promise((r) => setTimeout(r, 1500))]).then(() => { game.state = 'title'; });
+    Promise.race([ready, new Promise((r) => setTimeout(r, 1500))]).then(() => {
+      game.state = 'title';
+      const m = document.getElementById('boot-msg');
+      if (m && !document.getElementById('boot-err').textContent) m.remove();
+    });
   });
 
   const STEP = 1000 / 60;

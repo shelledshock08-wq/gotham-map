@@ -41,7 +41,12 @@ def repl(m):
         first = False
     return out + inline(m)
 
+music = {k: embedded.pop(k) for k in [k for k in embedded if k.startswith('assets/music/')]}
 html = re.sub(r'<script src="([^"]+)"></script>', repl, html)
+if music:
+    # The song goes last: if it fails to load (or the file is cut off) the game still runs.
+    tail = ''.join(f'<script>window.EMBEDDED_ASSETS[{json.dumps(k)}] = {json.dumps(v)};</script>\n' for k, v in music.items())
+    html = html.replace('</body>', tail + '</body>')
 out = os.path.join(ROOT, 'sonic-standalone-full.html' if 'assets/music' in subs else 'sonic-standalone.html')
 open(out, 'w', encoding='utf-8').write(html)
 print(f'wrote {out} ({os.path.getsize(out) / 1024 / 1024:.2f} MB, {len(embedded)} assets)')

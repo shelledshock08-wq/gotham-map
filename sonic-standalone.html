@@ -15,6 +15,9 @@
   }
   #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
   canvas#screen { display: block; image-rendering: auto; background: #000; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+  #boot-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; pointer-events: none; }
+  #boot-err { color: #ff8a8a; white-space: pre-wrap; font-size: 13px; max-width: 90vw; }
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
   #touch.on { display: block; }
   .tbtn {
@@ -40,6 +43,22 @@
 </head>
 <body>
 <div id="wrap"><canvas id="screen" width="1280" height="720"></canvas></div>
+<!-- Visible until the game starts. If it never goes away, scripts are not running. -->
+<div id="boot-msg">
+  <div><b>Loading Sonic...</b><br><br>
+  If this message stays, this viewer is not running the game's JavaScript.<br>
+  Open the file in <b>Chrome, Edge, Firefox or Safari</b> (not a file preview inside another app).<br>
+  The full version is about 7 MB; if your copy is much smaller, the download was cut off.</div>
+  <pre id="boot-err"></pre>
+</div>
+<script>
+  // Show any startup error on screen instead of a silent black canvas.
+  window.addEventListener('error', function (e) {
+    var el = document.getElementById('boot-err');
+    if (el) el.textContent += 'Error: ' + (e.message || e) + (e.filename ? ' (' + e.filename.split('/').pop().slice(0, 40) + ':' + e.lineno + ')' : '') + '\n';
+    var m = document.getElementById('boot-msg'); if (m) m.style.display = 'block';
+  });
+</script>
 <div id="touch">
   <div class="tbtn" id="t-left"  data-k="left">&#9664;</div>
   <div class="tbtn" id="t-right" data-k="right">&#9654;</div>
@@ -4143,7 +4162,11 @@ class Game {
   Assets.load((p) => { game.loadProgress = p; }).then(() => {
     // wait briefly for the pixel font so the first frames render correctly
     const ready = document.fonts && document.fonts.load ? document.fonts.load(`20px ${FONT}`).catch(() => {}) : Promise.resolve();
-    Promise.race([ready, new Promise((r) => setTimeout(r, 1500))]).then(() => { game.state = 'title'; });
+    Promise.race([ready, new Promise((r) => setTimeout(r, 1500))]).then(() => {
+      game.state = 'title';
+      const m = document.getElementById('boot-msg');
+      if (m && !document.getElementById('boot-err').textContent) m.remove();
+    });
   });
 
   const STEP = 1000 / 60;
