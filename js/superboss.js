@@ -1307,7 +1307,7 @@ class FinalBattle {
     if (t === 70) this.say('sonic', "He's blowing up the whole base?!", { dur: 110, prio: 5 });
     if (t === 150) { this.say('sonic', 'My power\'s spent... Fine. Just me and my legs.', { dur: 130, prio: 5 }); this.flash = 0.6; h.depowered = true; h.facing = 1; Sound.play('ringloss', { rate: 0.7 }); }
     if (t > 150) { h.y += (this.gy - 34 - h.y) * 0.12; h.vx = 0; h.vy = 0; }   // drops out of super form onto the floor
-    if (t === 240) this.say('sonic', 'Time to BOOST.', { dur: 90, prio: 5, big: true });
+    if (t === 240) { this.say('sonic', 'Time to BOOST.', { dur: 90, prio: 5, big: true }); Sound.playTrack('assets/music/rise_from_the_ashes.mp3', 'escape'); }
     if (t > 290) this.flash = Math.min(1.2, (t - 290) / 25);
     if (t === 320) { g.startEscape(); }
   }

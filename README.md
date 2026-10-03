@@ -59,6 +59,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Boost (hold; smashes crates, rubble and robots) | X | X | B |
 | Jump / homing attack in mid-air / air dash | Z / Space | A | A |
 | Slide | hold ↓ | Down | ▼ |
+| Run on water | keep boosting (or hit the floating dash panels) | | |
 
 **Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–8) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl or the 3D base escape. Turn it off with `DEV_MENU = false` in `js/game.js`.
 
@@ -76,7 +77,14 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation. Counter Eggman's eye laser by holding your laser while it charges: the beams lock into a clash you win by mashing.
 - **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. The camera goes in close (and tighter during ground-and-pound), jolts toward every punch, and heavy blows drop into slow motion. Sonic's rage builds as he lands hits: his aura burns from gold to crimson, embers rise off him and red edges close in on the screen. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and a beating that shows on Eggman in four stages: a swollen cheek, a cracked lens and a nosebleed; then a black eye and a split forehead; then both eyes blackened, a shattered lens over a swollen-shut eye, blood running down his face and a torn coat; and finally smashed goggles, a purple face covered in blood that drips off him, and a coat in tatters. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away.
-- **Egg Base Escape:** Eggman sets the base to self-destruct, and the game switches to a behind-the-back 3D boost stage in the style of Sonic Generations (three.js, with a low-poly Sonic built in code). You run on auto, steer, boost through crates and Egg Pawns, jump laser trip-wires, slide under laser fences, dodge falling ceiling, clear pits and chain homing attacks across drones, while the collapse chases you (the meter at the top). Rings fill the boost gauge. You burst out of the base, it explodes behind you, and TO BE CONTINUED. Dying restarts the escape.
+- **Egg Base Escape:** Eggman sets the base to self-destruct. Sonic drops out of super form and the game switches to a behind-the-back 3D boost stage in the style of Sonic Generations (three.js), with the Sonic Generations model and animations: run, max-speed sprint, spring, hurt, falling and victory. It plays *Rise From The Ashes* if `assets/music/rise_from_the_ashes.mp3` is present. The course has five parts:
+  1. You boost through the collapsing base and a loop in its hangar.
+  2. You burst out onto an elevated highway through a burning city at dusk, with banked turns, cars, Egg Pawns, a broken bridge you cross by chaining homing attacks, a loop and a corkscrew.
+  3. You run straight down the glass face of a skyscraper (Speed Highway style) while windows burst around you.
+  4. You cross a bay running on the water. You have to keep boosting or you sink.
+  5. You take the coast road through a final loop, launch off a ramp and watch the base blow up behind you. TO BE CONTINUED.
+
+  Boosting hits with a sonic-boom shockwave, a blue jet trail, a camera FOV punch and a synthesized roar that becomes a held jet-engine sound. The blast wave chases you the whole way (the meter at the top). Rings refill the boost gauge. Dying restarts the escape.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
 - Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone); dying in the brawl or the escape restarts that part. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle, brawl or escape if you had reached it.
 - An original chiptune soundtrack synthesized live with Web Audio: meadow, dunes, fortress, boss and invincibility themes.
@@ -98,7 +106,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/speech.js` | Speech bubbles and button prompts |
 | `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 | `js/brawl.js` | Eggman brawl, Metal Sonic, impact effects |
-| `js/escape.js` | 3D Egg Base Escape: course, low-poly Sonic, boost physics, hazards |
+| `js/escape.js` | 3D Egg Base Escape: course (loops, corkscrew, building run, water), boost physics, hazards, camera |
+| `js/models3d.js` | Packed Sonic and Egg Pawn 3D models and animations (generated by `tools/convert_models`) |
 | `js/lib/three.min.js` | three.js r149 (MIT), used only by the escape |
 | `js/eggframes.js` | Eggman sprite frame rects |
 | `js/eggface.js` | Eggman face anchors per frame (generated) |
@@ -110,9 +119,10 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **Sound effects / jingles:** Kenney "Digital Audio" and "Music Jingles", CC0 ([kenney.nl](https://kenney.nl)), via the [ETdoFresh/kenney.nl](https://github.com/ETdoFresh/kenney.nl) mirror. They were converted to MP3. See `assets/LICENSE-kenney.txt`.
 - **Sonic sprites:** fan-ripped 8-bit Sonic sprite sheet from [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML), downsampled to native resolution. Super Sonic is a gold recolor of the same frames.
 - **Eggman sprites:** fan-ripped frames from the same [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML) project, downsampled to native pixels. Metal Sonic is a steel recolor of the Sonic sheet.
+- **3D Sonic and Egg Pawn:** the Sonic Generations models ripped by Apoc Hedgie for The Models Resource, with Generations animation clips, both taken from the [JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity](https://github.com/JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity) fan project and converted with `tools/convert_models`.
 - **3D engine:** [three.js](https://threejs.org) r149, MIT license (`js/lib/LICENSE-three.txt`).
 - **Rings, monitors, bosses, Egg Colossus, effects, chiptune music:** drawn and composed in code for this project.
-- **Final battle songs:** the game plays `assets/music/with_me.mp3` (robot fight) and `assets/music/built_for_blame.mp3` (brawl) if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).
+- **Final battle songs:** the game plays `assets/music/with_me.mp3` (robot fight), `assets/music/built_for_blame.mp3` (brawl) and `assets/music/rise_from_the_ashes.mp3` (escape) if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).
 - **Font:** Press Start 2P (SIL OFL), bundled in `assets/fonts` (from `@fontsource/press-start-2p`).
 
 This is an unofficial, non-commercial fan game. Sonic the Hedgehog, Super Sonic, Dr. Eggman and the original sprites are property of SEGA. This project is not affiliated with or endorsed by SEGA. Don't sell it or monetize it.

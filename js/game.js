@@ -221,7 +221,6 @@ class Game {
     this.rings = 0; this.timeStopped = false;
     this.speech.clear();
     document.getElementById('touch').classList.add('super');
-    Sound.stopTrack();
     this.escape = new EscapeStage(this);
   }
   endEscape() {

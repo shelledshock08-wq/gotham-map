@@ -216,6 +216,59 @@ const Sound = {
     }
   },
 
+  // The boost: a sonic-boom blast when it kicks in...
+  boostBurst() {
+    if (!this.ctx || this.muted) return;
+    const c = this.ctx, t = c.currentTime;
+    const out = c.createGain(); out.gain.value = 1; out.connect(this.sfxGain);
+    // sub-bass thump that drops away
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.45);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.6);
+    // the blast: noise swept through a band-pass, low to high
+    if (this.noiseBuf) {
+      const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.7;
+      f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(5200, t + 0.35);
+      const ng = c.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.75, t + 0.03); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      n.connect(f); f.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.75);
+    }
+    // a rising jet whine on top
+    const w = c.createOscillator(); w.type = 'sawtooth';
+    w.frequency.setValueAtTime(220, t); w.frequency.exponentialRampToValueAtTime(1400, t + 0.4);
+    const wf = c.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 2400;
+    const wg = c.createGain(); wg.gain.setValueAtTime(0.0001, t); wg.gain.exponentialRampToValueAtTime(0.12, t + 0.05); wg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    w.connect(wf); wf.connect(wg); wg.connect(out); w.start(t); w.stop(t + 0.55);
+  },
+
+  // ...and a jet-engine roar held while boosting (0 = off).
+  boostHold(level) {
+    if (!this.ctx || !this.noiseBuf) return;
+    const c = this.ctx, t = c.currentTime;
+    if (!this.boostNode && level > 0 && !this.muted) {
+      const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true;
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.9;
+      const lo = c.createBiquadFilter(); lo.type = 'lowpass'; lo.frequency.value = 220;
+      const g = c.createGain(); g.gain.value = 0.0001;
+      const rum = c.createOscillator(); rum.type = 'sawtooth'; rum.frequency.value = 46;
+      const rg = c.createGain(); rg.gain.value = 0.18;
+      n.connect(f); f.connect(g); rum.connect(lo); lo.connect(rg); rg.connect(g); g.connect(this.sfxGain);
+      n.start(); rum.start();
+      this.boostNode = { n, f, g, rum };
+    }
+    const B = this.boostNode;
+    if (!B) return;
+    const v = this.muted ? 0 : level;
+    B.g.gain.setTargetAtTime(Math.max(0.0001, 0.42 * v), t, 0.05);
+    B.f.frequency.setTargetAtTime(700 + 900 * v + Math.random() * 200, t, 0.1);
+    if (level <= 0) {
+      const node = B; this.boostNode = null;
+      node.g.gain.setTargetAtTime(0.0001, t, 0.08);
+      setTimeout(() => { try { node.n.stop(); node.rum.stop(); } catch (e) { /* already stopped */ } }, 400);
+    }
+  },
+
   // ---------- music ----------
   pulse(duty) {
     if (this.pulseWaves[duty]) return this.pulseWaves[duty];
