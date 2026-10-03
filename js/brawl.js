@@ -24,8 +24,11 @@ function eggFrame(name) { return EGG_FRAME_NAMES.indexOf(name); }
 
 // Draw an Eggman frame with feet at (x, y). Sprites face left; flip = face right.
 function drawEggFrame(ctx, idx, x, y, opts = {}) {
-  const img = Assets.img[opts.white ? 'eggman_white' : 'eggman'], f = EGG_FRAMES[idx];
+  // opts.dmg 1-4 picks a beaten-up sheet (2x resolution, same layout)
+  const dimg = !opts.white && opts.dmg && Assets.img['eggman_d' + opts.dmg];
+  const img = dimg || Assets.img[opts.white ? 'eggman_white' : 'eggman'], f = EGG_FRAMES[idx];
   if (!img || !f) return;
+  const k = dimg ? EGG_DMG_SCALE : 1;
   const s = opts.scale || EGG_SCALE, w = f[2] * s, h = f[3] * s;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -34,7 +37,7 @@ function drawEggFrame(ctx, idx, x, y, opts = {}) {
   if (opts.flip) ctx.scale(-1, 1);
   if (opts.sx || opts.sy) ctx.scale(opts.sx || 1, opts.sy || 1);   // impact squash
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
-  ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+  ctx.drawImage(img, f[0] * k, f[1] * k, f[2] * k, f[3] * k, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   ctx.restore();
 }
 
@@ -110,7 +113,8 @@ class EggBomb {
 class BrawlEggman {
   constructor(fb, x, y) {
     this.fb = fb; this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.ground = false;
-    this.hp = 420; this.max = 420;   // a long, drawn-out beating this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
+    this.hp = 420; this.max = 420;   // a long, drawn-out beating
+    this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0; this.idx = 0;
     this.act = null; this.cool = 70; this.facing = -1; this.thrown = false; this.saidFear = 0;
     this.state = 'air';
     this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0; this.squash = 0;
@@ -231,10 +235,20 @@ class BrawlEggman {
     if (Math.random() < toothP) this.fb.add(new Gore(this.fb, x, y, (dir || (Math.random() - 0.5)) * 5, -7, 'tooth'));
   }
 
+  // How beaten up he looks: 0 = fresh, 4 = wrecked
+  get dmgLevel() {
+    const f = this.fear;
+    return f > 0.8 ? 4 : f > 0.58 ? 3 : f > 0.34 ? 2 : f > 0.12 ? 1 : 0;
+  }
+
+  // Where his nose is on the current frame (falls back to a standing estimate)
   headPos() {
-    const f = EGG_FRAMES[eggFrame('stand')], h = f[3] * EGG_SCALE;
-    const front = this.facing > 0 ? 1 : -1;
-    return { x: this.x + front * 14, y: this.y - h * 0.74 };
+    const f = EGG_FRAMES[this.idx] || EGG_FRAMES[0], a = EGG_FACE[this.idx] || EGG_FACE[0];
+    const flip = this.facing > 0 ? -1 : 1, lx = (a.nose[0] - f[2] / 2) * EGG_SCALE * flip, ly = -(f[3] - a.nose[1]) * EGG_SCALE;
+    if (!this.drawRot) return { x: this.x + lx, y: this.y + ly };
+    // follow the sprite's rotation (about its middle)
+    const h = f[3] * EGG_SCALE, c = Math.cos(this.drawRot), sn = Math.sin(this.drawRot), py = ly + h / 2;
+    return { x: this.x + lx * c - py * sn, y: this.y - h / 2 + lx * sn + py * c };
   }
 
   checkFear() {
@@ -309,7 +323,8 @@ class BrawlEggman {
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
     const sq = { sx: 1 + 0.28 * this.squash, sy: 1 - 0.2 * this.squash };
-    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, ...sq });
+    this.idx = idx; this.drawRot = rot;
+    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, dmg: this.dmgLevel, ...sq });
     if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85, ...sq });
     // sweat drops when scared
     if (this.fear > 0.35 && t % 30 < 20) {
@@ -328,16 +343,10 @@ class BrawlEggman {
       }
       ctx.restore();
     }
-    // accumulated damage on his face: bruise, broken goggles, nosebleed
-    if (this.wounds > 6 && (this.state === 'idle' || this.state === 'run' || this.state === 'throw' || this.state === 'hurt')) {
-      const hp = this.headPos(), hx = hp.x - cam.x + dx, hy = hp.y - cam.y, k = Math.min(1, this.wounds / 120), fr = this.facing > 0 ? 1 : -1;
-      ctx.save();
-      ctx.fillStyle = `rgba(90,30,110,${0.25 + 0.35 * k})`; ctx.beginPath(); ctx.ellipse(hx - fr * 10, hy - 6, 9 + 6 * k, 6 + 4 * k, 0, 0, Math.PI * 2); ctx.fill();
-      if (this.wounds > 35) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(hx - 14, hy - 18); ctx.lineTo(hx - 6, hy - 10); ctx.lineTo(hx - 12, hy - 4); ctx.stroke(); }
-      if (this.wounds > 70) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(hx + fr * 2, hy - 20, 12, 7); }
-      ctx.fillStyle = '#8f0b10'; const len = 6 + 22 * k;
-      ctx.fillRect(hx + fr * 12, hy + 4, 3, len); ctx.fillRect(hx + fr * 17, hy + 6, 2, len * 0.7);
-      ctx.restore();
+    // fresh blood running off his face once he's badly hurt
+    if (this.dmgLevel >= 3 && t % (this.dmgLevel === 4 ? 9 : 16) === 0 && this.fb.phase === 'brawl') {
+      const hp = this.headPos();
+      this.fb.add(new Gore(this.fb, hp.x + (Math.random() - 0.5) * 6, hp.y + 4, (Math.random() - 0.5) * 1.2, 0.5, 'blood'));
     }
   }
 }
