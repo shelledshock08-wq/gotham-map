@@ -317,18 +317,18 @@ function drawBossFace(ctx, s = 1) {
 
 // ---------------- boss craft ----------------
 let bossCanvas = null;
-function drawBoss(ctx, x, y, t, flash, dir) {
-  if (!flash) { drawBossShape(ctx, x, y, t, dir); return; }
+function drawBoss(ctx, x, y, t, flash, dir, noPilot) {
+  if (!flash) { drawBossShape(ctx, x, y, t, dir, noPilot); return; }
   // render to an offscreen canvas so the white flash only covers the craft
   if (!bossCanvas) { bossCanvas = document.createElement('canvas'); bossCanvas.width = 240; bossCanvas.height = 200; }
   const g = bossCanvas.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, 240, 200);
-  drawBossShape(g, 120, 120, t, dir);
+  drawBossShape(g, 120, 120, t, dir, noPilot);
   g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillRect(0, 0, 240, 200);
   ctx.drawImage(bossCanvas, x - 120, y - 120);
 }
-function drawBossShape(ctx, x, y, t, dir) {
+function drawBossShape(ctx, x, y, t, dir, noPilot) {
   ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
   // flame
   const fl = 10 + Math.sin(t * 0.8) * 4;
@@ -336,6 +336,7 @@ function drawBossShape(ctx, x, y, t, dir) {
   ctx.fillStyle = '#fff2a8'; ctx.beginPath(); ctx.moveTo(-56, 10); ctx.lineTo(-56 - fl, 14); ctx.lineTo(-56, 18); ctx.fill();
   // pilot
   ctx.save(); ctx.translate(6, -26);
+  if (noPilot) ctx.globalAlpha = 0;
   ctx.fillStyle = '#d42b2b'; ell(ctx, 0, 18, 30, 20); fillStroke(ctx, '#d42b2b');
   ctx.fillStyle = '#ffd23f'; ctx.fillRect(-4, 2, 8, 30);
   ctx.translate(0, -10); drawBossFace(ctx, 0.85);

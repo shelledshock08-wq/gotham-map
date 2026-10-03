@@ -108,7 +108,6 @@ const Sound = {
   pulseWaves: {},
   noiseBuf: null,
   ringPan: 1,
-  voiceBufs: {}, voiceSrc: {}, voiceEls: {}, duckTimer: null,
 
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -125,7 +124,6 @@ const Sound = {
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.loadSamples();
-    this.loadVoices();
     if (this.pendingSong) { const s = this.pendingSong; this.pendingSong = null; this.playMusic(s); }
   },
 
@@ -151,53 +149,6 @@ const Sound = {
           this.fallback[name] = a;
         });
     }
-  },
-
-  // ---------- voiced dialogue ----------
-  readClip(path) {
-    const embedded = window.EMBEDDED_ASSETS && window.EMBEDDED_ASSETS[path];
-    if (embedded) {
-      const bin = atob(embedded.slice(embedded.indexOf(',') + 1));
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return Promise.resolve(bytes.buffer);
-    }
-    return fetch(path).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
-  },
-  loadVoices() {
-    if (typeof VOICE_LINES === 'undefined') return;
-    for (const [path] of Object.values(VOICE_LINES)) {
-      if (this.voiceBufs[path]) continue;
-      this.readClip(path)
-        .then((ab) => new Promise((res, rej) => this.ctx.decodeAudioData(ab, res, rej)))
-        .then((buf) => { this.voiceBufs[path] = buf; })
-        .catch(() => { this.voiceEls[path] = path; });
-    }
-  },
-  voice(who, path, seconds) {
-    if (!this.ctx || this.muted) return;
-    const prev = this.voiceSrc[who];
-    if (prev) { try { prev.stop(); } catch (e) { /* already stopped */ } }
-    const buf = this.voiceBufs[path];
-    if (buf) {
-      const src = this.ctx.createBufferSource(); src.buffer = buf;
-      const g = this.ctx.createGain(); g.gain.value = 1.25;
-      src.connect(g); g.connect(this.master); src.start();
-      this.voiceSrc[who] = src;
-    } else if (this.voiceEls[path]) {
-      const a = new window.Audio(path); a.volume = 1; a.play().catch(() => {});
-      this.voiceSrc[who] = { stop: () => a.pause() };
-    } else return;
-    // duck the music while someone talks
-    const t = this.ctx.currentTime;
-    this.musicGain.gain.cancelScheduledValues(t);
-    this.musicGain.gain.setTargetAtTime(0.2, t, 0.05);
-    if (this.trackEl) this.trackEl.volume = 0.3;
-    clearTimeout(this.duckTimer);
-    this.duckTimer = setTimeout(() => {
-      this.musicGain.gain.setTargetAtTime(0.55, this.ctx.currentTime, 0.2);
-      if (this.trackEl) this.trackEl.volume = 0.85;
-    }, (seconds || 1.5) * 1000 + 150);
   },
 
   toggleMute() {

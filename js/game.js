@@ -222,7 +222,7 @@ class Game {
     p.reset(this.arena.x + 300, this.arena.groundY);
     p.y = this.arena.groundY - STAND_H; p.ground = true;
     this.rings = 50;
-    this.final = new FinalBattle(this, null, true);
+    this.final = new FinalBattle(this, null, this.final && this.final.reachedBrawl ? 'brawl' : true);
   }
   onBossDefeated() { this.addScore(1000); this.timeStopped = true; Sound.stopMusic(); }
   onBossGone() { this.later(60, () => this.startTally()); }
@@ -263,7 +263,7 @@ class Game {
     }
 
     // ---- play ----
-    if (inp.startPressed && !this.tally) { this.state = 'paused'; return; }
+    if (inp.startPressed && !this.tally && !(this.final && this.final.phase === 'tbc')) { this.state = 'paused'; return; }
     this.speech.update();
     if (this.combo && --this.combo.t <= 0) this.combo = null;
     if (this.hitStop > 0) { this.hitStop--; return; }   // impact freeze frames
@@ -281,7 +281,7 @@ class Game {
       for (const e of this.effects) e.update(this);
       this.effects = this.effects.filter((o) => !o.dead);
       if (this.tally) this.updateTally(inp);
-      this.cam.x = this.arena.x; this.cam.y = this.final.camY;
+      if (this.final) { this.cam.x = this.arena.x; this.cam.y = this.final.camY; }
       return;
     }
 
@@ -638,8 +638,8 @@ class Game {
     }
     const k = Math.min(1, this.endTimer / 40);
     ctx.globalAlpha = k;
-    this.text(ctx, 'CONGRATULATIONS!', VIEW_W / 2, 170, 44, '#ffd23f', 'center');
-    this.text(ctx, 'THE EGG COLOSSUS IS SCRAP AND EGGMAN HAS FLED.', VIEW_W / 2, 240, 16, '#fff', 'center');
+    this.text(ctx, 'TO BE CONTINUED...', VIEW_W / 2, 170, 40, '#ffd23f', 'center');
+    this.text(ctx, 'EGGMAN ESCAPED WITH METAL SONIC. THIS IS NOT OVER.', VIEW_W / 2, 240, 14, '#fff', 'center');
     this.text(ctx, `FINAL SCORE ${this.score}`, VIEW_W / 2, 310, 26, '#fff', 'center');
     this.text(ctx, `HI-SCORE ${this.hiscore}`, VIEW_W / 2, 350, 16, '#c9d4ff', 'center');
     if (this.endTimer > 120 && Math.floor(t / 30) % 2 === 0) this.text(ctx, 'PRESS START', VIEW_W / 2, 420, 20, '#fff', 'center');

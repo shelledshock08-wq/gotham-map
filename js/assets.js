@@ -33,6 +33,8 @@ const IMAGE_LIST = (() => {
   for (const b of bgs) list[b] = `assets/bg/${b}.png`;
   list.sonic = 'assets/sonic/sonic.png';
   list.super = 'assets/sonic/super.png';
+  list.eggman = 'assets/sonic/eggman.png';
+  list.metal = 'assets/sonic/metal.png';
   return list;
 })();
 
@@ -64,6 +66,7 @@ const Assets = {
       this.img.spring_red = this.tint(this.img.spring, '#ff2d3a', 0.55);
       this.img.spring_out_red = this.tint(this.img.spring_out, '#ff2d3a', 0.55);
     }
+    if (this.img.eggman) this.img.eggman_white = this.tint(this.img.eggman, '#ffffff', 1);
     for (const k of ['slime_normal_walk_a', 'slime_normal_walk_b', 'slime_normal_rest']) {
       if (this.img[k]) this.img[k + '_blue'] = this.tint(this.img[k], '#2f7dff', 0.5);
     }

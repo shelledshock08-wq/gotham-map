@@ -413,6 +413,100 @@ class SuperHero {
     }
   }
 
+  move(inp, max) {
+    const fb = this.fb;
+    let ix = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), iy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    if (this.hitT > 0) { this.hitT--; ix = 0; iy = 0; }
+    this.vx += ix * 0.95; this.vy += iy * 0.95;
+    if (!ix) this.vx *= 0.86;
+    if (!iy) this.vy *= 0.86;
+    const sp = Math.hypot(this.vx, this.vy);
+    if (sp > max && this.hitT <= 0) { this.vx *= max / sp; this.vy *= max / sp; }
+    if (this.lunge > 0) {
+      this.lunge--;
+      const tg = this.target;
+      if (tg && dist(this.x, this.y, tg.x, tg.y) > 85) { const a = angTo(this.x, this.y, tg.x, tg.y); this.x += Math.cos(a) * 22; this.y += Math.sin(a) * 22; }
+    }
+    this.x += this.vx; this.y += this.vy;
+    this.x = Math.max(fb.ax + 30, Math.min(fb.ax + fb.aw - 30, this.x));
+    this.y = Math.max(fb.camY + 50, Math.min(fb.gy - 36, this.y));
+    if (ix) this.facing = ix;
+    else if (this.target) this.facing = this.target.x >= this.x ? 1 : -1;
+    return { ix, iy };
+  }
+
+  // Close-quarters beatdown on Eggman: punch combo, kick, grab & throw, clones.
+  updateBrawl(inp) {
+    const fb = this.fb, E = fb.egg2;
+    this.anim += 0.12;
+    if (this.invuln > 0) this.invuln--;
+    if (this.comboT > 0) this.comboT--; else this.combo = 0;
+    if (this.cloneCD > 0) this.cloneCD--;
+    if (this.kickCD > 0) this.kickCD--;
+    this.trail.unshift({ x: this.x, y: this.y }); if (this.trail.length > 6) this.trail.pop();
+    this.target = E ? E.center() : null;
+    if (this.grab && E) {
+      const G = this.grab; G.t++;
+      const a = G.t * 0.42 * this.facing;
+      E.x = this.x + Math.cos(a) * 80; E.y = this.y + 60 + Math.sin(a) * 80; E.rot = a;
+      this.move(inp, 3);
+      if (G.t % 10 === 0) fb.add(new FBEffect('spark', E.x, E.y - 60, { dur: 12 }));
+      if (G.t > 14 && (inp.grabPressed || inp.punchPressed || inp.laserPressed || G.t > 80)) {
+        let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+        if (!dx && !dy) dx = this.facing;
+        const l = Math.hypot(dx, dy);
+        Object.assign(E, { state: 'air', ground: false, thrown: true, vx: dx / l * 27, vy: dy / l * 27 - (dy === 0 ? 5 : 0), stun: 50 });
+        this.grab = null; fb.shake = 8; fb.zoom = 1.05;
+        fb.add(new PowFX(E.x, E.y - 80, dy > 0 ? 'SLAM!' : 'HURL!', true));
+        Sound.play('release'); Sound.play('pop', { rate: 0.6 });
+      }
+      return;
+    }
+    this.move(inp, 9.5);
+    if (this.punchT > 0) { this.punchT--; if (this.punchT === 8) this.landBlow(); }
+    const near = E && dist(this.x, this.y, E.x, E.y - 60) < 330;
+    if (inp.punchPressed && this.punchT <= 3) {
+      this.combo = this.comboT > 0 ? (this.combo % 4) + 1 : 1;
+      this.comboT = 34; this.punchT = 13; this.blow = 'punch';
+      this.punchAng = near ? angTo(this.x, this.y, E.x, E.y - 60) : (this.facing > 0 ? 0 : Math.PI);
+      if (near) this.lunge = 6;
+      this.facing = Math.cos(this.punchAng) >= 0 ? 1 : -1;
+    } else if (inp.laserPressed && this.kickCD <= 0 && this.punchT <= 3) {
+      this.punchT = 16; this.kickCD = 32; this.blow = 'kick';
+      this.punchAng = near ? angTo(this.x, this.y, E.x, E.y - 60) : (this.facing > 0 ? 0 : Math.PI);
+      if (near) this.lunge = 7;
+      this.facing = Math.cos(this.punchAng) >= 0 ? 1 : -1;
+    }
+    if (inp.grabPressed && E && E.state !== 'grabbed' && dist(this.x, this.y, E.x, E.y - 60) < 130) {
+      this.grab = { t: 0 }; E.state = 'grabbed'; E.act = null; this.punchT = 0;
+      fb.add(new PowFX(E.x, E.y - 90, 'GRAB!', false)); Sound.play('skid');
+      fb.say('sonic', ['Come here!', 'Gotcha!', 'Going somewhere?'][Math.floor(Math.random() * 3)], { cool: 300, coolKey: 'grab', dur: 80 });
+    } else if (inp.grabPressed && E) fb.say('sonic', 'Get closer to grab him!', { cool: 240, coolKey: 'far', dur: 80 });
+    if (inp.clonesPressed && this.cloneCD <= 0 && fb.g.rings >= 5) {
+      fb.g.rings -= 5; this.cloneCD = 220;
+      for (let i = 0; i < 4; i++) fb.add(new Clone(fb, this.x, this.y, i));
+      Sound.play('shield', { rate: 1.3 });
+      fb.add(new FBEffect('text', this.x, this.y - 70, { text: 'LIGHT CLONES!', dur: 45, size: 18, color: '#fff3a8' }));
+    }
+  }
+
+  landBlow() {
+    const fb = this.fb, E = fb.egg2, a = this.punchAng;
+    const kick = this.blow === 'kick', big = kick || this.combo === 4;
+    const reach = kick ? 84 : 66;
+    const px = this.x + Math.cos(a) * reach, py = this.y + Math.sin(a) * reach;
+    fb.add(new FBEffect('fist', px, py, { ang: a, size: big ? 1.7 : 1, dur: big ? 18 : 12 }));
+    for (const o of fb.objs) if (o instanceof EggBomb && dist(px, py, o.x, o.y) < 90) o.smash();
+    if (!E || E.state === 'grabbed' || dist(px, py, E.x, E.y - 60) > 115) { Sound.play('roll', { vol: 0.4, rate: 1.7 }); return; }
+    const dir = Math.cos(a) >= 0 ? 1 : -1;
+    if (kick) {
+      if (this.y < E.y - 150 && !E.ground) E.takeHit(10, dir * 4, 24, true, 'SPIKE!');
+      else E.takeHit(11, dir * 20, -7, true);
+    } else if (this.combo === 4) E.takeHit(9, dir * 4, -17, true, 'UPPERCUT!');
+    else if (this.combo === 3) E.takeHit(5, dir * 6, -5, false);
+    else E.takeHit(4, dir * 3, E.ground ? 0 : -6, false);
+  }
+
   hit(sx, sy, rings) {
     if (!this.active || this.invuln > 0) return;
     const g = this.fb.g;
@@ -444,7 +538,7 @@ class SuperHero {
     let pose = Math.hypot(this.vx, this.vy) > 3 ? 'fly' : 'hover';
     if (this.punchT > 0) pose = 'punch';
     if (this.charge > 0 || this.beam) pose = 'charge';
-    if (this.rip) pose = 'rip';
+    if (this.rip || this.grab) pose = 'rip';
     if (this.hitT > 0) pose = 'hurt';
     const bob = pose === 'hover' ? Math.sin(t * 0.08) * 4 : 0;
     drawSonicFrame(ctx, animFrame(pose, this.anim), x, y + 34 + bob, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
@@ -667,14 +761,16 @@ class Colossus {
     const E = this.eye, fb = this.fb, h = fb.hero, hp = this.headPos();
     E.t++;
     if (E.t < 55) { E.ang += Math.max(-0.05, Math.min(0.05, angDiff(E.ang, angTo(hp.x, hp.y, h.x, h.y)))); return; }
-    if (E.t === 55) { E.firing = true; Sound.play('bosshit', { rate: 0.6 }); }
+    if (E.t === 55) {
+      E.firing = true; Sound.play('bosshit', { rate: 0.6 });
+      // Counter: if Sonic is charging (or already firing) his laser, the beams lock together.
+      if (h.active && (h.charge >= 8 || h.beam)) { fb.startClash(h.charge); return; }
+    }
     if (fb.clash) return;
+    if (h.active && h.beam) { fb.startClash(0); return; }
     E.ang += Math.max(-0.011 * this.speed(), Math.min(0.011 * this.speed(), angDiff(E.ang, angTo(hp.x, hp.y, h.x, h.y))));
     const ex = hp.x + Math.cos(E.ang) * 1800, ey = hp.y + Math.sin(E.ang) * 1800;
     E.end = { x: ex, y: ey };
-    // beam clash: Sonic's beam meets the eye laser
-    if (h.beam && segDist(hp.x, hp.y, h.x, h.y, h.x + Math.cos(h.beam.ang) * 1800, h.y + Math.sin(h.beam.ang) * 1800) < 90 &&
-        segDist(h.x, h.y, hp.x, hp.y, ex, ey) < 110) { fb.startClash(); return; }
     if (h.active && segDist(h.x, h.y, hp.x, hp.y, ex, ey) < 30) h.hit(h.x - Math.cos(E.ang) * 10, h.y - Math.sin(E.ang) * 10, 10);
     if (E.t % 3 === 0) {
       // scorch the ground where the beam lands
@@ -748,7 +844,7 @@ class Colossus {
       hx = this.fb.egg.x + (hp.x - this.fb.egg.x) * e; hy = this.fb.egg.y + (hp.y - this.fb.egg.y) * e - Math.sin(k * Math.PI) * 120;
     }
     ctx.save(); ctx.translate(hx - cam.x, hy - cam.y); ctx.scale(1.15, 1.15);
-    drawBoss(ctx, 0, 0, t, fl, -1);
+    drawBoss(ctx, 0, 0, t, fl, -1, this.pilotless);
     ctx.restore();
     // front pod & arm
     if (this.attached('frontPod')) this.drawPod(ctx, x - 165 + shake(this.parts.frontPod), by - 545, C, this.parts.frontPod, t);
@@ -854,7 +950,16 @@ class FinalBattle {
     this.hero = new SuperHero(this, p.x, p.y);
     this.objs = []; this.shake = 0; this.flash = 0; this.clash = null; this.hintT = 0;
     this.drain = 0;
+    this.egg2 = null; this.metal = null; this.hitStop = 0; this.zoom = 1; this.brawlCombo = null; this.reachedBrawl = false;
     p.frozen = true; this.pStart = p.x;
+    if (quick === 'brawl') {
+      // retry straight into the brawl
+      this.phase = 'brawl'; this.reachedBrawl = true; this.hintT = 360;
+      Object.assign(this.robot, { hp: 0, rise: 2000, pilotless: true });
+      this.hero.active = true; this.hero.x = this.ax + 300; this.hero.y = this.gy - 200; this.hero.invuln = 90;
+      this.egg2 = new BrawlEggman(this, this.ax + 900, this.gy - 300);
+      Sound.playTrack('assets/music/built_for_blame.mp3', 'boss');
+    }
     if (game.rings < 50) game.rings = 50;
     Sound.stopMusic();
   }
@@ -868,7 +973,7 @@ class FinalBattle {
     if (type === 'punch') S('Big fist incoming! Fly out of the way!', { once: 'fist' }) || S('Fist again! Dodge it!', { cool: 1200, coolKey: 'fist2', dur: 120, prio: 1 });
     if (type === 'slam') S("He's gonna slam! Stay up high!", { once: 'slam' });
     if (type === 'missiles') S('Shit, I better smash those rockets! {punch}', { once: 'rockets' }) || S('More rockets! {punch} \'em!', { cool: 900, coolKey: 'rockets2', dur: 130, prio: 1 });
-    if (type === 'eye') S('Laser, huh? Two can play that game! Hold {laser}, aim at his face!', { once: 'eye', dur: 260 }) || S('Beam him back! Hold {laser}!', { cool: 1000, coolKey: 'eye2', dur: 140, prio: 1 });
+    if (type === 'eye') S("His eye's charging! Hold {laser} now, our beams will lock, then mash {punch}!", { once: 'eye', dur: 300, prio: 3 }) || S('Counter it! Hold {laser}!', { cool: 600, coolKey: 'eye2', dur: 140, prio: 2 });
     if (type === 'rain') S('Heads up! Falling debris!', { once: 'rain' });
   }
   onLoose(key) {
@@ -880,7 +985,12 @@ class FinalBattle {
     // projectiles first
     let hit = false;
     for (const o of this.objs) {
-      if ((o instanceof Missile || (o instanceof Debris && o.t >= 45)) && !o.dead && dist(px, py, o.x, o.y) < r + 24) { o.smash(); hit = true; }
+      if ((o instanceof Missile || o instanceof EggBomb || (o instanceof Debris && o.t >= 45)) && !o.dead && dist(px, py, o.x, o.y) < r + 24) { o.smash(); hit = true; }
+    }
+    if (this.phase === 'brawl') {
+      const E = this.egg2;
+      if (E && E.state !== 'grabbed' && dist(px, py, E.x, E.y - 60) < r + 50) { E.takeHit(dmg * 1.4, Math.sign(E.x - px || 1) * 3, E.ground ? 0 : -5, false); return true; }
+      return hit;
     }
     const R = this.robot;
     if (R.hp <= 0 || this.phase !== 'battle') return hit;
@@ -912,8 +1022,15 @@ class FinalBattle {
     return { x: ox + cos * 1700, y: oy + sin * 1700 };
   }
 
-  startClash() {
-    this.clash = { v: 0.5, t: 0 };
+  startClash(charge = 0) {
+    const h = this.hero, hp = this.robot.headPos();
+    this.clash = { v: 0.42 + Math.min(90, charge) / 90 * 0.2, t: 0 };
+    h.charge = 0; h.vx = 0; h.vy = 0;
+    const ang = angTo(h.x, h.y, hp.x, hp.y);
+    h.beam = { ang, t: 0, dur: 9999, w: 30, dmg: 0, end: { x: h.x, y: h.y } };
+    this.shake = 12; this.hitStop = 8; this.zoom = 1.08;
+    this.add(new PowFX((h.x + hp.x) / 2, (h.y + hp.y) / 2 - 60, 'CLASH!', true));
+    Sound.play('bosshit'); Sound.play('release', { rate: 0.6 });
     this.say('sonic', 'MASH {punch}!!!', { prio: 4, dur: 200 });
     this.add(new FBEffect('text', this.hero.x, this.hero.y - 80, { text: 'BEAM CLASH! MASH!', dur: 80, size: 20, color: '#fff' }));
   }
@@ -924,7 +1041,7 @@ class FinalBattle {
   updateClash(inp) {
     const C = this.clash, R = this.robot, h = this.hero;
     C.t++;
-    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) C.v += 0.05;
+    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) { C.v += 0.05; this.zoom = Math.max(this.zoom, 1.02); }
     C.v -= 0.0055 * R.speed();
     if (h.beam) { h.beam.t = 0; h.beam.ang = angTo(h.x, h.y, R.headPos().x, R.headPos().y); }
     this.shake = Math.max(this.shake, 4);
@@ -947,8 +1064,54 @@ class FinalBattle {
     }
   }
 
+  startRescue() {
+    if (this.phase !== 'brawl') return;
+    this.phase = 'rescue'; this.t = 0;
+    const h = this.hero, E = this.egg2;
+    h.grab = null; h.punchT = 0; h.lunge = 0;
+    E.act = null; E.stun = 9999; if (E.state === 'grabbed') { E.state = 'air'; E.ground = false; }
+    this.objs = this.objs.filter((o) => !(o instanceof EggBomb));
+    this.hitStop = 14; this.zoom = 1.12; this.shake = 16;
+  }
+
+  updateRescue() {
+    const h = this.hero, E = this.egg2, M = this.metal, t = this.t;
+    if (E.state !== 'carried') E.update();
+    if (t === 2) { this.say('eggman', 'N-no! Please! PLEASE!!', { dur: 100, prio: 5 }); this.add(new FBEffect('text', this.ax + 640, this.camY + 200, { text: 'FINAL BLOW', dur: 70, size: 34, color: '#fff' })); }
+    if (t === 20) this.say('sonic', 'This ends NOW!', { dur: 80, prio: 5 });
+    if (t < 70) { // wind up above him
+      const tx = E.x - 160, ty = this.gy - 260;
+      h.x += (tx - h.x) * 0.1; h.y += (ty - h.y) * 0.1; h.facing = 1; h.charge = Math.min(90, t * 2);
+    }
+    if (t === 50) this.metal = new MetalSonic(this, E.x + 10, E.y - 80);
+    if (this.metal) this.metal.update();
+    if (t === 70) { h.charge = 0; Sound.play('release', { rate: 0.7 }); }
+    if (t >= 70 && t < 82) {
+      const tx = E.x, ty = E.y - 60, a = angTo(h.x, h.y, tx, ty);
+      h.x += Math.cos(a) * 30; h.y += Math.sin(a) * 30; h.punchT = 10; h.punchAng = a;
+    }
+    if (t === 76 && this.metal) {  // snatched at the very last frame
+      this.metal.x = E.x; this.metal.y = E.y - 140; this.metal.state = 'hover';
+      E.state = 'carried';
+      Sound.play('release', { rate: 1.6 });
+    }
+    if (t === 82) {
+      this.add(new PowFX(h.x + 40, h.y + 20, 'MISS!', true));
+      for (let i = 0; i < 6; i++) this.add(new FBEffect('boom', h.x + (Math.random() - 0.5) * 120, this.gy - 10, { dur: 26, s: 1.4 }));
+      this.shake = 22; this.hitStop = 12; Sound.play('boom');
+      h.y = Math.min(h.y, this.gy - 40);
+    }
+    if (E.state === 'carried' && this.metal) { E.x = this.metal.x + 6; E.y = this.metal.y + 150; E.rot = 0; E.facing = 1; }
+    if (t === 100) this.say('sonic', 'WHAT?!', { dur: 70, prio: 5, big: true });
+    if (t === 160) this.say('eggman', 'Ho ho ho! Perfect timing, Metal!', { dur: 140, prio: 5 });
+    if (t === 250) this.say('sonic', '...Metal Sonic?!', { dur: 120, prio: 5 });
+    if (t === 340) this.say('eggman', "This isn't over, hedgehog! Not by a long shot!", { dur: 160, prio: 5 });
+    if (t === 420 && this.metal) { this.metal.state = 'out'; Sound.play('release', { rate: 0.5 }); }
+    if (t === 520) { this.phase = 'tbc'; this.t = 0; Sound.play('actclear', { rate: 0.8 }); }
+  }
+
   startFinale() {
-    if (this.phase === 'finale' || this.phase === 'outro') return;
+    if (this.phase !== 'battle') return;
     this.phase = 'finale'; this.t = 0; this.clash = null;
     const R = this.robot; R.eye = null; R.attack = null; R.fist = null;
     this.hero.beam = null; this.hero.charge = 0;
@@ -958,11 +1121,15 @@ class FinalBattle {
 
   update(inp) {
     const g = this.g, R = this.robot, h = this.hero;
+    this.zoom += (1 - this.zoom) * 0.12;
+    if (this.hitStop > 0) { this.hitStop--; return; }      // impact freeze frames
+    if (this.phase === 'tbc') { this.t++; if (this.t > 120 && (inp.startPressed || inp.jumpPressed || inp.punchPressed || inp.tapped || this.t > 420) && !g.tally) g.startTally(); return; }
     this.t++;
+    if (this.brawlCombo && --this.brawlCombo.t <= 0) this.brawlCombo = null;
     if (this.shake > 0) this.shake *= 0.88;
     if (this.shake < 0.5) this.shake = 0;
     if (this.flash > 0) this.flash -= 0.03;
-    document.getElementById('touch').classList.toggle('super', this.phase === 'battle');
+    document.getElementById('touch').classList.toggle('super', this.phase === 'battle' || this.phase === 'brawl');
 
     if (this.phase === 'rise' || this.phase === 'emeralds') {
       // Sonic walks to the left side of the arena and waits
@@ -1024,12 +1191,39 @@ class FinalBattle {
         Sound.play('boom', { vol: 0.5, rate: 0.7 + Math.random() * 0.6 });
       }
       h.vx *= 0.9; h.vy *= 0.9; h.x += h.vx; h.y += h.vy;
-      if (this.t === 200) { this.flash = 1.4; Sound.play('boom'); }
-      if (this.t > 200) {
-        R.rise += 6 + (this.t - 200) * 0.4;       // the wreck sinks into the ground
-        this.egg = this.egg || {};
+      if (this.t === 30) this.say('eggman', 'No, no, NO! Systems failing!', { dur: 120 });
+      if (this.t >= 150) { this.phase = 'rip'; this.t = 0; }
+    } else if (this.phase === 'rip') {
+      // Sonic tears the cockpit open and yanks Eggman out
+      R.t++;
+      const hp = R.headPos();
+      if (this.t === 1) this.say('sonic', "Oh no you don't! Get OUT of there!", { dur: 120, prio: 4 });
+      if (this.t < 90) { h.x += (hp.x - 100 - h.x) * 0.12; h.y += (hp.y + 10 - h.y) * 0.12; h.facing = 1; }
+      if (this.t > 50 && this.t < 90) { this.shake = Math.max(this.shake, 6); if (this.t % 4 === 0) this.add(new FBEffect('spark', hp.x + (Math.random() - 0.5) * 80, hp.y - 20 + (Math.random() - 0.5) * 50, { dur: 14 })); }
+      if (this.t === 90) {
+        R.pilotless = true;
+        this.egg2 = new BrawlEggman(this, hp.x - 20, hp.y + 40);
+        Object.assign(this.egg2, { vx: -9, vy: -8, ground: false, state: 'air', stun: 40 });
+        this.add(new PowFX(hp.x, hp.y - 40, 'RIIIP!', true));
+        for (let i = 0; i < 16; i++) this.add(new FBEffect('spark', hp.x + (Math.random() - 0.5) * 120, hp.y - 30 + (Math.random() - 0.5) * 80, { dur: 22, color: '#bfe8ff' }));
+        this.shake = 20; this.hitStop = 10; this.zoom = 1.1;
+        Sound.play('boom'); Sound.play('bosshit');
+        this.say('eggman', "W-wait! Let's talk about this!!", { dur: 140, prio: 3 });
       }
-      if (this.t >= 300) { this.phase = 'outro'; this.t = 0; this.escape = { x: R.headPos().x, y: R.headPos().y }; }
+      if (this.t > 90) R.rise += 10;                       // the wreck sinks away
+      if (this.egg2) this.egg2.update();
+      if (this.t === 110) Sound.playTrack('assets/music/built_for_blame.mp3', 'boss');
+      if (this.t === 175) this.say('sonic', 'Talk? Nah. Time to smack your shit.', { dur: 170, prio: 4 });
+      if (this.t >= 230) { this.phase = 'brawl'; this.t = 0; this.hintT = 480; this.reachedBrawl = true; }
+    } else if (this.phase === 'brawl') {
+      if (this.hintT > 0) this.hintT--;
+      if (this.t === 30) this.say('sonic', 'Mash {punch} to combo, {laser} to kick, {grab} to grab and throw him!', { dur: 300, prio: 3 });
+      h.updateBrawl(inp);
+      if (this.egg2) this.egg2.update();
+      if (g.rings <= 0) { this.phase = 'lost'; this.t = 0; h.active = false; Sound.play('death'); Sound.stopTrack(); Sound.stopMusic(); this.say('sonic', 'No... my power...', { prio: 5, dur: 120 }); }
+      if (this.t % 600 === 0) for (let i = 0; i < 3; i++) this.add(new FloatRing(this, this.ax + 100 + Math.random() * 1000, this.camY + 160, 0, 1));
+    } else if (this.phase === 'rescue') {
+      this.updateRescue(inp);
     } else if (this.phase === 'outro') {
       this.escape.x += 7; this.escape.y -= 4;
       h.x += (this.ax + 640 - h.x) * 0.03; h.y += (this.gy - 260 - h.y) * 0.03;
@@ -1071,12 +1265,17 @@ class FinalBattle {
     else this.drawSky(ctx, t);
     if (this.phase === 'rise' && this.t < 60) { ctx.globalAlpha = this.t / 60; this.drawSky(ctx, t); ctx.globalAlpha = 1; }
 
-    if (this.phase !== 'outro' || true) R.draw(ctx, c, t);
-    if (this.phase === 'outro') {
-      ctx.save(); ctx.translate(this.escape.x - c.x, this.escape.y - c.y); ctx.scale(0.8, 0.8);
-      drawBoss(ctx, 0, 0, t, false, 1); ctx.restore();
+    // punch-in zoom on big impacts, centred between Sonic and his target
+    ctx.save();
+    if (this.zoom > 1.001) {
+      const E = this.egg2;
+      const fx = (E ? (h.x + E.x) / 2 : h.x) - c.x, fy = (E ? (h.y + E.y - 60) / 2 : h.y) - c.y;
+      ctx.translate(fx, fy); ctx.scale(this.zoom, this.zoom); ctx.translate(-fx, -fy);
     }
+    if (R.rise < 900) R.draw(ctx, c, t);
     g.world.drawTiles(ctx, { x: Math.round(c.x), y: Math.round(c.y) });
+    if (this.egg2) this.egg2.draw(ctx, c, t);
+    if (this.metal) this.metal.draw(ctx, c, t);
     for (const o of this.objs) if (!(o instanceof FBEffect)) o.draw(ctx, c, t);
 
     // the hero
@@ -1086,7 +1285,15 @@ class FinalBattle {
 
     if (this.phase === 'emeralds') this.drawEmeralds(ctx, c, t);
     for (const o of this.objs) if (o instanceof FBEffect) o.draw(ctx, c, t);
-    if (h.active && h.target && this.phase === 'battle') this.drawReticle(ctx, h.target.x - c.x, h.target.y - c.y, t);
+    if (h.active && h.target && (this.phase === 'battle' || this.phase === 'brawl')) this.drawReticle(ctx, h.target.x - c.x, h.target.y - c.y, t);
+    // counter prompt while the eye laser charges
+    if (this.phase === 'battle' && R.eye && !R.eye.firing && h.active && !this.clash) {
+      drawPrompt(ctx, h.x - c.x, h.y - c.y - 80, 'laser', h.charge > 0 ? 'KEEP HOLDING!' : 'HOLD TO COUNTER!', t);
+      ctx.save(); ctx.strokeStyle = `rgba(255,60,60,${0.5 + 0.5 * Math.sin(t * 0.5)})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(h.x - c.x, h.y - c.y, 52 + (55 - R.eye.t), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+    if (this.phase === 'brawl' && h.grab) drawPrompt(ctx, h.x - c.x, h.y - c.y - 90, 'grab', 'THROW! (aim with arrows)', t);
+    ctx.restore();
 
     if (this.phase === 'rise' && Math.floor(this.t / 15) % 2 === 0) {
       ctx.fillStyle = 'rgba(255,0,0,.18)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -1094,6 +1301,24 @@ class FinalBattle {
       g.text(ctx, 'EGG COLOSSUS APPROACHING', VIEW_W / 2, 350, 18, '#fff', 'center', '#000');
     }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    if (this.phase === 'tbc') this.drawTBC(ctx, t);
+  }
+
+  // Freeze frame: sepia wash + "TO BE CONTINUED" arrow
+  drawTBC(ctx, t) {
+    const k = Math.min(1, this.t / 30);
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(200,150,90,${0.8 * k})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(40,20,0,${0.35 * k})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const x = VIEW_W - 60 - 620 * Math.min(1, this.t / 20), y = VIEW_H - 120;
+    ctx.translate(x, y);
+    ctx.fillStyle = '#1b1006'; ctx.strokeStyle = '#e9d7a8'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(0, -38); ctx.lineTo(520, -38); ctx.lineTo(520, -60); ctx.lineTo(590, 0); ctx.lineTo(520, 60); ctx.lineTo(520, 38); ctx.lineTo(0, 38); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.font = `28px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e9d7a8'; ctx.fillText('TO BE CONTINUED', 26, 2);
+    ctx.restore();
+    if (this.t > 120 && Math.floor(t / 30) % 2) this.g.text(ctx, 'PRESS START', VIEW_W / 2, 60, 16, '#e9d7a8', 'center', '#1b1006');
   }
 
   drawEmeralds(ctx, c, t) {
@@ -1130,6 +1355,31 @@ class FinalBattle {
         g.text(ctx, label, bx + 8, by + 17, 11, '#1a1406', 'left', null);
       });
     }
+    if (this.phase === 'brawl' || this.phase === 'rescue') {
+      const E = this.egg2;
+      if (E) {
+        const w = 520, x = VIEW_W / 2 - w / 2, y = 26;
+        ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - 5, y - 5, w + 10, 26);
+        ctx.fillStyle = E.fear > 0.66 ? '#ff8ad8' : '#ff3b3b'; ctx.fillRect(x, y, w * E.hp / E.max, 16);
+        const mood = E.fear < 0.3 ? 'ANGRY' : E.fear < 0.66 ? 'NERVOUS' : 'TERRIFIED';
+        g.text(ctx, `DR. EGGMAN  -  ${mood}`, VIEW_W / 2, y + 48, 14, '#fff', 'center');
+      }
+      if (this.brawlCombo && this.brawlCombo.n >= 2) {
+        const n = this.brawlCombo.n, s = 1 + Math.max(0, (this.brawlCombo.t - 90) / 10) * 0.4;
+        ctx.save(); ctx.translate(VIEW_W - 170, 190); ctx.scale(s, s); ctx.rotate(-0.08);
+        g.text(ctx, `${n}`, 0, 0, 52, n >= 20 ? '#ff5ae0' : '#ffd23f', 'center', '#000');
+        g.text(ctx, 'HITS!', 0, 36, 18, '#fff', 'center', '#000');
+        ctx.restore();
+      }
+    }
+    if (this.hintT > 0 && this.phase === 'brawl') {
+      ctx.globalAlpha = Math.min(1, this.hintT / 60);
+      ctx.fillStyle = 'rgba(0,0,20,.6)'; ctx.fillRect(140, VIEW_H - 92, VIEW_W - 280, 64);
+      const touch = document.getElementById('touch').classList.contains('on');
+      g.text(ctx, touch ? 'A PUNCH COMBO   B KICK   X LIGHT CLONES' : 'Z PUNCH COMBO (x4 = UPPERCUT)   X KICK   C LIGHT CLONES', VIEW_W / 2, VIEW_H - 64, 13, '#fff', 'center');
+      g.text(ctx, touch ? 'Y GRAB, THEN Y + D-PAD TO THROW' : 'V GRAB HIM, THEN V + ARROWS TO THROW (DOWN = SLAM)', VIEW_W / 2, VIEW_H - 38, 13, '#ffd23f', 'center');
+      ctx.globalAlpha = 1;
+    }
     if (this.hintT > 0 && this.phase === 'battle') {
       ctx.globalAlpha = Math.min(1, this.hintT / 60);
       ctx.fillStyle = 'rgba(0,0,20,.6)'; ctx.fillRect(140, VIEW_H - 92, VIEW_W - 280, 64);
@@ -1145,7 +1395,14 @@ class FinalBattle {
       ctx.fillStyle = '#ff2a2a'; ctx.fillRect(x, y, w, 20);
       ctx.fillStyle = '#ffd23f'; ctx.fillRect(x, y, w * this.clash.v, 20);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, 20);
-      if (Math.floor(this.clash.t / 8) % 2) g.text(ctx, 'MASH Z!', VIEW_W / 2, y + 56, 22, '#fff', 'center');
+      ctx.fillStyle = '#fff'; ctx.fillRect(x + w * this.clash.v - 3, y - 6, 6, 32);
+      g.text(ctx, 'SONIC', x - 10, y + 17, 12, '#ffd23f', 'right', '#000');
+      g.text(ctx, 'EGGMAN', x + w + 10, y + 17, 12, '#ff6060', 'left', '#000');
+      if (Math.floor(this.clash.t / 8) % 2) {
+        ctx.font = `22px ${FONT}`;
+        drawKeyCap(ctx, VIEW_W / 2 - 110, y + 60, keyLabel('punch'), 22);
+        g.text(ctx, 'MASH!', VIEW_W / 2 + 30, y + 58, 22, '#fff', 'center');
+      }
     }
   }
 }
