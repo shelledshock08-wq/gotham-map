@@ -56,6 +56,34 @@ class PowFX {
   draw(ctx, cam) { ctx.save(); const s = this.big ? 1.3 : 0.9; ctx.translate(this.x - cam.x, this.y - cam.y); ctx.scale(s, s); drawPow(ctx, 0, 0, this.word, this.t / this.dur, this.rot); ctx.restore(); }
 }
 
+// Blood droplets and knocked-out teeth. They fall, hit the floor and leave stains.
+class Gore {
+  constructor(fb, x, y, vx, vy, kind) { this.fb = fb; this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.kind = kind; this.t = 0; this.r = kind === 'blood' ? 2 + Math.random() * 3.5 : 0; this.rot = Math.random() * 6; }
+  update() {
+    this.t++; this.vy += 0.45; this.x += this.vx; this.y += this.vy; this.rot += this.vx * 0.1;
+    const fb = this.fb;
+    if (this.x < fb.ax + 30 || this.x > fb.ax + fb.aw - 30) { this.vx = -this.vx * 0.2; if (this.kind === 'blood') fb.stain(this.x, this.y, this.r * 1.4, true); }
+    if (this.y >= fb.gy - 2) {
+      this.y = fb.gy - 2;
+      if (this.kind === 'blood') { fb.stain(this.x, fb.gy, this.r * (1.6 + Math.random()), false); this.dead = true; }
+      else if (Math.abs(this.vy) > 3) { this.vy = -this.vy * 0.35; this.vx *= 0.6; }
+      else { this.vy = 0; this.vx *= 0.8; }
+    }
+    if (this.t > 600) this.dead = true;
+  }
+  draw(ctx, cam) {
+    const x = this.x - cam.x, y = this.y - cam.y;
+    if (this.kind === 'blood') {
+      ctx.fillStyle = '#9b0d12';
+      ctx.beginPath(); ctx.ellipse(x, y, this.r, this.r * (1 + Math.min(1.5, Math.abs(this.vy) * 0.08)), Math.atan2(this.vy, this.vx) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.rot);
+      ctx.fillStyle = '#f4f1e4'; ctx.fillRect(-3, -4, 6, 8); ctx.strokeStyle = '#6b6252'; ctx.lineWidth = 1; ctx.strokeRect(-3, -4, 6, 8);
+      ctx.restore();
+    }
+  }
+}
+
 class EggBomb {
   constructor(fb, x, y, vx, vy) { this.fb = fb; this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.t = 0; }
   update() {
@@ -78,6 +106,7 @@ class BrawlEggman {
     this.hp = 160; this.max = 160; this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
     this.act = null; this.cool = 70; this.facing = -1; this.thrown = false; this.saidFear = 0;
     this.state = 'air';
+    this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0;
   }
   get fear() { return 1 - this.hp / this.max; }
   center() { return { x: this.x, y: this.y - 60 }; }
@@ -86,7 +115,9 @@ class BrawlEggman {
     const fb = this.fb, h = fb.hero;
     this.t++;
     if (this.flash > 0) this.flash--;
-    if (this.state === 'grabbed' || this.state === 'carried') return;
+    if (this.recent > 0) this.recent--;
+    if (this.snap > 0) this.snap *= 0.8;
+    if (this.state === 'grabbed' || this.state === 'carried' || this.state === 'pinned') return;
     const L = fb.ax + 60, R = fb.ax + fb.aw - 60;
     if (!this.ground) {
       this.vy += 0.6; this.x += this.vx; this.y += this.vy; this.rot += this.vx * 0.018;
@@ -96,9 +127,10 @@ class BrawlEggman {
         if (Math.abs(this.vx) > 8) {
           this.damage(5 + Math.abs(this.vx) * 0.35, true);
           fb.shake = Math.max(fb.shake, 16); fb.hitStop = Math.max(fb.hitStop, 6);
-          fb.add(new PowFX(this.x, this.y - 70, 'SPLAT!', true));
-          for (let i = 0; i < 4; i++) fb.add(new FBEffect('boom', this.x, this.y - 40 - i * 25, { dur: 20 }));
-          Sound.play('boom', { vol: 0.8 });
+          for (let i = 0; i < 5; i++) fb.add(new FBEffect('dust', this.x, this.y - 30 - i * 22, { dur: 28 }));
+          fb.stain(this.x < fb.ax + fb.aw / 2 ? fb.ax + 34 : fb.ax + fb.aw - 34, this.y - 70, 16, true);
+          this.bleed(this.x, this.y - 90, -Math.sign(this.vx), 10, 0.3);
+          Sound.punch(1.6); Sound.play('boom', { vol: 0.5, rate: 0.6 });
         }
         this.vx = -this.vx * 0.35;
       }
@@ -108,9 +140,9 @@ class BrawlEggman {
           const slam = this.thrown || this.vy > 16;
           this.damage(slam ? 6 + this.vy * 0.4 : this.vy * 0.25, slam);
           fb.shake = Math.max(fb.shake, this.vy);
-          if (slam) { fb.add(new PowFX(this.x, this.y - 60, 'SLAM!', true)); fb.hitStop = Math.max(fb.hitStop, 6); }
-          fb.add(new FBEffect('boom', this.x, this.y - 10, { dur: 22, s: 1.3 }));
-          Sound.play('boom', { vol: 0.6, rate: 0.8 });
+          if (slam) { fb.hitStop = Math.max(fb.hitStop, 7); this.bleed(this.x, this.y - 40, 0, 8, 0.2); Sound.punch(1.7); }
+          for (let i = 0; i < 4; i++) fb.add(new FBEffect('dust', this.x + (i - 1.5) * 30, this.y - 6, { dur: 26 }));
+          Sound.play('boom', { vol: 0.4, rate: 0.6 });
           this.vy = -this.vy * 0.4; this.vx *= 0.6; this.thrown = false;
         } else {
           this.ground = true; this.vy = 0; this.rot = 0; this.thrown = false;
@@ -153,7 +185,7 @@ class BrawlEggman {
       this.x -= A.dir * (5 + f * 2);
       if (f > 0.5 && A.t === 30 && Math.random() < 0.4) { // trips over his own feet
         this.act = null; this.stun = 45; this.state = 'down'; this.cool = 30;
-        fb.add(new PowFX(this.x, this.y - 40, 'TRIP!', false)); Sound.play('skid');
+        fb.add(new FBEffect('dust', this.x, this.y - 6, { dur: 26 })); Sound.play('skid'); Sound.punch(0.6);
         return;
       }
       if (A.t > 60 || this.x <= L || this.x >= R) this.endAct();
@@ -180,32 +212,73 @@ class BrawlEggman {
     if (this.hp <= 1) { this.hp = 1; this.fb.startRescue(); }
   }
 
-  takeHit(dmg, kx, ky, big, word) {
+  // Spray blood from (x, y) in direction dir (-1/1, 0 = upward); teeth with probability toothP
+  bleed(x, y, dir, n, toothP) {
+    for (let k = 0; k < n; k++) {
+      const vx = (dir ? dir * (2 + Math.random() * 6) : (Math.random() - 0.5) * 6), vy = -2 - Math.random() * 6;
+      this.fb.add(new Gore(this.fb, x + (Math.random() - 0.5) * 10, y + (Math.random() - 0.5) * 10, vx, vy, 'blood'));
+    }
+    if (Math.random() < toothP) this.fb.add(new Gore(this.fb, x, y, (dir || (Math.random() - 0.5)) * 5, -7, 'tooth'));
+  }
+
+  headPos() {
+    const f = EGG_FRAMES[eggFrame('stand')], h = f[3] * EGG_SCALE;
+    const front = this.facing > 0 ? 1 : -1;
+    return { x: this.x + front * 14, y: this.y - h * 0.74 };
+  }
+
+  checkFear() {
     const fb = this.fb;
-    if (fb.phase !== 'brawl' || this.state === 'grabbed') return false;
-    this.damage(dmg, big);
-    if (fb.phase !== 'brawl') return true;
-    this.vx = kx; this.vy = ky;
-    if (ky < 0 || !this.ground) { this.ground = false; this.state = 'air'; }
-    this.stun = big ? 50 : 24; this.act = null; this.cool = 25;
-    fb.hitStop = Math.max(fb.hitStop, big ? 9 : 4);
-    fb.shake = Math.max(fb.shake, big ? 14 : 5);
-    fb.zoom = Math.max(fb.zoom, big ? 1.09 : 1.035);
-    const c = this.center();
-    fb.add(new PowFX(c.x + (Math.random() - 0.5) * 40, c.y - 30 + (Math.random() - 0.5) * 30, word || POW_WORDS[Math.floor(Math.random() * POW_WORDS.length)], big));
-    for (let i = 0; i < (big ? 8 : 4); i++) fb.add(new FBEffect('spark', c.x + (Math.random() - 0.5) * 70, c.y + (Math.random() - 0.5) * 70, { dur: 16, color: i % 2 ? '#fff' : '#ffe680' }));
-    Sound.play('pop', { rate: big ? 0.6 : 0.9 + Math.random() * 0.3 });
-    if (big) Sound.play('bosshit', { rate: 0.9 });
-    fb.brawlCombo = { n: (fb.brawlCombo && fb.brawlCombo.t > 0 ? fb.brawlCombo.n : 0) + 1, t: 100 };
-    fb.g.addScore(big ? 300 : 100);
-    if (fb.brawlCombo.n % 5 === 0) fb.add(new FloatRing(fb, c.x, c.y, (Math.random() - 0.5) * 6, -5));
-    // fear dialogue
     while (this.saidFear < EGG_FEAR_LINES.length && this.fear >= EGG_FEAR_LINES[this.saidFear][0]) {
       fb.say('eggman', EGG_FEAR_LINES[this.saidFear][1], { dur: 150, prio: 2 });
       this.saidFear++;
     }
+  }
+
+  // A body blow. kx/ky = knockback. Shows Sonic's real glove landing, blood, a head snap.
+  takeHit(dmg, kx, ky, big) {
+    const fb = this.fb;
+    if (fb.phase !== 'brawl' || this.state === 'grabbed' || this.state === 'pinned') return false;
+    this.damage(dmg, big);
+    if (fb.phase !== 'brawl') return true;
+    const dir = Math.sign(kx) || (fb.hero.x < this.x ? 1 : -1);
+    this.vx = kx; this.vy = ky;
+    this.recent += big ? 3 : 1;
+    if (ky < 0 || !this.ground) { this.ground = false; this.state = 'air'; }
+    else if (big || this.recent >= 4) { this.state = 'down'; this.recent = 0; }
+    else this.state = 'hurt';
+    this.stun = Math.round((big ? 50 : 26) * (1 + this.fear * 0.8));   // gets up slower as he breaks
+    this.act = null; this.cool = 25;
+    this.snap = big ? 1 : 0.6; this.snapDir = dir;
+    this.wounds += dmg;
+    fb.hitStop = Math.max(fb.hitStop, big ? 10 : 5);
+    fb.shake = Math.max(fb.shake, big ? 16 : 7);
+    fb.zoom = Math.max(fb.zoom, big ? 1.06 : 1.02);
+    const hp = this.headPos();
+    fb.add(new FBEffect('impact', hp.x - dir * 10, hp.y + 10, { dur: big ? 10 : 7, big }));
+    this.bleed(hp.x, hp.y + 8, dir, big ? 12 : 5, big ? 0.35 : 0.08);
+    Sound.punch(big ? 1.6 : 1);
+    fb.brawlCombo = { n: (fb.brawlCombo && fb.brawlCombo.t > 0 ? fb.brawlCombo.n : 0) + 1, t: 100 };
+    fb.g.addScore(big ? 300 : 100);
+    if (fb.brawlCombo.n % 5 === 0) fb.add(new FloatRing(fb, hp.x, hp.y, (Math.random() - 0.5) * 6, -5));
+    this.checkFear();
     if (big) fb.say('sonic', SONIC_BRAWL_QUIPS[Math.floor(Math.random() * SONIC_BRAWL_QUIPS.length)], { cool: 360, coolKey: 'bq', dur: 100 });
     return true;
+  }
+
+  // Ground-and-pound blow while pinned: no knockback, just damage.
+  poundHit(side) {
+    const fb = this.fb;
+    this.damage(4, false);
+    this.wounds += 4; this.flash = 4; this.snap = 0.8; this.snapDir = side;
+    const hp = { x: this.x + side * 6, y: this.y - 28 };
+    fb.add(new FBEffect('impact', hp.x, hp.y, { dur: 7 }));
+    this.bleed(hp.x, hp.y, 0, 6, 0.15);
+    fb.hitStop = Math.max(fb.hitStop, 5); fb.shake = Math.max(fb.shake, 9);
+    Sound.punch(1.3);
+    fb.brawlCombo = { n: (fb.brawlCombo && fb.brawlCombo.t > 0 ? fb.brawlCombo.n : 0) + 1, t: 100 };
+    fb.g.addScore(150);
+    this.checkFear();
   }
 
   draw(ctx, cam, t) {
@@ -215,12 +288,14 @@ class BrawlEggman {
     if (this.state === 'run') idx = eggFrame('run' + (Math.floor(t * 0.25) % 4));
     else if (this.state === 'idle' || this.state === 'throw') idx = eggFrame('stand');
     else if (this.state === 'cower') idx = lose(0.15);
-    else if (this.state === 'down') idx = eggFrame('lose2');
+    else if (this.state === 'down' || this.state === 'pinned') { idx = eggFrame('lose2'); rot = this.state === 'pinned' ? -Math.PI / 2 * (flip ? -1 : 1) * 0.9 : 0; }
+    else if (this.state === 'hurt') idx = eggFrame('lose0');
     else { idx = lose(0.3); rot = this.ground ? 0 : this.rot; }
+    rot += this.snap * this.snapDir * 0.35;   // head snaps back on impact
     let dx = 0;
     if (this.state === 'cower' || this.fear > 0.6) dx = (Math.random() - 0.5) * (this.state === 'cower' ? 6 : 2);
     // shadow
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
     drawEggFrame(ctx, idx, x + dx, y, { flip, rot });
     if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85 });
     // sweat drops when scared
@@ -231,8 +306,16 @@ class BrawlEggman {
         ctx.beginPath(); ctx.moveTo(sx, sy - 8); ctx.quadraticCurveTo(sx + 6, sy + 2, sx, sy + 4); ctx.quadraticCurveTo(sx - 6, sy + 2, sx, sy - 8); ctx.fill();
       }
     }
-    if (this.state === 'down' || (this.stun > 0 && this.ground)) {
-      for (let i = 0; i < 3; i++) { const a = t * 0.1 + i * 2.1; drawSparkle(ctx, x + Math.cos(a) * 40, y - 100 + Math.sin(a) * 10, 0.3, '#ffe23d'); }
+    // accumulated damage on his face: bruise, broken goggles, nosebleed
+    if (this.wounds > 6 && (this.state === 'idle' || this.state === 'run' || this.state === 'throw' || this.state === 'hurt')) {
+      const hp = this.headPos(), hx = hp.x - cam.x + dx, hy = hp.y - cam.y, k = Math.min(1, this.wounds / 120), fr = this.facing > 0 ? 1 : -1;
+      ctx.save();
+      ctx.fillStyle = `rgba(90,30,110,${0.25 + 0.35 * k})`; ctx.beginPath(); ctx.ellipse(hx - fr * 10, hy - 6, 9 + 6 * k, 6 + 4 * k, 0, 0, Math.PI * 2); ctx.fill();
+      if (this.wounds > 35) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(hx - 14, hy - 18); ctx.lineTo(hx - 6, hy - 10); ctx.lineTo(hx - 12, hy - 4); ctx.stroke(); }
+      if (this.wounds > 70) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(hx + fr * 2, hy - 20, 12, 7); }
+      ctx.fillStyle = '#8f0b10'; const len = 6 + 22 * k;
+      ctx.fillRect(hx + fr * 12, hy + 4, 3, len); ctx.fillRect(hx + fr * 17, hy + 6, 2, len * 0.7);
+      ctx.restore();
     }
   }
 }

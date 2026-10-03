@@ -46,6 +46,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Punch combo (4th hit = uppercut, juggles him) | Z / Space | A | A |
 | Kick (sends him into walls; from above = spike) | X | X | B |
 | Grab, then throw (aim with arrows, down = slam) | V / Shift | B | Y |
+| Ground and pound (when he's knocked down): get close, then mash | Z | A | A |
 | Light clones | C | Y | X |
 
 ## Features
@@ -61,7 +62,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation. Counter Eggman's eye laser by holding your laser while it charges: the beams lock into a clash you win by mashing.
-- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and beats him around the arena with punch combos, kicks, wall splats, grabs and throws, with hit-stop, zoom-ins and comic-book impact bursts. Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away. TO BE CONTINUED.
+- **Final brawl:** when the Colossus falls, Super Sonic rips Eggman out of the cockpit and fights him hand to hand: punch combos, kicks, wall slams, grabs and throws, and ground-and-pound when he's down. Hits land with Sonic's actual gloves and shoes, heavy synthesized punch impacts, hit-stop, blood and teeth that stain the floor, and damage that builds on Eggman's face (bruises, broken goggles, nosebleed). Eggman fights back with charges, leaps and bombs, but gets more scared with every hit (ANGRY → NERVOUS → TERRIFIED): he flees, trips, cowers and begs. At the last second Metal Sonic snatches him away. TO BE CONTINUED.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
 - Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone), and dying in the brawl restarts the brawl. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle/brawl if you'd reached it.
 - An original chiptune soundtrack synthesized live with Web Audio: meadow, dunes, fortress, boss and invincibility themes.

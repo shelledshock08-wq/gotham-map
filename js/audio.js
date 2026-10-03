@@ -305,6 +305,28 @@ const Sound = {
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   },
 
+  // Body-blow impact: sharp slap transient + low thump (+ crunch for big hits)
+  punch(power = 1) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime, out = this.sfxGain;
+    const n = this.ctx.createBufferSource(); n.buffer = this.noiseBuf;
+    const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900 + Math.random() * 500; bp.Q.value = 0.8;
+    const g1 = this.ctx.createGain();
+    g1.gain.setValueAtTime(0.9 * power, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.07 + 0.05 * power);
+    n.connect(bp); bp.connect(g1); g1.connect(out); n.start(t, Math.random() * 0.5); n.stop(t + 0.2);
+    const o = this.ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(120 + 30 * power, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.16 + 0.08 * power);
+    const g2 = this.ctx.createGain();
+    g2.gain.setValueAtTime(0.9 * Math.min(1.4, power), t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.22 + 0.1 * power);
+    o.connect(g2); g2.connect(out); o.start(t); o.stop(t + 0.4);
+    if (power > 1.2) {
+      const c = this.ctx.createBufferSource(); c.buffer = this.noiseBuf;
+      const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+      const g3 = this.ctx.createGain(); g3.gain.setValueAtTime(0.35, t + 0.01); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+      c.connect(hp); hp.connect(g3); g3.connect(out); c.start(t + 0.01, Math.random()); c.stop(t + 0.12);
+    }
+  },
+
   kick(t) {
     const o = this.ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
