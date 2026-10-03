@@ -27,9 +27,10 @@ function drawKeyCap(ctx, x, y, label, size = 14) {
 }
 
 // "[V] RIP!" style prompt drawn in world space over an object.
-function drawPrompt(ctx, x, y, action, text, t) {
+function drawPrompt(ctx, x, y, action, text, t, s = 1) {
   if (Math.floor(t / 12) % 4 === 3) return;
   ctx.save();
+  if (s !== 1) { ctx.translate(x, y); ctx.scale(s, s); ctx.translate(-x, -y); }   // keep on-screen size under camera zoom
   ctx.font = `14px ${FONT}`;
   const label = keyLabel(action);
   const tw = ctx.measureText(text).width;

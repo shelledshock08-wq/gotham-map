@@ -6,11 +6,17 @@
 const EGG_SCALE = 2.5;
 const POW_WORDS = ['POW!', 'WHAM!', 'SMACK!', 'BAM!', 'CRACK!', 'THWACK!', 'BONK!', 'KAPOW!', 'WHUMP!'];
 const EGG_FEAR_LINES = [
-  [0.12, 'You\'ll pay for that, you blue rodent!'],
-  [0.3, 'Ow! OW! Not the mustache!'],
-  [0.48, 'Okay, okay! I\'m sorry! I\'ll stop!'],
-  [0.66, 'SOMEBODY HELP ME!!!'],
-  [0.82, 'M-mommy...'],
+  [0.06, 'You\'ll pay for that, you blue rodent!'],
+  [0.15, 'I have an IQ of 300! You can\'t--'],
+  [0.24, 'Ow! OW! Not the mustache!'],
+  [0.33, 'My teeth! You knocked out my TEETH!'],
+  [0.42, 'Okay, okay! I\'m sorry! I\'ll stop!'],
+  [0.51, 'I\'ll free them! I\'ll free ALL of them!'],
+  [0.6, 'SOMEBODY HELP ME!!!'],
+  [0.69, 'Orbot... Cubot... anyone...'],
+  [0.78, 'Please... I can\'t feel my face...'],
+  [0.87, 'M-mommy...'],
+  [0.95, 'Metal... where are you...'],
 ];
 const SONIC_BRAWL_QUIPS = ['Get UP.', 'You hurt my friends.', 'Look at me!', "I'm not done with you.", 'How many did you cage, huh?!', 'This is what you earned.', 'Stand up. Fight back.'];
 
@@ -104,7 +110,7 @@ class EggBomb {
 class BrawlEggman {
   constructor(fb, x, y) {
     this.fb = fb; this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.ground = false;
-    this.hp = 160; this.max = 160; this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
+    this.hp = 420; this.max = 420;   // a long, drawn-out beating this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
     this.act = null; this.cool = 70; this.facing = -1; this.thrown = false; this.saidFear = 0;
     this.state = 'air';
     this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0; this.squash = 0;
@@ -312,6 +318,15 @@ class BrawlEggman {
         const sx = x + (i % 2 ? 40 : -40) + i * 4, sy = y - 120 + ((t + i * 9) % 30);
         ctx.beginPath(); ctx.moveTo(sx, sy - 8); ctx.quadraticCurveTo(sx + 6, sy + 2, sx, sy + 4); ctx.quadraticCurveTo(sx - 6, sy + 2, sx, sy - 8); ctx.fill();
       }
+    }
+    // spin-dash gashes across his coat
+    if (this.gashes && (this.state === 'idle' || this.state === 'run' || this.state === 'throw' || this.state === 'hurt')) {
+      ctx.save(); ctx.strokeStyle = '#7d0a0e'; ctx.lineWidth = 3;
+      for (let i = 0; i < Math.min(4, this.gashes); i++) {
+        const gy = y - 70 + i * 14 + dx;
+        ctx.beginPath(); ctx.moveTo(x - 26 + dx, gy - 10); ctx.lineTo(x + 24 + dx, gy + 8); ctx.stroke();
+      }
+      ctx.restore();
     }
     // accumulated damage on his face: bruise, broken goggles, nosebleed
     if (this.wounds > 6 && (this.state === 'idle' || this.state === 'run' || this.state === 'throw' || this.state === 'hurt')) {

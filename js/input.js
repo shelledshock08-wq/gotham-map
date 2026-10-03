@@ -97,6 +97,7 @@ const Input = {
     const tapPunch = hit('Space', 'KeyZ', 'KeyJ'), tapLaser = hit('KeyX', 'KeyK');
     const tapClones = hit('KeyC', 'KeyL'), tapGrab = hit('KeyV', 'ShiftLeft', 'ShiftRight', 'KeyI');
     const tapStart = hit('Enter', 'Escape', 'KeyP');
+    const hitU = hit('ArrowUp', 'KeyW'), hitD = hit('ArrowDown', 'KeyS'), hitL = hit('ArrowLeft', 'KeyA'), hitR = hit('ArrowRight', 'KeyD');
     this.hits.clear();
     const th = this.touchHits;
     const tJump = th.has('jump') || th.has('laser') || th.has('clones') || th.has('grab');
@@ -106,10 +107,10 @@ const Input = {
       left, right, up, down, jump, start,
       jumpPressed: (jump && !this.prev.jump) || tapJump || tJump,
       startPressed: (start && !this.prev.start) || tapStart || tStart,
-      upPressed: up && !this.prev.up,
-      downPressed: down && !this.prev.down,
-      leftPressed: left && !this.prev.left,
-      rightPressed: right && !this.prev.right,
+      upPressed: (up && !this.prev.up) || hitU,
+      downPressed: (down && !this.prev.down) || hitD,
+      leftPressed: (left && !this.prev.left) || hitL,
+      rightPressed: (right && !this.prev.right) || hitR,
       tapped,
       mutePressed: k.has('KeyM') && !this.prev.mute,
       punch, laser, clones, grab,

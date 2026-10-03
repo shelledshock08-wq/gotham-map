@@ -44,10 +44,12 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Action | Keyboard | Gamepad | Touch |
 |---|---|---|---|
 | Punch combo (4th hit = uppercut, juggles him) | Z / Space | A | A |
+| Headbutt | Up + Z | Up + A | ▲ + A |
 | Kick (sends him into walls; from above = spike) | X | X | B |
-| Grab, then throw (aim with arrows, down = slam) | V / Shift | B | Y |
-| Ground and pound (when he's knocked down): get close, then mash | Z | A | A |
-| Light clones | C | Y | X |
+| Spin-dash cut: hold to rev, release to slice through him (1-3 passes) | hold C | hold Y | hold X |
+| Grab him by the leg, smash him into the floor left/right, throw | V, then ← / → (or Z), V | B, ← / →, B | Y, ◀ / ▶, Y |
+| Ground and pound (when he's knocked down) | Z next to him, mash Z | A | A |
+| Bite (while pinned) / haul him up by the leg | hold V / Up | hold B / Up | hold Y / ▲ |
 
 **Developer skip menu (temporary):** on the title screen, click **DEV** (or press 1–7) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle or the brawl. Turn it off with `DEV_MENU = false` in `js/game.js`.
 
