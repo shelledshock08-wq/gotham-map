@@ -62,7 +62,7 @@ class Game {
     this.timeStopped = false;
     this.camLock = null; this.goal = null; this.goalLockX = null;
     this.boss = null; this.bossStarted = false; this.arena = null;
-    this.tally = null; this.deathHandled = false;
+    this.tally = null; this.deathHandled = false; this.final = null;
     let start = null;
     for (const e of data.ents) {
       switch (e.type) {
@@ -155,6 +155,25 @@ class Game {
   }
   onGoalDone() { this.later(40, () => this.startTally()); }
 
+  startFinal(egg) {
+    this.boss = null;
+    this.final = new FinalBattle(this, egg, false);
+  }
+  finalDeath() {
+    this.lives--;
+    document.getElementById('touch').classList.remove('super');
+    if (this.lives <= 0) {
+      this.final = null;
+      this.state = 'gameover'; this.goTimer = 0; Sound.stopMusic(); Sound.stopTrack(); Sound.play('gameover'); this.saveHi();
+      return;
+    }
+    // retry the showdown straight from the transformation
+    const p = this.player;
+    p.reset(this.arena.x + 300, this.arena.groundY);
+    p.y = this.arena.groundY - STAND_H; p.ground = true;
+    this.rings = 50;
+    this.final = new FinalBattle(this, null, true);
+  }
   onBossDefeated() { this.addScore(1000); this.timeStopped = true; Sound.stopMusic(); }
   onBossGone() { this.later(60, () => this.startTally()); }
 
@@ -179,7 +198,8 @@ class Game {
         Sound.playMusic('meadow');
         return;
       case 'paused':
-        if (inp.startPressed) this.state = 'play';
+        Sound.pauseTrack(true);
+        if (inp.startPressed) { this.state = 'play'; Sound.pauseTrack(false); }
         return;
       case 'gameover':
         this.goTimer++;
@@ -201,6 +221,15 @@ class Game {
 
     for (let i = this.timers.length - 1; i >= 0; i--) {
       if (--this.timers[i].t <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
+    }
+
+    if (this.final) {
+      this.final.update(inp);
+      for (const e of this.effects) e.update(this);
+      this.effects = this.effects.filter((o) => !o.dead);
+      if (this.tally) this.updateTally(inp);
+      this.cam.x = this.arena.x; this.cam.y = this.final.camY;
+      return;
     }
 
     for (const m of this.movers) m.update(this);
@@ -268,11 +297,11 @@ class Game {
     } else if (++T.wait > 150) {
       this.saveHi();
       if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
-      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; Sound.playMusic('meadow'); }
+      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
-  toTitle() { this.saveHi(); this.state = 'title'; Sound.stopMusic(); }
+  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; Sound.stopMusic(); Sound.stopTrack(); }
 
   saveHi() {
     if (this.score > this.hiscore) {
@@ -334,6 +363,15 @@ class Game {
   }
 
   drawPlay(ctx) {
+    if (this.final) {
+      this.final.draw(ctx, this.cam, this.t);
+      this.drawHUD(ctx);
+      this.final.drawHUD(ctx);
+      if (this.tally) this.drawTally(ctx);
+      if (this.state === 'paused') this.drawPause(ctx);
+      if (this.state === 'gameover') this.drawGameOver(ctx);
+      return;
+    }
     const cam = { x: this.cam.x, y: this.cam.y };
     if (this.shake) { cam.x += (Math.random() - 0.5) * this.shake * 2; cam.y += (Math.random() - 0.5) * this.shake * 2; }
     const t = this.t;
@@ -479,9 +517,7 @@ class Game {
     for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#2a55e6' : '#1d3fd1'; ctx.fillRect(-150, -150 + i * 50, 300, 50); }
     ctx.restore();
     // hero peeking
-    ctx.save(); ctx.translate(0, -20); ctx.scale(3.2, 3.2);
-    drawHero(ctx, 'tap', t * 0.12, {});
-    ctx.restore();
+    drawSonicFrame(ctx, animFrame('tap', t * 0.04), 0, 128, { scale: 8 });
     ctx.restore();
 
     // logo banner
@@ -511,8 +547,9 @@ class Game {
     this.endWorld.drawBackground(ctx, cam, t);
     ctx.fillStyle = '#3ecf72'; ctx.fillRect(0, 560, VIEW_W, 160);
     ctx.fillStyle = '#e8935a'; ctx.fillRect(0, 590, VIEW_W, 130);
-    ctx.save(); ctx.translate(VIEW_W / 2, 560 - 29 * 2.2); ctx.scale(2.2, 2.2);
-    drawHero(ctx, 'dash', t * 0.9, {}); ctx.restore();
+    const hy = 470 + Math.sin(t * 0.06) * 10;
+    drawSuperAura(ctx, VIEW_W / 2, hy - 40, t, 1.4);
+    drawSonicFrame(ctx, animFrame('fly', t * 0.1), VIEW_W / 2, hy, { sheet: 'super', scale: 4 });
     for (let i = 0; i < 6; i++) {
       const x = (VIEW_W / 2 - 200 - i * 90 + Math.sin(t * 0.05 + i) * 20);
       const y = 545 - Math.abs(Math.sin(t * 0.12 + i)) * 50;
@@ -521,7 +558,7 @@ class Game {
     const k = Math.min(1, this.endTimer / 40);
     ctx.globalAlpha = k;
     this.text(ctx, 'CONGRATULATIONS!', VIEW_W / 2, 170, 44, '#ffd23f', 'center');
-    this.text(ctx, 'THE ANIMALS ARE FREE AND EGGMAN HAS FLED.', VIEW_W / 2, 240, 16, '#fff', 'center');
+    this.text(ctx, 'THE EGG COLOSSUS IS SCRAP AND EGGMAN HAS FLED.', VIEW_W / 2, 240, 16, '#fff', 'center');
     this.text(ctx, `FINAL SCORE ${this.score}`, VIEW_W / 2, 310, 26, '#fff', 'center');
     this.text(ctx, `HI-SCORE ${this.hiscore}`, VIEW_W / 2, 350, 16, '#c9d4ff', 'center');
     if (this.endTimer > 120 && Math.floor(t / 30) % 2 === 0) this.text(ctx, 'PRESS START', VIEW_W / 2, 420, 20, '#fff', 'center');

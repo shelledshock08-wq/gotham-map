@@ -356,7 +356,7 @@ class Player {
   // ----------------------------------------------------------------- drawing
   animate() {
     const sp = Math.abs(this.ground ? this.gsp : this.xsp);
-    this.anim += this.ground ? Math.max(0.08, sp * 0.06) : 0.2;
+    this.anim += this.ground ? Math.max(0.06, sp * 0.028) : 0.15;
     this.ballRot += (this.ground ? this.gsp : this.xsp * 0.6 + 3 * this.facing) * 0.05 + (this.spindash ? 0.6 * this.facing : 0);
     if (this.skidDust > 0) { this.skidDust--; if (this.skidDust % 4 === 0 && this.ground) this.game.addDust(this.x, this.feet - 4); }
     const still = this.ground && sp < 0.01 && !this.ball && this.state === 'normal';
@@ -389,18 +389,21 @@ class Player {
     const sx = Math.round(this.x - cam.x), sy = Math.round(this.y - cam.y);
     if (this.invuln > 0 && this.state !== 'hurt' && Math.floor(this.invuln / 3) % 2 === 0) return;
     const pose = this.pose();
-    ctx.save();
-    ctx.translate(sx, sy);
+    const flip = this.facing < 0;
     if (pose === 'ball') {
-      drawHeroBall(ctx, this.ballRot, { squash: this.spindash ? 0.6 + Math.sin(t * 0.8) * 0.3 : 0 });
+      if (this.spindash) drawSonicFrame(ctx, animFrame('spindash', t * 0.5), sx, sy + 2, { anchor: 'center', flip });
+      else drawSonicFrame(ctx, animFrame('ball', Math.abs(this.ballRot) * 1.3), sx, sy, { anchor: 'center', flip });
     } else {
-      // rotate around the feet
-      ctx.translate(0, STAND_H); ctx.rotate(this.drawAngle); ctx.translate(0, -STAND_H);
-      ctx.scale(this.facing, 1);
-      ctx.translate(0, -1);
-      drawHero(ctx, pose, pose === 'dash' ? t * 0.9 : pose === 'tap' ? t * 0.25 : this.anim, {});
+      let name = pose, ft = this.anim;
+      if (pose === 'idle' && t % 200 < 8) name = 'blink';
+      if (pose === 'tap') ft = t * 0.06;
+      if (pose === 'dash') ft = t * 0.5;
+      // rotate around the feet on slopes / loops
+      const fy = sy + STAND_H;
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(this.drawAngle); ctx.translate(-sx, -sy);
+      drawSonicFrame(ctx, animFrame(name, ft), sx, fy + 1, { flip, sy: pose === 'crouch' ? 0.72 : 1 });
+      ctx.restore();
     }
-    ctx.restore();
     if (this.shield) drawShield(ctx, sx, sy, t);
     if (this.invinc > 0) drawInvincibility(ctx, sx, sy, t);
   }

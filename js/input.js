@@ -3,8 +3,9 @@
 
 const Input = {
   keys: new Set(),
-  touch: { left: false, right: false, up: false, down: false, jump: false, start: false },
-  prev: { jump: false, start: false, up: false, down: false, left: false, right: false },
+  hits: new Set(),
+  touch: { left: false, right: false, up: false, down: false, jump: false, start: false, laser: false, clones: false, grab: false },
+  prev: { jump: false, start: false, up: false, down: false, left: false, right: false, punch: false, laser: false, clones: false, grab: false },
   state: null,
 
   init() {
@@ -12,6 +13,7 @@ const Input = {
     window.addEventListener('keydown', (e) => {
       if (block.includes(e.code)) e.preventDefault();
       this.keys.add(e.code);
+      if (!e.repeat) this.hits.add(e.code);   // remember taps shorter than a frame
       Sound.init();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -20,6 +22,7 @@ const Input = {
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const pad = document.getElementById('touch');
     if (isTouch) pad.classList.add('on');
+    this.isTouch = isTouch;
     const btns = [...pad.querySelectorAll('.tbtn')];
     const active = new Map();   // pointerId -> key
     const refresh = () => {
@@ -41,7 +44,8 @@ const Input = {
         if (!active.has(e.pointerId)) return;
         const k = keyAt(e.clientX, e.clientY);
         // slide between d-pad buttons, but never slide onto/off the jump button
-        if (k && k !== 'jump' && k !== 'start' && active.get(e.pointerId) !== 'jump') { active.set(e.pointerId, k); refresh(); }
+        const dpad = ['left', 'right', 'up', 'down'];
+        if (k && dpad.includes(k) && dpad.includes(active.get(e.pointerId))) { active.set(e.pointerId, k); refresh(); }
       });
       const end = (e) => { active.delete(e.pointerId); refresh(); };
       b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
@@ -58,7 +62,14 @@ const Input = {
     let down = k.has('ArrowDown') || k.has('KeyS');
     let jump = k.has('Space') || k.has('KeyZ') || k.has('KeyX') || k.has('KeyC') || k.has('KeyJ') || k.has('KeyK');
     let start = k.has('Enter') || k.has('Escape') || k.has('KeyP');
+    // separate action buttons used by the Super Sonic battle
+    let punch = k.has('Space') || k.has('KeyZ') || k.has('KeyJ');
+    let laser = k.has('KeyX') || k.has('KeyK');
+    let clones = k.has('KeyC') || k.has('KeyL');
+    let grab = k.has('KeyV') || k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyI');
     const t = this.touch;
+    punch = punch || t.jump; laser = laser || t.laser; clones = clones || t.clones; grab = grab || t.grab;
+    jump = jump || t.laser || t.clones || t.grab;
     left = left || t.left; right = right || t.right; up = up || t.up; down = down || t.down;
     jump = jump || t.jump; start = start || t.start;
 
@@ -73,20 +84,32 @@ const Input = {
       down = down || ay > 0.5 || b(13);
       jump = jump || b(0) || b(1) || b(2) || b(3);
       start = start || b(9);
+      punch = punch || b(0); grab = grab || b(1); laser = laser || b(2); clones = clones || b(3);
     }
     const tapped = !!this.tapped; this.tapped = false;
+    const hit = (...codes) => codes.some((c) => this.hits.has(c));
+    const tapJump = hit('Space', 'KeyZ', 'KeyX', 'KeyC', 'KeyJ', 'KeyK');
+    const tapPunch = hit('Space', 'KeyZ', 'KeyJ'), tapLaser = hit('KeyX', 'KeyK');
+    const tapClones = hit('KeyC', 'KeyL'), tapGrab = hit('KeyV', 'ShiftLeft', 'ShiftRight', 'KeyI');
+    const tapStart = hit('Enter', 'Escape', 'KeyP');
+    this.hits.clear();
     const s = {
       left, right, up, down, jump, start,
-      jumpPressed: jump && !this.prev.jump,
-      startPressed: start && !this.prev.start,
+      jumpPressed: (jump && !this.prev.jump) || tapJump,
+      startPressed: (start && !this.prev.start) || tapStart,
       upPressed: up && !this.prev.up,
       downPressed: down && !this.prev.down,
       leftPressed: left && !this.prev.left,
       rightPressed: right && !this.prev.right,
       tapped,
       mutePressed: k.has('KeyM') && !this.prev.mute,
+      punch, laser, clones, grab,
+      punchPressed: (punch && !this.prev.punch) || tapPunch,
+      laserPressed: (laser && !this.prev.laser) || tapLaser,
+      clonesPressed: (clones && !this.prev.clones) || tapClones,
+      grabPressed: (grab && !this.prev.grab) || tapGrab,
     };
-    this.prev = { jump, start, up, down, left, right, mute: k.has('KeyM') };
+    this.prev = { jump, start, up, down, left, right, mute: k.has('KeyM'), punch, laser, clones, grab };
     this.state = s;
     return s;
   },

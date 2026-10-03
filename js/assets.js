@@ -31,6 +31,8 @@ const IMAGE_LIST = (() => {
     'background_color_mushrooms', 'background_clouds', 'background_solid_sky',
     'background_fade_hills', 'background_fade_desert'];
   for (const b of bgs) list[b] = `assets/bg/${b}.png`;
+  list.sonic = 'assets/sonic/sonic.png';
+  list.super = 'assets/sonic/super.png';
   return list;
 })();
 

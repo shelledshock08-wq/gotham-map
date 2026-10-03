@@ -79,6 +79,20 @@ const SONGS = {
       'F#5 - - - - - - - D#5 - - - B4 - - -',
     ],
   },
+  final: {
+    bpm: 184, drums: 'boss', bass: 'drive', duty: 0.25,
+    chords: ['Em', 'C', 'D', 'B', 'Em', 'C', 'D', 'B'],
+    lead: [
+      'B5 - - - G5 - E5 - B5 - - - C6 - B5 -',
+      'A5 - - - G5 - E5 - C5 - - - E5 - G5 -',
+      'A5 - - - F#5 - D5 - A5 - - - B5 - A5 -',
+      'F#5 - - - - - - - D#5 - - - B4 - - -',
+      'E5 E5 . E5 G5 . E5 . F#5 . G5 . A5 . G5 F#5',
+      'E5 - - - C5 - - - G5 - - - E5 - C5 -',
+      'F#5 F#5 . F#5 A5 . F#5 . G5 . A5 . B5 . A5 G5',
+      'B5 - - - A5 - - - G5 - - - F#5 - - -',
+    ],
+  },
   invincible: {
     bpm: 190, drums: 'boss', bass: 'drive', duty: 0.25, arpLead: true,
     chords: ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'G'],
@@ -140,6 +154,7 @@ const Sound = {
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.9;
+    if (this.trackEl) this.trackEl.muted = this.muted;
     try { localStorage.setItem('sonic_muted', this.muted ? '1' : '0'); } catch (e) { /* ignore */ }
   },
 
@@ -195,7 +210,29 @@ const Sound = {
     return (this.pulseWaves[duty] = this.ctx.createPeriodicWave(re, im));
   },
 
-  playMusic(name) {
+  // Streamed song (used for the final battle). Falls back to a synth song if the file is missing.
+  playTrack(path, fallbackSong) {
+    if (this.trackPath === path) return;
+    this.stopMusic(); this.stopTrack();
+    this.trackPath = path;
+    const src = (window.EMBEDDED_ASSETS && window.EMBEDDED_ASSETS[path]) || path;
+    const a = new window.Audio(src);
+    a.loop = true; a.volume = 0.85; a.muted = this.muted;
+    a.onerror = () => { if (this.trackEl === a) { this.trackEl = null; this.playMusic(fallbackSong, true); } };
+    this.trackEl = a;
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+  },
+  stopTrack() {
+    if (this.trackEl) { this.trackEl.pause(); this.trackEl = null; }
+    this.trackPath = null;
+  },
+  pauseTrack(paused) {
+    if (!this.trackEl) return;
+    if (paused) this.trackEl.pause(); else { const p = this.trackEl.play(); if (p && p.catch) p.catch(() => {}); }
+  },
+
+  playMusic(name, keepTrackPath) {
+    if (!keepTrackPath && this.trackEl) this.stopTrack();
     if (!this.ctx) { this.pendingSong = name; return; }
     if (this.songName === name) return;
     this.stopMusic();

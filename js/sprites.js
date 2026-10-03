@@ -198,8 +198,14 @@ function drawHeroBall(ctx, rot, opts = {}) {
   ctx.restore();
 }
 
-function drawHeroHead(ctx, s = 1) {
-  ctx.save(); ctx.scale(s, s); ctx.translate(-2, 14); drawHead(ctx, {}); ctx.restore();
+function drawHeroHead(ctx, s = 1, sheet = 'sonic') {
+  // top half of the idle frame, centred on (0, 0)
+  const img = Assets.img[sheet], f = SONIC_FRAMES[1];
+  if (!img || !f) return;
+  const k = 2.6 * s, hh = 15;
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, f[0], f[1], f[2], hh, Math.round(-f[2] * k / 2), Math.round(-hh * k / 2), Math.round(f[2] * k), Math.round(hh * k));
+  ctx.restore();
 }
 
 // ---------------- rings ----------------
@@ -437,3 +443,31 @@ const THEME_COLORS = {
   stone:  { top: '#b8c0cc', dirt: '#8f97a6', dirtL: '#a6aebb', dirtD: '#636a78', sky1: '#2b2f6b', sky2: '#8a7fc9' },
   purple: { top: '#c78cf5', dirt: '#8e5bd1', dirtL: '#a274e0', dirtD: '#5f3a99', sky1: '#251b4d', sky2: '#7a5bbf' },
 };
+
+// ---------------- fan sprite sheet (8-bit Sonic) ----------------
+const SPRITE_SCALE = 2.5;
+const SONIC_ANIM = {
+  idle: [1], blink: [2], lookup: [3], tap: [4, 5], walk: [17, 18, 19, 20], run: [10, 11, 12, 13],
+  dash: [25, 26, 27, 28], ball: [29, 30, 31, 32], spindash: [21, 22, 23, 24], spring: [9], hurt: [8],
+  dead: [16], skid: [15], push: [13], crouch: [1], fly: [13], hover: [1], punch: [20], charge: [9],
+  rip: [15], dive: [14],
+};
+// Draws frame `idx`. anchor 'feet' puts the bottom centre at (x, y); 'center' centres it.
+function drawSonicFrame(ctx, idx, x, y, opts = {}) {
+  const img = Assets.img[opts.sheet || 'sonic'];
+  const f = SONIC_FRAMES[idx];
+  if (!img || !f) return;
+  const s = opts.scale || SPRITE_SCALE;
+  const w = f[2] * s, h = f[3] * s;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  if (opts.rot) ctx.rotate(opts.rot);
+  if (opts.flip) ctx.scale(-1, 1);
+  if (opts.sy) ctx.scale(1, opts.sy);
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  const oy = opts.anchor === 'center' ? -h / 2 : -h;
+  ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(oy), Math.round(w), Math.round(h));
+  ctx.restore();
+}
+function animFrame(name, t) { const a = SONIC_ANIM[name] || SONIC_ANIM.idle; return a[Math.floor(t) % a.length]; }

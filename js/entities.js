@@ -480,7 +480,7 @@ class Boss {
         Sound.play('boom', { vol: 0.5 });
       }
       this.flash = this.t % 6 < 3 ? 1 : 0;
-      if (this.t > 100) { this.state = 'flee'; this.t = 0; this.dir = 1; }
+      if (this.t > 100) { this.dead = true; g.startFinal(this); }
     } else if (this.state === 'flee') {
       this.x += 6; this.y -= 2.5;
       if (this.t % 10 === 0) g.addEffect(new Effect('dust', this.x - 70, this.y + 10));

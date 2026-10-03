@@ -31,6 +31,11 @@
   #t-down  { left: 84px;  bottom: 24px; }
   #t-jump  { right: 24px; bottom: 60px; width: 92px; height: 92px; font-size: 26px; background: rgba(40,110,255,.35); }
   #t-pause { right: 16px; top: 16px; width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
+  .tbtn.sup { display: none; width: 68px; height: 68px; font-size: 20px; background: rgba(255,200,40,.3); }
+  #touch.super .tbtn.sup { display: flex; }
+  #t-laser  { right: 132px; bottom: 40px; }
+  #t-clones { right: 110px; bottom: 130px; }
+  #t-grab   { right: 24px;  bottom: 168px; }
 </style>
 </head>
 <body>
@@ -41,15 +46,20 @@
   <div class="tbtn" id="t-up"    data-k="up">&#9650;</div>
   <div class="tbtn" id="t-down"  data-k="down">&#9660;</div>
   <div class="tbtn" id="t-jump"  data-k="jump">A</div>
+  <div class="tbtn sup" id="t-laser" data-k="laser">B</div>
+  <div class="tbtn sup" id="t-clones" data-k="clones">X</div>
+  <div class="tbtn sup" id="t-grab" data-k="grab">Y</div>
   <div class="tbtn" id="t-pause" data-k="start">II</div>
 </div>
 <script src="js/assets.js"></script>
+<script src="js/sonicframes.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/levels.js"></script>
 <script src="js/world.js"></script>
 <script src="js/player.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/superboss.js"></script>
 <script src="js/input.js"></script>
 <script src="js/game.js"></script>
 </body>
