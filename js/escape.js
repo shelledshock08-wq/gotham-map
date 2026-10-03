@@ -1086,7 +1086,7 @@ class EscapeStage {
         case 'pawn': case 'drone': {
           const oy = o.y || 0, oh = o.type === 'pawn' ? 2.6 : 1.4;
           if (Math.abs(ds) < 1.4 && dx < 1.5 && this.y < oy + oh && top > oy - (o.type === 'drone' ? 0.7 : 0)) {
-            if (this.boosting || this.jumped || this.homing || this.rolling || this.dashAir > 0) this.smash(o);
+            if (this.boosting || this.jumped || this.homing || this.rolling || this.dashAir > 0 || this.trick > 0) this.smash(o);
             else this.hurt('hit');
           }
           break;

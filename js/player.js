@@ -228,7 +228,9 @@ class Player {
     const P = PHYS, w = this.game.world;
     const hurt = this.state === 'hurt';
     if (!hurt) {
-      if (this.jumping && !inp.jump && this.ysp < -P.jumpCut && !this.homing) this.ysp = -P.jumpCut;
+      if (this.jumping && !inp.jump && this.ysp < -P.jumpCut && !this.homing && !this.springing) this.ysp = -P.jumpCut;
+      // falling off a ledge (not curled up): jump curls you into a ball and homes in / air dashes
+      if (!this.jumping && !this.ball && inp.jumpPressed && !this.homing) { const was = this.hR; this.jumping = true; this.springing = false; this.y += was - this.hR; }
       // Homing attack: press jump again in mid-air. Locks onto the nearest
       // enemy/monitor ahead; with nothing in range it's a forward air dash.
       if (this.jumping && inp.jumpPressed && !this.airDashUsed && !this.homing) {
@@ -376,7 +378,12 @@ class Player {
   // ----------------------------------------------------------------- springs
   launch(xs, ys, lock = 0) {
     this.ground = false; this.platform = null; this.angle = 0;
-    if (this.jumping || this.rolling) this.setBall(false);
+    // upward springs fire you off curled up (attacking, can home in); sideways ones keep you on your feet
+    const was = this.hR;
+    this.rolling = false; this.spindash = false;
+    if (ys !== null && ys < 0) { this.jumping = true; this.airDashUsed = false; this.homing = 0; this.springT = 14; }
+    else this.jumping = false;
+    this.y += was - this.hR;
     if (ys !== null) { this.ysp = ys; this.springing = ys < 0; }
     if (xs !== null) { this.xsp = xs; this.facing = Math.sign(xs) || this.facing; }
     this.controlLock = lock;
@@ -391,6 +398,7 @@ class Player {
   animate() {
     const sp = Math.abs(this.ground ? this.gsp : this.xsp);
     this.anim += this.ground ? Math.max(0.06, sp * 0.028) : 0.15;
+    if (this.springT > 0) this.springT--;
     this.ballRot += (this.ground ? this.gsp : this.xsp * 0.6 + 3 * this.facing) * 0.05 + (this.spindash ? 0.6 * this.facing : 0);
     if (this.skidDust > 0) { this.skidDust--; if (this.skidDust % 4 === 0 && this.ground) this.game.addDust(this.x, this.feet - 4); }
     const still = this.ground && sp < 0.01 && !this.ball && this.state === 'normal';
@@ -406,6 +414,7 @@ class Player {
   pose() {
     if (this.state === 'dead') return 'dead';
     if (this.state === 'hurt') return 'hurt';
+    if (this.springT > 0 && !this.ground) return 'spring';
     if (this.ball) return 'ball';
     if (!this.ground && this.state !== 'loop') return this.springing ? 'spring' : (Math.abs(this.xsp) > 5 ? 'run' : 'walk');
     const sp = Math.abs(this.gsp);
