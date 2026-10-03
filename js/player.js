@@ -28,6 +28,7 @@ class Player {
     this.anim = 0; this.ballRot = 0; this.idleTime = 0; this.drawAngle = 0;
     this.platform = null; this.loop = null; this.pushing = false;
     this.deadTimer = 0; this.frozen = false; this.skidDust = 0;
+    this.homing = 0; this.homeTarget = null; this.airDashUsed = false;
   }
 
   get ball() { return this.rolling || this.jumping || this.spindash; }
@@ -227,7 +228,31 @@ class Player {
     const P = PHYS, w = this.game.world;
     const hurt = this.state === 'hurt';
     if (!hurt) {
-      if (this.jumping && !inp.jump && this.ysp < -P.jumpCut) this.ysp = -P.jumpCut;
+      if (this.jumping && !inp.jump && this.ysp < -P.jumpCut && !this.homing) this.ysp = -P.jumpCut;
+      // Homing attack: press jump again in mid-air. Locks onto the nearest
+      // enemy/monitor ahead; with nothing in range it's a forward air dash.
+      if (this.jumping && inp.jumpPressed && !this.airDashUsed && !this.homing) {
+        this.airDashUsed = true;
+        const tg = this.game.homingTarget();
+        if (tg) { this.homing = 34; this.homeTarget = tg; Sound.play('release', { rate: 1.4, vol: 0.7 }); }
+        else {
+          this.xsp = this.facing * Math.max(Math.abs(this.xsp), 7 * K);
+          this.ysp = Math.min(this.ysp, 0) * 0.3;
+          Sound.play('roll', { rate: 1.3 });
+          this.game.addDust(this.x - this.facing * 20, this.y);
+        }
+      }
+      if (this.homing) {
+        this.homing--;
+        const pos = this.homeTarget && this.game.targetPos(this.homeTarget);
+        if (!pos || this.homing <= 0) { this.homing = 0; this.homeTarget = null; }
+        else {
+          const a = Math.atan2(pos.y - this.y, pos.x - this.x), sp = 13 * K;
+          this.xsp = Math.cos(a) * sp; this.ysp = Math.sin(a) * sp - PHYS.grav;
+          this.facing = this.xsp >= 0 ? 1 : -1;
+          if (this.game.frame % 2 === 0) this.game.addEffect(new Effect('sparkle', this.x, this.y, { color: '#8fd4ff', dur: 12 }));
+        }
+      }
       if (inp.left) { if (this.xsp > -this.top) this.xsp = Math.max(this.xsp - P.air, -this.top); this.facing = -1; }
       if (inp.right) { if (this.xsp < this.top) this.xsp = Math.min(this.xsp + P.air, this.top); this.facing = 1; }
       if (this.ysp < 0 && this.ysp > -4 * K) this.xsp -= (this.xsp / 0.125) / 256;
@@ -277,6 +302,7 @@ class Player {
     this.springing = false;
     if (this.state === 'hurt') { this.state = 'normal'; this.gsp = 0; this.xsp = 0; this.invuln = 120; }
     if (this.jumping) { this.jumping = false; this.y -= STAND_H - BALL_H; }
+    this.homing = 0; this.homeTarget = null; this.airDashUsed = false;
     // rolling continues on landing only if pressing down
     if (this.rolling && !this.game.input.down) { this.rolling = false; this.y -= STAND_H - BALL_H; }
     this.y = f.y - this.hR;
@@ -337,6 +363,14 @@ class Player {
   updateDead() {
     this.y += this.ysp; this.ysp += PHYS.grav;
     this.deadTimer++;
+  }
+
+  // After a successful homing / stomp hit: pop upward, ready to home again.
+  homingBounce() {
+    if (this.ground) return;
+    if (this.homing) { this.homing = 0; this.homeTarget = null; this.xsp *= 0.2; }
+    this.ysp = -6.2 * K; this.airDashUsed = false;
+    if (!this.jumping && !this.rolling) { this.jumping = true; }
   }
 
   // ----------------------------------------------------------------- springs

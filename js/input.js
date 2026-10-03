@@ -7,6 +7,7 @@ const Input = {
   touch: { left: false, right: false, up: false, down: false, jump: false, start: false, laser: false, clones: false, grab: false },
   prev: { jump: false, start: false, up: false, down: false, left: false, right: false, punch: false, laser: false, clones: false, grab: false },
   state: null,
+  lastDevice: 'kb',
 
   init() {
     const block = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
@@ -14,6 +15,7 @@ const Input = {
       if (block.includes(e.code)) e.preventDefault();
       this.keys.add(e.code);
       if (!e.repeat) this.hits.add(e.code);   // remember taps shorter than a frame
+      this.lastDevice = 'kb';
       Sound.init();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -21,7 +23,7 @@ const Input = {
 
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const pad = document.getElementById('touch');
-    if (isTouch) pad.classList.add('on');
+    if (isTouch) { pad.classList.add('on'); this.lastDevice = 'touch'; }
     this.isTouch = isTouch;
     const btns = [...pad.querySelectorAll('.tbtn')];
     const active = new Map();   // pointerId -> key
@@ -36,7 +38,7 @@ const Input = {
     };
     for (const b of btns) {
       b.addEventListener('pointerdown', (e) => {
-        e.preventDefault(); Sound.init();
+        e.preventDefault(); Sound.init(); this.lastDevice = 'touch';
         try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         active.set(e.pointerId, b.dataset.k); refresh();
       });
@@ -84,6 +86,7 @@ const Input = {
       down = down || ay > 0.5 || b(13);
       jump = jump || b(0) || b(1) || b(2) || b(3);
       start = start || b(9);
+      if (gp.buttons.some((x) => x.pressed)) this.lastDevice = 'pad';
       punch = punch || b(0); grab = grab || b(1); laser = laser || b(2); clones = clones || b(3);
     }
     const tapped = !!this.tapped; this.tapped = false;

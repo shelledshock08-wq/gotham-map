@@ -163,8 +163,10 @@ class Enemy {
     g.addEnemy(new Animal(this.x, this.y - 20));
     Sound.play('pop');
     g.awardChain(this.x, this.y - 40);
+    g.hitStop = Math.max(g.hitStop || 0, 4); g.shake = Math.max(g.shake, 5);
+    for (let i = 0; i < 5; i++) g.addEffect(new Effect('sparkle', this.x + (Math.random() - 0.5) * 50, this.y - 20 - Math.random() * 40, { color: '#ffe680' }));
     if (!p.ground) {
-      if (p.y < this.y - this.def.h / 2 && p.ysp > 0) p.ysp = -p.ysp;
+      if (p.homing || (p.y < this.y - this.def.h / 2 && p.ysp > 0)) p.homingBounce();
       else if (p.ysp < 0) p.ysp += 1;
     }
   }
@@ -232,7 +234,8 @@ class Monitor {
     g.addEffect(new Effect('icon', this.x, this.y - 40, { icon: this.kind, dur: 60 }));
     Sound.play('pop');
     g.addScore(10);
-    if (!p.ground && p.ysp > 0) p.ysp = -p.ysp;
+    if (!p.ground && (p.ysp > 0 || p.homing)) p.homingBounce();
+    g.hitStop = Math.max(g.hitStop || 0, 3);
     g.later(30, () => g.applyMonitor(this.kind, this.x, this.y - 80));
   }
   draw(ctx, cam, t) {
@@ -468,7 +471,7 @@ class Boss {
         if (dx * dx + dy * dy < 70 * 70) {
           if (p.attacking && this.flash === 0) {
             this.hits++; this.flash = 40; Sound.play('bosshit'); g.shake = 6;
-            p.xsp = Math.sign(dx || 1) * 4 * K; p.ysp = -5 * K; p.ground = false; p.platform = null;
+            p.homing = 0; p.homeTarget = null; p.airDashUsed = false; p.xsp = Math.sign(dx || 1) * 4 * K; p.ysp = -5 * K; p.ground = false; p.platform = null; g.hitStop = 6;
             g.addScore(100);
             if (this.hits >= this.maxHits) { this.state = 'explode'; this.t = 0; g.onBossDefeated(); }
           } else if (!p.attacking) p.hurt(this.x);

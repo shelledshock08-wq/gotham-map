@@ -23,6 +23,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Jump | Z / X / C / Space | A / B / X / Y | A |
 | Roll | Down while running | Down | ▼ |
 | Spin dash | Hold Down, tap Jump, release Down | same | same |
+| Homing attack / air dash | Jump, then Jump again in mid-air | A, A | A, A |
 | Look up / down | Up / Down while standing | same | ▲ ▼ |
 | Pause | Enter / P / Esc | Start | II |
 | Mute | M | — | — |
@@ -47,6 +48,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Item monitors: 10 rings, shield, speed shoes, invincibility, 1-up.
 - Springs (yellow and red, up and sideways), spikes, checkpoints (star posts), and a spinning end-of-act signpost.
 - Badniks: slime, ladybug, mouse, hopping frog, hovering fly, a bee that fires stingers, and an indestructible saw. Defeating one frees an animal, and chained hits score 100, 200, 500 and then 1000.
+- Homing attack with a lock-on reticle: chain enemies in mid-air (flying badniks are placed over pits for this). Hits get impact freeze frames, screen shake and a combo counter; from the 3rd hit in a chain each kill also gives a ring.
+- Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
@@ -66,6 +69,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/entities.js` | Rings, enemies, monitors, springs, platforms, boss |
 | `js/input.js` | Keyboard, gamepad and touch input |
 | `js/game.js` | State machine, camera, HUD, main loop |
+| `js/speech.js` | Speech bubbles and button prompts |
+| `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 
 ## Credits & licenses
 

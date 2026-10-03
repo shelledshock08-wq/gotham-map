@@ -3,6 +3,7 @@
 
 const FONT = '"Press Start 2P", "Courier New", monospace';
 const CHAIN = [100, 200, 500, 1000];
+const QUIPS = ['Too easy!', 'Way past cool!', 'Next!', "Keep 'em coming!", 'Too slow!', 'Is that all?', 'Smooth!'];
 
 class Game {
   constructor(canvas) {
@@ -20,6 +21,8 @@ class Game {
     try { this.hiscore = parseInt(localStorage.getItem('sonic_hiscore') || '0', 10) || 0; } catch (e) { /* ignore */ }
     try { if (localStorage.getItem('sonic_muted') === '1') Sound.muted = true; } catch (e) { /* ignore */ }
     this.titleCam = 0;
+    this.speech = new SpeechSystem(this);
+    this.hitStop = 0; this.combo = null;
     this.resize();
     window.addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'play') this.state = 'paused'; });
@@ -38,6 +41,7 @@ class Game {
   // ------------------------------------------------------------ game flow
   newGame() {
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
+    this.speech.reset();
     this.loadLevel(0);
   }
 
@@ -63,6 +67,7 @@ class Game {
     this.camLock = null; this.goal = null; this.goalLockX = null;
     this.boss = null; this.bossStarted = false; this.arena = null;
     this.tally = null; this.deathHandled = false; this.final = null;
+    this.speech.clear(); this.combo = null; this.hitStop = 0;
     let start = null;
     for (const e of data.ents) {
       switch (e.type) {
@@ -133,6 +138,51 @@ class Game {
     this.chain++;
     this.addScore(v);
     this.addEffect(new Effect('score', x, y, { text: String(v) }));
+    if (this.chain >= 2) {
+      this.combo = { n: this.chain, t: 80 };
+      // combo reward: an extra ring per hit from the 3rd hit on
+      if (this.chain >= 3) { this.rings++; Sound.ring(); }
+      if (this.chain === 2) this.speech.say('sonic', 'Chain it! Tap {jump} again after every hit!', { once: 'chain' });
+    }
+    if (this.chain === 3 || this.chain === 5) this.speech.say('sonic', QUIPS[Math.floor(Math.random() * QUIPS.length)], { cool: 420, coolKey: 'quip', dur: 110 });
+  }
+
+  // Homing attack target: nearest enemy / monitor / boss in front of Sonic.
+  homingTarget() {
+    const p = this.player;
+    let best = null, bd = 330;
+    const consider = (ref) => {
+      const pos = this.targetPos(ref);
+      if (!pos) return;
+      const dx = pos.x - p.x, dy = pos.y - p.y;
+      if (dx * p.facing < -30 || dy < -150) return;
+      const d = Math.hypot(dx, dy);
+      if (d < bd) { bd = d; best = ref; }
+    };
+    for (const e of this.enemies) if (e instanceof Enemy && !e.def.hazard) consider(e);
+    for (const o of this.objs) if (o instanceof Monitor) consider(o);
+    if (this.boss) consider(this.boss);
+    return best;
+  }
+  targetPos(ref) {
+    if (ref instanceof Enemy) return ref.dead ? null : { x: ref.x, y: ref.y - ref.def.h / 2 };
+    if (ref instanceof Monitor) return ref.broken ? null : { x: ref.x, y: ref.y - 30 };
+    if (ref instanceof Boss) return ref.state === 'fight' ? { x: ref.x, y: ref.y + 4 } : null;
+    return null;
+  }
+
+  tutorialHints() {
+    const p = this.player, sp = this.speech;
+    if (this.levelIndex === 0 && this.card === 0) sp.say('sonic', "Let's go! {jump} jump, hold {down} + tap {jump} to spin dash!", { once: 'intro', dur: 240 });
+    if (this.levelIndex === 0 && this.card === 0 && p.state === 'normal') {
+      for (const e of this.enemies) {
+        if (e instanceof Enemy && !e.def.hazard && e.x > p.x && e.x - p.x < 520) {
+          sp.say('sonic', 'Badnik! Jump, then press {jump} again in the air to HOMING ATTACK!', { once: 'homing', dur: 300, prio: 2 });
+          break;
+        }
+      }
+    }
+    if (this.levelIndex === 1 && this.card === 0) sp.say('sonic', 'Tip: homing attacks chain through enemies in mid-air!', { once: 'act2', dur: 200 });
   }
 
   applyMonitor(kind, x, y) {
@@ -214,6 +264,9 @@ class Game {
 
     // ---- play ----
     if (inp.startPressed && !this.tally) { this.state = 'paused'; return; }
+    this.speech.update();
+    if (this.combo && --this.combo.t <= 0) this.combo = null;
+    if (this.hitStop > 0) { this.hitStop--; return; }   // impact freeze frames
     this.input = inp;
     const p = this.player;
     if (this.card > 0) this.card--;
@@ -250,7 +303,10 @@ class Game {
       this.bossStarted = true;
       this.camLock = { x0: this.arena.x, x1: this.arena.x + this.arena.w, y: this.arena.groundY - VIEW_H + 140 };
       this.boss = new Boss(this.arena.x, this.arena.groundY, this.arena.w);
+      this.speech.say('eggman', 'Ho ho ho! Nice of you to drop by, hedgehog!', { dur: 170 });
+      this.later(150, () => this.speech.say('sonic', 'Jump and smack his ship! {jump} (or {jump} again mid-air to home in)', { dur: 260, prio: 2 }));
     }
+    this.tutorialHints();
 
     // timer
     if (!this.timeStopped && this.card < 110 && p.state !== 'dead') {
@@ -365,6 +421,7 @@ class Game {
   drawPlay(ctx) {
     if (this.final) {
       this.final.draw(ctx, this.cam, this.t);
+      this.speech.draw(ctx, this.cam);
       this.drawHUD(ctx);
       this.final.drawHUD(ctx);
       if (this.tally) this.drawTally(ctx);
@@ -385,6 +442,9 @@ class Game {
     if (this.boss) this.boss.draw(ctx, cam, t);
     this.player.draw(ctx, cam, t);
     for (const e of this.effects) e.draw(ctx, cam, t);
+    this.drawReticle(ctx, cam, t);
+    this.speech.draw(ctx, cam);
+    this.drawCombo(ctx);
     this.drawHUD(ctx);
     if (this.card > 0) this.drawTitleCard(ctx);
     if (this.tally) this.drawTally(ctx);
@@ -401,6 +461,27 @@ class Game {
   fmtTime(frames) {
     const s = Math.floor(frames / 60);
     return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, '0')}"${String(Math.floor((frames % 60) / 60 * 100)).padStart(2, '0')}`;
+  }
+
+  drawReticle(ctx, cam, t) {
+    const p = this.player;
+    if (!p.jumping || p.airDashUsed || p.homing || p.state !== 'normal') return;
+    const tg = this.homingTarget(); if (!tg) return;
+    const pos = this.targetPos(tg);
+    ctx.save(); ctx.translate(pos.x - cam.x, pos.y - cam.y); ctx.rotate(t * 0.12);
+    ctx.strokeStyle = '#4fe3ff'; ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(32, -6); ctx.lineTo(32, 6); ctx.closePath(); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  drawCombo(ctx) {
+    if (!this.combo) return;
+    const c = this.combo, k = Math.min(1, (80 - c.t) / 6), s = 1 + (1 - k) * 0.6;
+    ctx.save(); ctx.globalAlpha = Math.min(1, c.t / 15);
+    ctx.translate(VIEW_W - 180, 210); ctx.scale(s, s); ctx.rotate(-0.08);
+    this.text(ctx, `x${c.n}`, 0, 0, 44, c.n >= 5 ? '#ff5ae0' : '#ffd23f', 'center', '#0b1440');
+    this.text(ctx, 'COMBO!', 0, 34, 18, '#fff', 'center', '#0b1440');
+    ctx.restore();
   }
 
   drawHUD(ctx) {

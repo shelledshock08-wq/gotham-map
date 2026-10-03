@@ -141,6 +141,7 @@ function buildAct1() {
   b.ent('enemy', (s + 9) * TILE, b.groundY(s + 9) - 150, { kind: 'fly' });
   b.deco(s + 5, 'mushroom_red');
   b.gap(3); b.ringArc(X() - 4, 6, 140, 44, 40);
+  b.ent('enemy', (X() - 2) * TILE, b.groundY(X() - 4) - 160, { kind: 'fly' });
   s = X(); b.flat(14);
   b.on(s + 2, 'checkpoint'); b.on(s + 6, 'spikes'); b.on(s + 7, 'spikes');
   b.on(s + 11, 'monitor', { kind: 'shield' }); b.on(s + 9, 'enemy', { kind: 'slime' });
@@ -152,6 +153,7 @@ function buildAct1() {
   s = X(); b.up(3); b.flat(8);
   b.on(s + 5, 'enemy', { kind: 'slime' }); b.rings(s + 4, 4);
   s = X(); b.gap(5);
+  b.ent('enemy', (s + 1) * TILE, b.groundY(s - 1) - 200, { kind: 'fly' }); b.ent('enemy', (s + 3) * TILE + 32, b.groundY(s - 1) - 250, { kind: 'fly' });
   b.ent('mover', s * TILE + 32, b.groundY(s - 1) - 24, { axis: 'x', range: 3 * TILE, len: 3 });
   s = X(); b.flat(12);
   b.ent('enemy', (s + 6) * TILE, b.groundY(s + 6) - 260, { kind: 'bee' });
@@ -193,6 +195,7 @@ function buildAct2() {
   s = X(); b.up(3); b.flat(8);
   b.on(s + 5, 'enemy', { kind: 'saw', range: 3 * TILE }); b.on(s + 10, 'monitor', { kind: 'shield' });
   s = X(); b.gap(6);
+  b.ent('enemy', (s + 2) * TILE, b.groundY(s - 1) - 260, { kind: 'fly' }); b.ent('enemy', (s + 4) * TILE, b.groundY(s - 1) - 320, { kind: 'fly' });
   b.ent('mover', (s + 1) * TILE + 32, b.groundY(s - 1) + 2 * TILE, { axis: 'y', range: 3 * TILE, len: 2 });
   b.ent('mover', (s + 4) * TILE, b.groundY(s - 1) - 40, { axis: 'y', range: 2 * TILE, len: 2, phase: Math.PI });
   s = X(); b.flat(12);
@@ -233,6 +236,7 @@ function buildAct3() {
   b.on(s + 4, 'spring', { dir: 'up' }); b.platform(s + 5, 4, 5, s + 4); b.platRings(s + 5, 4, 5, s + 4);
   b.on(s + 12, 'checkpoint'); b.on(s + 15, 'enemy', { kind: 'mouse' });
   s = X(); b.gap(5);
+  b.ent('enemy', (s + 1) * TILE, b.groundY(s - 1) - 170, { kind: 'fly' }); b.ent('enemy', (s + 3) * TILE, b.groundY(s - 1) - 230, { kind: 'fly' }); b.ent('enemy', (s + 5) * TILE, b.groundY(s - 1) - 190, { kind: 'fly' });
   b.ent('mover', s * TILE + 32, b.groundY(s - 1) - 24, { axis: 'x', range: 3 * TILE, len: 3 });
   s = X(); b.flat(10);
   b.on(s + 3, 'monitor', { kind: 'shield' }); b.on(s + 6, 'monitor', { kind: 'ring' });
