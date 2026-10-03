@@ -12,7 +12,7 @@ const EGG_FEAR_LINES = [
   [0.66, 'SOMEBODY HELP ME!!!'],
   [0.82, 'M-mommy...'],
 ];
-const SONIC_BRAWL_QUIPS = ["That's for the animals!", 'Not so tough without your robot!', 'Yeah, run!', "I'm just getting started!", 'Too slow!', 'Get back here!'];
+const SONIC_BRAWL_QUIPS = ['Get UP.', 'You hurt my friends.', 'Look at me!', "I'm not done with you.", 'How many did you cage, huh?!', 'This is what you earned.', 'Stand up. Fight back.'];
 
 function eggFrame(name) { return EGG_FRAME_NAMES.indexOf(name); }
 
@@ -26,6 +26,7 @@ function drawEggFrame(ctx, idx, x, y, opts = {}) {
   ctx.translate(x, y - (opts.center ? 0 : 0));
   if (opts.rot) { ctx.translate(0, -h / 2); ctx.rotate(opts.rot); ctx.translate(0, h / 2); }
   if (opts.flip) ctx.scale(-1, 1);
+  if (opts.sx || opts.sy) ctx.scale(opts.sx || 1, opts.sy || 1);   // impact squash
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
   ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   ctx.restore();
@@ -106,7 +107,7 @@ class BrawlEggman {
     this.hp = 160; this.max = 160; this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
     this.act = null; this.cool = 70; this.facing = -1; this.thrown = false; this.saidFear = 0;
     this.state = 'air';
-    this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0;
+    this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0; this.squash = 0;
   }
   get fear() { return 1 - this.hp / this.max; }
   center() { return { x: this.x, y: this.y - 60 }; }
@@ -117,6 +118,7 @@ class BrawlEggman {
     if (this.flash > 0) this.flash--;
     if (this.recent > 0) this.recent--;
     if (this.snap > 0) this.snap *= 0.8;
+    if (this.squash > 0.01) this.squash *= 0.72; else this.squash = 0;
     if (this.state === 'grabbed' || this.state === 'carried' || this.state === 'pinned') return;
     const L = fb.ax + 60, R = fb.ax + fb.aw - 60;
     if (!this.ground) {
@@ -169,7 +171,9 @@ class BrawlEggman {
     const type = pool[Math.floor(Math.random() * pool.length)];
     this.act = { type, t: 0, dir: this.fb.hero.x < this.x ? -1 : 1 };
     if (type === 'leap') { this.vy = -14; this.vx = this.act.dir * (7 - f * 3); this.ground = false; this.state = 'leap'; }
-    if (type === 'cower') this.fb.say('eggman', ['P-please, no more!', "I'll be good, I swear!", 'Waaah! Not the face!'][Math.floor(Math.random() * 3)], { cool: 300, coolKey: 'cower', dur: 110 });
+    if (type === 'cower' && this.fb.say('eggman', ['P-please, no more!', "I'll be good, I swear!", 'Not the face! Not the face!'][Math.floor(Math.random() * 3)], { cool: 300, coolKey: 'cower', dur: 110 })) {
+      this.fb.g.later(70, () => this.fb.say('sonic', ['Don\'t you DARE beg.', 'They begged too.', 'Get up.'][Math.floor(Math.random() * 3)], { dur: 100, prio: 2 }));
+    }
   }
 
   runAct(h, L, R) {
@@ -250,7 +254,8 @@ class BrawlEggman {
     this.stun = Math.round((big ? 50 : 26) * (1 + this.fear * 0.8));   // gets up slower as he breaks
     this.act = null; this.cool = 25;
     this.snap = big ? 1 : 0.6; this.snapDir = dir;
-    this.wounds += dmg;
+    this.wounds += dmg; this.squash = big ? 1 : 0.6;
+    fb.impact(dir, big);
     fb.hitStop = Math.max(fb.hitStop, big ? 10 : 5);
     fb.shake = Math.max(fb.shake, big ? 16 : 7);
     fb.zoom = Math.max(fb.zoom, big ? 1.06 : 1.02);
@@ -270,7 +275,8 @@ class BrawlEggman {
   poundHit(side) {
     const fb = this.fb;
     this.damage(4, false);
-    this.wounds += 4; this.flash = 4; this.snap = 0.8; this.snapDir = side;
+    this.wounds += 4; this.flash = 4; this.snap = 0.8; this.snapDir = side; this.squash = 0.8;
+    fb.impact(side * 0.4, false); fb.kick.y += 10;
     const hp = { x: this.x + side * 6, y: this.y - 28 };
     fb.add(new FBEffect('impact', hp.x, hp.y, { dur: 7 }));
     this.bleed(hp.x, hp.y, 0, 6, 0.15);
@@ -296,8 +302,9 @@ class BrawlEggman {
     if (this.state === 'cower' || this.fear > 0.6) dx = (Math.random() - 0.5) * (this.state === 'cower' ? 6 : 2);
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
-    drawEggFrame(ctx, idx, x + dx, y, { flip, rot });
-    if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85 });
+    const sq = { sx: 1 + 0.28 * this.squash, sy: 1 - 0.2 * this.squash };
+    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, ...sq });
+    if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85, ...sq });
     // sweat drops when scared
     if (this.fear > 0.35 && t % 30 < 20) {
       ctx.fillStyle = '#9fe3ff';

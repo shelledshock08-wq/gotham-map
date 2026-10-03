@@ -92,7 +92,9 @@ class SpeechSystem {
     for (const b of this.list) {
       const pos = this.speakerPos(b.who);
       if (!pos) continue;
-      this.drawBubble(ctx, b, pos.x - cam.x, pos.y - cam.y);
+      const F = this.g.final;
+      const sp = F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
+      this.drawBubble(ctx, b, sp.x, sp.y);
     }
   }
 

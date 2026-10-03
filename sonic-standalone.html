@@ -18,6 +18,13 @@
   #boot-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; pointer-events: none; }
   #boot-err { color: #ff8a8a; white-space: pre-wrap; font-size: 13px; max-width: 90vw; }
+  #dev { position: fixed; left: 10px; top: 10px; display: none; z-index: 5; font: 700 13px system-ui, sans-serif; }
+  #dev.on { display: block; }
+  #dev button { display: block; margin: 0 0 4px; padding: 8px 12px; border: 1px solid #ffd23f; border-radius: 6px;
+    background: rgba(10,15,40,.85); color: #ffd23f; font: inherit; cursor: pointer; min-width: 190px; text-align: left; }
+  #dev-list { display: none; }
+  #dev.open #dev-list { display: block; }
+  #dev #dev-toggle { min-width: 0; background: #ffd23f; color: #10142e; }
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
   #touch.on { display: block; }
   .tbtn {
@@ -59,6 +66,19 @@
     var m = document.getElementById('boot-msg'); if (m) m.style.display = 'block';
   });
 </script>
+<!-- DEV ONLY: section skip menu on the title screen. Set DEV_MENU = false in js/game.js to remove. -->
+<div id="dev">
+  <button id="dev-toggle">DEV</button>
+  <div id="dev-list">
+    <button data-skip="1">1 Act 1</button>
+    <button data-skip="2">2 Act 2</button>
+    <button data-skip="3">3 Act 3</button>
+    <button data-skip="4">4 Eggman ship boss</button>
+    <button data-skip="5">5 Egg Colossus (cutscene)</button>
+    <button data-skip="6">6 Super battle</button>
+    <button data-skip="7">7 Brawl</button>
+  </div>
+</div>
 <div id="touch">
   <div class="tbtn" id="t-left"  data-k="left">&#9664;</div>
   <div class="tbtn" id="t-right" data-k="right">&#9654;</div>
@@ -2453,15 +2473,17 @@ function segDist(px, py, x1, y1, x2, y2) {
 }
 
 // ---------------------------------------------------------------- drawing
-function drawSuperAura(ctx, x, y, t, s = 1) {
+function drawSuperAura(ctx, x, y, t, s = 1, rage = 0) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const r = (46 + Math.sin(t * 0.2) * 4) * s;
+  const r = (46 + Math.sin(t * (0.2 + rage * 0.3)) * (4 + rage * 6)) * s * (1 + rage * 0.35);
   const g = ctx.createRadialGradient(x, y, 4, x, y, r);
-  g.addColorStop(0, 'rgba(255,250,200,.55)'); g.addColorStop(0.5, 'rgba(255,200,40,.28)'); g.addColorStop(1, 'rgba(255,170,0,0)');
+  // gold when calm, burning crimson when Sonic is furious
+  const G = Math.round(200 - 170 * rage), B = Math.round(40 - 30 * rage);
+  g.addColorStop(0, `rgba(255,${Math.round(250 - 120 * rage)},${Math.round(200 - 150 * rage)},.55)`); g.addColorStop(0.5, `rgba(255,${G},${B},${0.28 + 0.2 * rage})`); g.addColorStop(1, 'rgba(255,40,0,0)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   // flickering flame spikes
-  ctx.fillStyle = 'rgba(255,220,90,.35)';
+  ctx.fillStyle = rage > 0.2 ? `rgba(255,${Math.round(220 - 180 * rage)},40,.4)` : 'rgba(255,220,90,.35)';
   for (let i = 0; i < 9; i++) {
     const a = i / 9 * Math.PI * 2 + t * 0.05;
     const l = (r * 0.9) + Math.sin(t * 0.5 + i * 2.3) * 10 * s;
@@ -2542,6 +2564,9 @@ class FBEffect {
       ctx.beginPath(); ctx.arc(0, 0, 10 + f * (this.big ? 60 : 34), 0, Math.PI * 2); ctx.stroke();
       if (f < 0.35) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(0, 0, this.big ? 26 : 14, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
+    } else if (this.kind === 'ember') {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1 - f; ctx.fillStyle = f < 0.5 ? '#ffb030' : '#ff3010';
+      ctx.fillRect(x - 2, y - 2, 4, 4); ctx.restore();
     } else if (this.kind === 'dust') {
       ctx.save(); ctx.globalAlpha = 0.55 * (1 - f); ctx.fillStyle = '#c9c2b4';
       ctx.beginPath(); ctx.arc(x, y - f * 10, 8 + f * 26, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -3013,7 +3038,10 @@ class SuperHero {
       const B = this.beam, e = this.fb.clash ? this.fb.clashPoint() : B.end;
       drawBeam(ctx, x + Math.cos(B.ang) * 20, y + Math.sin(B.ang) * 20, e.x - cam.x, e.y - cam.y, B.w, '#ffffff', '#ffc929', t);
     }
-    drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1);
+    const rage = this.fb.phase === 'brawl' || this.fb.phase === 'rescue' ? this.fb.rage : 0;
+    drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1, rage);
+    if (rage > 0.35 && t % 6 === 0) this.fb.add(new FBEffect('ember', this.x + (Math.random() - 0.5) * 50, this.y + 20, { dur: 40, vx: (Math.random() - 0.5) * 1.2, vy: -2 - Math.random() * 2 }));
+    if (rage > 0.55 && t % 50 === 0) this.fb.add(new FBEffect('dust', this.x + this.facing * 16, this.y - 14, { dur: 20 }));   // heavy breathing
     if (this.invuln > 0 && Math.floor(this.invuln / 3) % 2 === 0) return;
     let pose = Math.hypot(this.vx, this.vy) > 3 ? 'fly' : 'hover';
     if (this.punchT > 0) pose = 'punch';
@@ -3022,7 +3050,15 @@ class SuperHero {
     if (this.pound) pose = this.punchT > 0 ? 'punch' : 'charge';
     if (this.hitT > 0) pose = 'hurt';
     const bob = pose === 'hover' ? Math.sin(t * 0.08) * 4 : 0;
-    drawSonicFrame(ctx, animFrame(pose, this.anim), x, y + 34 + bob, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
+    let lx = 0, ly = 0;
+    if (this.fb.phase === 'brawl' && this.punchT > 0 && !this.pound) {
+      // wind up (pull back), then throw the whole body into it
+      const ph = (this.blow === 'kick' ? 16 : 13) - this.punchT, a = this.punchAng || 0;
+      const d = ph < 4 ? -ph * 4 : Math.min(22, (ph - 3) * 11) * (this.punchT > 3 ? 1 : this.punchT / 3);
+      lx = Math.cos(a) * d; ly = Math.sin(a) * d;
+    }
+    if (this.pound && this.punchT > 0) ly = this.punchT > 4 ? -8 : 6;
+    drawSonicFrame(ctx, animFrame(pose, this.anim), x + lx, y + 34 + bob + ly, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
     if (this.carry) {
       ctx.save(); ctx.translate(x, y - 64); drawPartIcon(ctx, this.carry.kind, 0.6, true); ctx.restore();
       drawPrompt(ctx, x, y - 112, 'grab', 'THROW!', t);
@@ -3432,6 +3468,7 @@ class FinalBattle {
     this.objs = []; this.shake = 0; this.flash = 0; this.clash = null; this.hintT = 0;
     this.drain = 0;
     this.egg2 = null; this.metal = null; this.hitStop = 0; this.zoom = 1; this.brawlCombo = null; this.reachedBrawl = false;
+    this.camZ = 1; this.camF = null; this.kick = { x: 0, y: 0 }; this.rage = 0; this.slow = 0; this.slowTick = false; this.redFlash = 0; this.view = null;
     p.frozen = true; this.pStart = p.x;
     if (quick === 'brawl') {
       // retry straight into the brawl
@@ -3628,7 +3665,11 @@ class FinalBattle {
   update(inp) {
     const g = this.g, R = this.robot, h = this.hero;
     this.zoom += (1 - this.zoom) * 0.12;
+    this.updateCamera();
+    if (this.redFlash > 0) this.redFlash *= 0.86;
     if (this.hitStop > 0) { this.hitStop--; return; }      // impact freeze frames
+    if (this.slow > 0) { this.slow--; this.slowTick = !this.slowTick; if (this.slowTick) return; }   // slow motion
+    if (this.rage > 0) this.rage = Math.max(0, this.rage - 0.0025);
     if (this.phase === 'tbc') { this.t++; if (this.t > 120 && (inp.startPressed || inp.jumpPressed || inp.punchPressed || inp.tapped || this.t > 420) && !g.tally) g.startTally(); return; }
     this.t++;
     if (this.brawlCombo && --this.brawlCombo.t <= 0) this.brawlCombo = null;
@@ -3746,6 +3787,44 @@ class FinalBattle {
     this.objs = this.objs.filter((o) => !o.dead);
   }
 
+  // Close-up fight camera: zooms in on Sonic and Eggman and kicks with each punch.
+  updateCamera() {
+    const cam = this.g.cam, h = this.hero, E = this.egg2;
+    const center = { x: cam.x + VIEW_W / 2, y: cam.y + VIEW_H * 0.55 };
+    let tz = 1, tf = center;
+    if ((this.phase === 'brawl' || this.phase === 'rescue') && E) {
+      tf = { x: (h.x + E.x) / 2, y: (h.y + E.y - 60) / 2 };
+      const d = Math.abs(h.x - E.x) + Math.abs(h.y - (E.y - 60)) * 0.6;
+      tz = h.pound ? 2.4 : Math.max(1.45, Math.min(2.1, 2.35 - d / 480));
+      if (this.phase === 'rescue') tz = this.t < 90 ? 1.9 : 1.25;
+    } else if (this.phase === 'rip' && this.t > 60) {
+      const hp = this.robot.headPos(); tf = { x: hp.x - 40, y: hp.y + 20 }; tz = 1.6;
+    }
+    this.camZ += (tz - this.camZ) * 0.07;
+    if (!this.camF) this.camF = { ...center };
+    this.camF.x += (tf.x - this.camF.x) * 0.12; this.camF.y += (tf.y - this.camF.y) * 0.12;
+    this.kick.x *= 0.78; this.kick.y *= 0.78;
+    const z = this.camZ * this.zoom;
+    // keep the arena floor near the bottom and the walls in frame
+    let fx = this.camF.x + this.kick.x, fy = this.camF.y + this.kick.y;
+    if (z > 1.05) {
+      fx = Math.max(this.ax + VIEW_W / (2 * z), Math.min(this.ax + this.aw - VIEW_W / (2 * z), fx));
+      fy = Math.min(this.gy + 40 - VIEW_H * 0.45 / z, fy);
+    }
+    this.view = { z, fx, fy };
+  }
+  toScreen(x, y) {
+    const v = this.view, cam = this.g.cam;
+    if (!v) return { x: x - cam.x, y: y - cam.y };
+    return { x: (x - v.fx) * v.z + VIEW_W / 2, y: (y - v.fy) * v.z + VIEW_H * 0.55 };
+  }
+  // A landed blow in the brawl: camera jolts in the punch direction, rage builds.
+  impact(dir, big) {
+    this.kick.x += dir * (big ? 34 : 14); this.kick.y += big ? 10 : 4;
+    this.rage = Math.min(1, this.rage + (big ? 0.12 : 0.06));
+    if (big) { this.slow = Math.max(this.slow, 18); this.redFlash = 1; }
+  }
+
   drawSky(ctx, t) {
     // stormy red/purple sky for the showdown
     const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
@@ -3771,12 +3850,11 @@ class FinalBattle {
     else this.drawSky(ctx, t);
     if (this.phase === 'rise' && this.t < 60) { ctx.globalAlpha = this.t / 60; this.drawSky(ctx, t); ctx.globalAlpha = 1; }
 
-    // punch-in zoom on big impacts, centred between Sonic and his target
+    // fight camera (close-up during the brawl, punch-in zoom on impacts)
     ctx.save();
-    if (this.zoom > 1.001) {
-      const E = this.egg2;
-      const fx = (E ? (h.x + E.x) / 2 : h.x) - c.x, fy = (E ? (h.y + E.y - 60) / 2 : h.y) - c.y;
-      ctx.translate(fx, fy); ctx.scale(this.zoom, this.zoom); ctx.translate(-fx, -fy);
+    if (this.view) {
+      const v = this.view;
+      ctx.translate(VIEW_W / 2, VIEW_H * 0.55); ctx.scale(v.z, v.z); ctx.translate(-(v.fx - c.x), -(v.fy - c.y));
     }
     if (R.rise < 900) R.draw(ctx, c, t);
     g.world.drawTiles(ctx, { x: Math.round(c.x), y: Math.round(c.y) });
@@ -3811,8 +3889,19 @@ class FinalBattle {
       g.text(ctx, 'WARNING', VIEW_W / 2, 300, 56, '#ff3030', 'center', '#000');
       g.text(ctx, 'EGG COLOSSUS APPROACHING', VIEW_W / 2, 350, 18, '#fff', 'center', '#000');
     }
+    if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'tbc') this.drawRage(ctx, t);
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.phase === 'tbc') this.drawTBC(ctx, t);
+  }
+
+  // Sonic's fury: pulsing red edges that close in as rage builds, red flash on heavy blows, letterbox bars
+  drawRage(ctx, t) {
+    const r = this.rage, beat = 0.5 + 0.5 * Math.sin(t * (0.12 + r * 0.18));
+    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * (0.55 - r * 0.2), VIEW_W / 2, VIEW_H / 2, VIEW_W * 0.75);
+    g.addColorStop(0, 'rgba(90,0,0,0)'); g.addColorStop(1, `rgba(110,0,0,${0.35 + r * 0.4 * beat})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    if (this.redFlash > 0.02) { ctx.fillStyle = `rgba(255,20,20,${0.22 * this.redFlash})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, VIEW_W, 22); ctx.fillRect(0, VIEW_H - 22, VIEW_W, 22);
   }
 
   // Freeze frame: sepia wash + "TO BE CONTINUED" arrow
@@ -3935,7 +4024,7 @@ const EGG_FEAR_LINES = [
   [0.66, 'SOMEBODY HELP ME!!!'],
   [0.82, 'M-mommy...'],
 ];
-const SONIC_BRAWL_QUIPS = ["That's for the animals!", 'Not so tough without your robot!', 'Yeah, run!', "I'm just getting started!", 'Too slow!', 'Get back here!'];
+const SONIC_BRAWL_QUIPS = ['Get UP.', 'You hurt my friends.', 'Look at me!', "I'm not done with you.", 'How many did you cage, huh?!', 'This is what you earned.', 'Stand up. Fight back.'];
 
 function eggFrame(name) { return EGG_FRAME_NAMES.indexOf(name); }
 
@@ -3949,6 +4038,7 @@ function drawEggFrame(ctx, idx, x, y, opts = {}) {
   ctx.translate(x, y - (opts.center ? 0 : 0));
   if (opts.rot) { ctx.translate(0, -h / 2); ctx.rotate(opts.rot); ctx.translate(0, h / 2); }
   if (opts.flip) ctx.scale(-1, 1);
+  if (opts.sx || opts.sy) ctx.scale(opts.sx || 1, opts.sy || 1);   // impact squash
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
   ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
   ctx.restore();
@@ -4029,7 +4119,7 @@ class BrawlEggman {
     this.hp = 160; this.max = 160; this.t = 0; this.stun = 0; this.flash = 0; this.rot = 0;
     this.act = null; this.cool = 70; this.facing = -1; this.thrown = false; this.saidFear = 0;
     this.state = 'air';
-    this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0;
+    this.wounds = 0; this.snap = 0; this.snapDir = 1; this.recent = 0; this.squash = 0;
   }
   get fear() { return 1 - this.hp / this.max; }
   center() { return { x: this.x, y: this.y - 60 }; }
@@ -4040,6 +4130,7 @@ class BrawlEggman {
     if (this.flash > 0) this.flash--;
     if (this.recent > 0) this.recent--;
     if (this.snap > 0) this.snap *= 0.8;
+    if (this.squash > 0.01) this.squash *= 0.72; else this.squash = 0;
     if (this.state === 'grabbed' || this.state === 'carried' || this.state === 'pinned') return;
     const L = fb.ax + 60, R = fb.ax + fb.aw - 60;
     if (!this.ground) {
@@ -4092,7 +4183,9 @@ class BrawlEggman {
     const type = pool[Math.floor(Math.random() * pool.length)];
     this.act = { type, t: 0, dir: this.fb.hero.x < this.x ? -1 : 1 };
     if (type === 'leap') { this.vy = -14; this.vx = this.act.dir * (7 - f * 3); this.ground = false; this.state = 'leap'; }
-    if (type === 'cower') this.fb.say('eggman', ['P-please, no more!', "I'll be good, I swear!", 'Waaah! Not the face!'][Math.floor(Math.random() * 3)], { cool: 300, coolKey: 'cower', dur: 110 });
+    if (type === 'cower' && this.fb.say('eggman', ['P-please, no more!', "I'll be good, I swear!", 'Not the face! Not the face!'][Math.floor(Math.random() * 3)], { cool: 300, coolKey: 'cower', dur: 110 })) {
+      this.fb.g.later(70, () => this.fb.say('sonic', ['Don\'t you DARE beg.', 'They begged too.', 'Get up.'][Math.floor(Math.random() * 3)], { dur: 100, prio: 2 }));
+    }
   }
 
   runAct(h, L, R) {
@@ -4173,7 +4266,8 @@ class BrawlEggman {
     this.stun = Math.round((big ? 50 : 26) * (1 + this.fear * 0.8));   // gets up slower as he breaks
     this.act = null; this.cool = 25;
     this.snap = big ? 1 : 0.6; this.snapDir = dir;
-    this.wounds += dmg;
+    this.wounds += dmg; this.squash = big ? 1 : 0.6;
+    fb.impact(dir, big);
     fb.hitStop = Math.max(fb.hitStop, big ? 10 : 5);
     fb.shake = Math.max(fb.shake, big ? 16 : 7);
     fb.zoom = Math.max(fb.zoom, big ? 1.06 : 1.02);
@@ -4193,7 +4287,8 @@ class BrawlEggman {
   poundHit(side) {
     const fb = this.fb;
     this.damage(4, false);
-    this.wounds += 4; this.flash = 4; this.snap = 0.8; this.snapDir = side;
+    this.wounds += 4; this.flash = 4; this.snap = 0.8; this.snapDir = side; this.squash = 0.8;
+    fb.impact(side * 0.4, false); fb.kick.y += 10;
     const hp = { x: this.x + side * 6, y: this.y - 28 };
     fb.add(new FBEffect('impact', hp.x, hp.y, { dur: 7 }));
     this.bleed(hp.x, hp.y, 0, 6, 0.15);
@@ -4219,8 +4314,9 @@ class BrawlEggman {
     if (this.state === 'cower' || this.fear > 0.6) dx = (Math.random() - 0.5) * (this.state === 'cower' ? 6 : 2);
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, this.fb.gy - cam.y - 2, 44, 10, 0, 0, Math.PI * 2); ctx.fill();
-    drawEggFrame(ctx, idx, x + dx, y, { flip, rot });
-    if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85 });
+    const sq = { sx: 1 + 0.28 * this.squash, sy: 1 - 0.2 * this.squash };
+    drawEggFrame(ctx, idx, x + dx, y, { flip, rot, ...sq });
+    if (this.flash > 0 && this.flash % 4 < 2) drawEggFrame(ctx, idx, x + dx, y, { flip, rot, white: true, alpha: 0.85, ...sq });
     // sweat drops when scared
     if (this.fear > 0.35 && t % 30 < 20) {
       ctx.fillStyle = '#9fe3ff';
@@ -4375,7 +4471,9 @@ class SpeechSystem {
     for (const b of this.list) {
       const pos = this.speakerPos(b.who);
       if (!pos) continue;
-      this.drawBubble(ctx, b, pos.x - cam.x, pos.y - cam.y);
+      const F = this.g.final;
+      const sp = F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
+      this.drawBubble(ctx, b, sp.x, sp.y);
     }
   }
 
@@ -4569,6 +4667,9 @@ const Input = {
 // Game state machine, camera, HUD and main loop.
 'use strict';
 
+// DEV ONLY: title-screen section skip menu (buttons + number keys 1-7). Turn off before release.
+const DEV_MENU = true;
+
 const FONT = '"Press Start 2P", "Courier New", monospace';
 const CHAIN = [100, 200, 500, 1000];
 const QUIPS = ['Too easy!', 'Way past cool!', 'Next!', "Keep 'em coming!", 'Too slow!', 'Is that all?', 'Smooth!'];
@@ -4608,6 +4709,7 @@ class Game {
 
   // ------------------------------------------------------------ game flow
   newGame() {
+    document.getElementById('dev').classList.remove('on', 'open');
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
     this.continues = 2;
     this.speech.reset();
@@ -4800,6 +4902,24 @@ class Game {
     } else this.respawn();
   }
 
+  // DEV ONLY: jump straight to a section of the game.
+  devSkip(n) {
+    Sound.init(); Sound.stopMusic(); Sound.stopTrack();
+    document.getElementById('dev').classList.remove('on', 'open');
+    this.newGame();
+    if (n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    this.loadLevel(2);
+    this.card = 0; this.lives = 9;
+    const a = this.arena, p = this.player;
+    if (n === 4) { p.reset(a.x + 150, a.groundY); return; }
+    p.reset(a.x + 300, a.groundY); p.y = a.groundY - STAND_H; p.ground = true;
+    this.bossStarted = true; this.timeStopped = true;
+    this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
+    this.rings = 50;
+    if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
+    else this.final = new FinalBattle(this, null, n === 7 ? 'brawl' : true);
+  }
+
   finalDeath() {
     this.lives--;
     document.getElementById('touch').classList.remove('super');
@@ -4831,6 +4951,7 @@ class Game {
       case 'loading': return;
       case 'title':
         this.titleCam += 2;
+        if (DEV_MENU) document.getElementById('dev').classList.add('on');
         if (inp.startPressed || inp.jumpPressed || inp.tapped) { Sound.init(); Sound.play('select'); this.newGame(); }
         Sound.playMusic('meadow');
         return;
@@ -5258,6 +5379,17 @@ class Game {
   const game = new Game(canvas);
   window.game = game;
   Input.init();
+  if (DEV_MENU) {
+    const dev = document.getElementById('dev');
+    document.getElementById('dev-toggle').addEventListener('click', (e) => { e.stopPropagation(); dev.classList.toggle('open'); });
+    for (const b of dev.querySelectorAll('[data-skip]')) {
+      b.addEventListener('click', (e) => { e.stopPropagation(); if (game.state === 'title') game.devSkip(+b.dataset.skip); });
+    }
+    window.addEventListener('keydown', (e) => {
+      const m = /^Digit([1-7])$/.exec(e.code);
+      if (m && game.state === 'title') game.devSkip(+m[1]);
+    });
+  }
   Assets.load((p) => { game.loadProgress = p; }).then(() => {
     // wait briefly for the pixel font so the first frames render correctly
     const ready = document.fonts && document.fonts.load ? document.fonts.load(`20px ${FONT}`).catch(() => {}) : Promise.resolve();

@@ -18,15 +18,17 @@ function segDist(px, py, x1, y1, x2, y2) {
 }
 
 // ---------------------------------------------------------------- drawing
-function drawSuperAura(ctx, x, y, t, s = 1) {
+function drawSuperAura(ctx, x, y, t, s = 1, rage = 0) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const r = (46 + Math.sin(t * 0.2) * 4) * s;
+  const r = (46 + Math.sin(t * (0.2 + rage * 0.3)) * (4 + rage * 6)) * s * (1 + rage * 0.35);
   const g = ctx.createRadialGradient(x, y, 4, x, y, r);
-  g.addColorStop(0, 'rgba(255,250,200,.55)'); g.addColorStop(0.5, 'rgba(255,200,40,.28)'); g.addColorStop(1, 'rgba(255,170,0,0)');
+  // gold when calm, burning crimson when Sonic is furious
+  const G = Math.round(200 - 170 * rage), B = Math.round(40 - 30 * rage);
+  g.addColorStop(0, `rgba(255,${Math.round(250 - 120 * rage)},${Math.round(200 - 150 * rage)},.55)`); g.addColorStop(0.5, `rgba(255,${G},${B},${0.28 + 0.2 * rage})`); g.addColorStop(1, 'rgba(255,40,0,0)');
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   // flickering flame spikes
-  ctx.fillStyle = 'rgba(255,220,90,.35)';
+  ctx.fillStyle = rage > 0.2 ? `rgba(255,${Math.round(220 - 180 * rage)},40,.4)` : 'rgba(255,220,90,.35)';
   for (let i = 0; i < 9; i++) {
     const a = i / 9 * Math.PI * 2 + t * 0.05;
     const l = (r * 0.9) + Math.sin(t * 0.5 + i * 2.3) * 10 * s;
@@ -107,6 +109,9 @@ class FBEffect {
       ctx.beginPath(); ctx.arc(0, 0, 10 + f * (this.big ? 60 : 34), 0, Math.PI * 2); ctx.stroke();
       if (f < 0.35) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(0, 0, this.big ? 26 : 14, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
+    } else if (this.kind === 'ember') {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1 - f; ctx.fillStyle = f < 0.5 ? '#ffb030' : '#ff3010';
+      ctx.fillRect(x - 2, y - 2, 4, 4); ctx.restore();
     } else if (this.kind === 'dust') {
       ctx.save(); ctx.globalAlpha = 0.55 * (1 - f); ctx.fillStyle = '#c9c2b4';
       ctx.beginPath(); ctx.arc(x, y - f * 10, 8 + f * 26, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -578,7 +583,10 @@ class SuperHero {
       const B = this.beam, e = this.fb.clash ? this.fb.clashPoint() : B.end;
       drawBeam(ctx, x + Math.cos(B.ang) * 20, y + Math.sin(B.ang) * 20, e.x - cam.x, e.y - cam.y, B.w, '#ffffff', '#ffc929', t);
     }
-    drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1);
+    const rage = this.fb.phase === 'brawl' || this.fb.phase === 'rescue' ? this.fb.rage : 0;
+    drawSuperAura(ctx, x, y, t, this.charge > 0 ? 1 + this.charge / 70 : 1, rage);
+    if (rage > 0.35 && t % 6 === 0) this.fb.add(new FBEffect('ember', this.x + (Math.random() - 0.5) * 50, this.y + 20, { dur: 40, vx: (Math.random() - 0.5) * 1.2, vy: -2 - Math.random() * 2 }));
+    if (rage > 0.55 && t % 50 === 0) this.fb.add(new FBEffect('dust', this.x + this.facing * 16, this.y - 14, { dur: 20 }));   // heavy breathing
     if (this.invuln > 0 && Math.floor(this.invuln / 3) % 2 === 0) return;
     let pose = Math.hypot(this.vx, this.vy) > 3 ? 'fly' : 'hover';
     if (this.punchT > 0) pose = 'punch';
@@ -587,7 +595,15 @@ class SuperHero {
     if (this.pound) pose = this.punchT > 0 ? 'punch' : 'charge';
     if (this.hitT > 0) pose = 'hurt';
     const bob = pose === 'hover' ? Math.sin(t * 0.08) * 4 : 0;
-    drawSonicFrame(ctx, animFrame(pose, this.anim), x, y + 34 + bob, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
+    let lx = 0, ly = 0;
+    if (this.fb.phase === 'brawl' && this.punchT > 0 && !this.pound) {
+      // wind up (pull back), then throw the whole body into it
+      const ph = (this.blow === 'kick' ? 16 : 13) - this.punchT, a = this.punchAng || 0;
+      const d = ph < 4 ? -ph * 4 : Math.min(22, (ph - 3) * 11) * (this.punchT > 3 ? 1 : this.punchT / 3);
+      lx = Math.cos(a) * d; ly = Math.sin(a) * d;
+    }
+    if (this.pound && this.punchT > 0) ly = this.punchT > 4 ? -8 : 6;
+    drawSonicFrame(ctx, animFrame(pose, this.anim), x + lx, y + 34 + bob + ly, { sheet: 'super', flip: this.facing < 0, rot: pose === 'fly' ? this.vy * 0.03 * this.facing : 0 });
     if (this.carry) {
       ctx.save(); ctx.translate(x, y - 64); drawPartIcon(ctx, this.carry.kind, 0.6, true); ctx.restore();
       drawPrompt(ctx, x, y - 112, 'grab', 'THROW!', t);
@@ -997,6 +1013,7 @@ class FinalBattle {
     this.objs = []; this.shake = 0; this.flash = 0; this.clash = null; this.hintT = 0;
     this.drain = 0;
     this.egg2 = null; this.metal = null; this.hitStop = 0; this.zoom = 1; this.brawlCombo = null; this.reachedBrawl = false;
+    this.camZ = 1; this.camF = null; this.kick = { x: 0, y: 0 }; this.rage = 0; this.slow = 0; this.slowTick = false; this.redFlash = 0; this.view = null;
     p.frozen = true; this.pStart = p.x;
     if (quick === 'brawl') {
       // retry straight into the brawl
@@ -1193,7 +1210,11 @@ class FinalBattle {
   update(inp) {
     const g = this.g, R = this.robot, h = this.hero;
     this.zoom += (1 - this.zoom) * 0.12;
+    this.updateCamera();
+    if (this.redFlash > 0) this.redFlash *= 0.86;
     if (this.hitStop > 0) { this.hitStop--; return; }      // impact freeze frames
+    if (this.slow > 0) { this.slow--; this.slowTick = !this.slowTick; if (this.slowTick) return; }   // slow motion
+    if (this.rage > 0) this.rage = Math.max(0, this.rage - 0.0025);
     if (this.phase === 'tbc') { this.t++; if (this.t > 120 && (inp.startPressed || inp.jumpPressed || inp.punchPressed || inp.tapped || this.t > 420) && !g.tally) g.startTally(); return; }
     this.t++;
     if (this.brawlCombo && --this.brawlCombo.t <= 0) this.brawlCombo = null;
@@ -1311,6 +1332,44 @@ class FinalBattle {
     this.objs = this.objs.filter((o) => !o.dead);
   }
 
+  // Close-up fight camera: zooms in on Sonic and Eggman and kicks with each punch.
+  updateCamera() {
+    const cam = this.g.cam, h = this.hero, E = this.egg2;
+    const center = { x: cam.x + VIEW_W / 2, y: cam.y + VIEW_H * 0.55 };
+    let tz = 1, tf = center;
+    if ((this.phase === 'brawl' || this.phase === 'rescue') && E) {
+      tf = { x: (h.x + E.x) / 2, y: (h.y + E.y - 60) / 2 };
+      const d = Math.abs(h.x - E.x) + Math.abs(h.y - (E.y - 60)) * 0.6;
+      tz = h.pound ? 2.4 : Math.max(1.45, Math.min(2.1, 2.35 - d / 480));
+      if (this.phase === 'rescue') tz = this.t < 90 ? 1.9 : 1.25;
+    } else if (this.phase === 'rip' && this.t > 60) {
+      const hp = this.robot.headPos(); tf = { x: hp.x - 40, y: hp.y + 20 }; tz = 1.6;
+    }
+    this.camZ += (tz - this.camZ) * 0.07;
+    if (!this.camF) this.camF = { ...center };
+    this.camF.x += (tf.x - this.camF.x) * 0.12; this.camF.y += (tf.y - this.camF.y) * 0.12;
+    this.kick.x *= 0.78; this.kick.y *= 0.78;
+    const z = this.camZ * this.zoom;
+    // keep the arena floor near the bottom and the walls in frame
+    let fx = this.camF.x + this.kick.x, fy = this.camF.y + this.kick.y;
+    if (z > 1.05) {
+      fx = Math.max(this.ax + VIEW_W / (2 * z), Math.min(this.ax + this.aw - VIEW_W / (2 * z), fx));
+      fy = Math.min(this.gy + 40 - VIEW_H * 0.45 / z, fy);
+    }
+    this.view = { z, fx, fy };
+  }
+  toScreen(x, y) {
+    const v = this.view, cam = this.g.cam;
+    if (!v) return { x: x - cam.x, y: y - cam.y };
+    return { x: (x - v.fx) * v.z + VIEW_W / 2, y: (y - v.fy) * v.z + VIEW_H * 0.55 };
+  }
+  // A landed blow in the brawl: camera jolts in the punch direction, rage builds.
+  impact(dir, big) {
+    this.kick.x += dir * (big ? 34 : 14); this.kick.y += big ? 10 : 4;
+    this.rage = Math.min(1, this.rage + (big ? 0.12 : 0.06));
+    if (big) { this.slow = Math.max(this.slow, 18); this.redFlash = 1; }
+  }
+
   drawSky(ctx, t) {
     // stormy red/purple sky for the showdown
     const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
@@ -1336,12 +1395,11 @@ class FinalBattle {
     else this.drawSky(ctx, t);
     if (this.phase === 'rise' && this.t < 60) { ctx.globalAlpha = this.t / 60; this.drawSky(ctx, t); ctx.globalAlpha = 1; }
 
-    // punch-in zoom on big impacts, centred between Sonic and his target
+    // fight camera (close-up during the brawl, punch-in zoom on impacts)
     ctx.save();
-    if (this.zoom > 1.001) {
-      const E = this.egg2;
-      const fx = (E ? (h.x + E.x) / 2 : h.x) - c.x, fy = (E ? (h.y + E.y - 60) / 2 : h.y) - c.y;
-      ctx.translate(fx, fy); ctx.scale(this.zoom, this.zoom); ctx.translate(-fx, -fy);
+    if (this.view) {
+      const v = this.view;
+      ctx.translate(VIEW_W / 2, VIEW_H * 0.55); ctx.scale(v.z, v.z); ctx.translate(-(v.fx - c.x), -(v.fy - c.y));
     }
     if (R.rise < 900) R.draw(ctx, c, t);
     g.world.drawTiles(ctx, { x: Math.round(c.x), y: Math.round(c.y) });
@@ -1376,8 +1434,19 @@ class FinalBattle {
       g.text(ctx, 'WARNING', VIEW_W / 2, 300, 56, '#ff3030', 'center', '#000');
       g.text(ctx, 'EGG COLOSSUS APPROACHING', VIEW_W / 2, 350, 18, '#fff', 'center', '#000');
     }
+    if (this.phase === 'brawl' || this.phase === 'rescue' || this.phase === 'tbc') this.drawRage(ctx, t);
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.phase === 'tbc') this.drawTBC(ctx, t);
+  }
+
+  // Sonic's fury: pulsing red edges that close in as rage builds, red flash on heavy blows, letterbox bars
+  drawRage(ctx, t) {
+    const r = this.rage, beat = 0.5 + 0.5 * Math.sin(t * (0.12 + r * 0.18));
+    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * (0.55 - r * 0.2), VIEW_W / 2, VIEW_H / 2, VIEW_W * 0.75);
+    g.addColorStop(0, 'rgba(90,0,0,0)'); g.addColorStop(1, `rgba(110,0,0,${0.35 + r * 0.4 * beat})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    if (this.redFlash > 0.02) { ctx.fillStyle = `rgba(255,20,20,${0.22 * this.redFlash})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, VIEW_W, 22); ctx.fillRect(0, VIEW_H - 22, VIEW_W, 22);
   }
 
   // Freeze frame: sepia wash + "TO BE CONTINUED" arrow

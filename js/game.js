@@ -1,6 +1,9 @@
 // Game state machine, camera, HUD and main loop.
 'use strict';
 
+// DEV ONLY: title-screen section skip menu (buttons + number keys 1-7). Turn off before release.
+const DEV_MENU = true;
+
 const FONT = '"Press Start 2P", "Courier New", monospace';
 const CHAIN = [100, 200, 500, 1000];
 const QUIPS = ['Too easy!', 'Way past cool!', 'Next!', "Keep 'em coming!", 'Too slow!', 'Is that all?', 'Smooth!'];
@@ -40,6 +43,7 @@ class Game {
 
   // ------------------------------------------------------------ game flow
   newGame() {
+    document.getElementById('dev').classList.remove('on', 'open');
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
     this.continues = 2;
     this.speech.reset();
@@ -232,6 +236,24 @@ class Game {
     } else this.respawn();
   }
 
+  // DEV ONLY: jump straight to a section of the game.
+  devSkip(n) {
+    Sound.init(); Sound.stopMusic(); Sound.stopTrack();
+    document.getElementById('dev').classList.remove('on', 'open');
+    this.newGame();
+    if (n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
+    this.loadLevel(2);
+    this.card = 0; this.lives = 9;
+    const a = this.arena, p = this.player;
+    if (n === 4) { p.reset(a.x + 150, a.groundY); return; }
+    p.reset(a.x + 300, a.groundY); p.y = a.groundY - STAND_H; p.ground = true;
+    this.bossStarted = true; this.timeStopped = true;
+    this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
+    this.rings = 50;
+    if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
+    else this.final = new FinalBattle(this, null, n === 7 ? 'brawl' : true);
+  }
+
   finalDeath() {
     this.lives--;
     document.getElementById('touch').classList.remove('super');
@@ -263,6 +285,7 @@ class Game {
       case 'loading': return;
       case 'title':
         this.titleCam += 2;
+        if (DEV_MENU) document.getElementById('dev').classList.add('on');
         if (inp.startPressed || inp.jumpPressed || inp.tapped) { Sound.init(); Sound.play('select'); this.newGame(); }
         Sound.playMusic('meadow');
         return;
@@ -690,6 +713,17 @@ class Game {
   const game = new Game(canvas);
   window.game = game;
   Input.init();
+  if (DEV_MENU) {
+    const dev = document.getElementById('dev');
+    document.getElementById('dev-toggle').addEventListener('click', (e) => { e.stopPropagation(); dev.classList.toggle('open'); });
+    for (const b of dev.querySelectorAll('[data-skip]')) {
+      b.addEventListener('click', (e) => { e.stopPropagation(); if (game.state === 'title') game.devSkip(+b.dataset.skip); });
+    }
+    window.addEventListener('keydown', (e) => {
+      const m = /^Digit([1-7])$/.exec(e.code);
+      if (m && game.state === 'title') game.devSkip(+m[1]);
+    });
+  }
   Assets.load((p) => { game.loadProgress = p; }).then(() => {
     // wait briefly for the pixel font so the first frames render correctly
     const ready = document.fonts && document.fonts.load ? document.fonts.load(`20px ${FONT}`).catch(() => {}) : Promise.resolve();

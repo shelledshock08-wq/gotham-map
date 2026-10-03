@@ -18,6 +18,13 @@
   #boot-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; pointer-events: none; }
   #boot-err { color: #ff8a8a; white-space: pre-wrap; font-size: 13px; max-width: 90vw; }
+  #dev { position: fixed; left: 10px; top: 10px; display: none; z-index: 5; font: 700 13px system-ui, sans-serif; }
+  #dev.on { display: block; }
+  #dev button { display: block; margin: 0 0 4px; padding: 8px 12px; border: 1px solid #ffd23f; border-radius: 6px;
+    background: rgba(10,15,40,.85); color: #ffd23f; font: inherit; cursor: pointer; min-width: 190px; text-align: left; }
+  #dev-list { display: none; }
+  #dev.open #dev-list { display: block; }
+  #dev #dev-toggle { min-width: 0; background: #ffd23f; color: #10142e; }
   #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
   #touch.on { display: block; }
   .tbtn {
@@ -59,6 +66,19 @@
     var m = document.getElementById('boot-msg'); if (m) m.style.display = 'block';
   });
 </script>
+<!-- DEV ONLY: section skip menu on the title screen. Set DEV_MENU = false in js/game.js to remove. -->
+<div id="dev">
+  <button id="dev-toggle">DEV</button>
+  <div id="dev-list">
+    <button data-skip="1">1 Act 1</button>
+    <button data-skip="2">2 Act 2</button>
+    <button data-skip="3">3 Act 3</button>
+    <button data-skip="4">4 Eggman ship boss</button>
+    <button data-skip="5">5 Egg Colossus (cutscene)</button>
+    <button data-skip="6">6 Super battle</button>
+    <button data-skip="7">7 Brawl</button>
+  </div>
+</div>
 <div id="touch">
   <div class="tbtn" id="t-left"  data-k="left">&#9664;</div>
   <div class="tbtn" id="t-right" data-k="right">&#9654;</div>
