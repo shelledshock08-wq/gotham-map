@@ -6,9 +6,9 @@
 'use strict';
 
 const ESC_DT = 1 / 60;
-const ESC_RUN = 40, ESC_BOOST = 68, ESC_SLIDE = 34;
+const ESC_RUN = 38, ESC_BOOST = 64, ESC_SLIDE = 34;
 const ESC_GRAV = 34, ESC_JUMP = 12.5;
-const ESC_WATER_MIN = 42;        // slower than this on water and you sink
+const ESC_WATER_MIN = 41;        // slower than this on water and you sink
 const ESC_SONIC_SCALE = 1.9;     // model is ~1 m tall; the course is built for a ~1.9 unit Sonic
 
 // ------------------------------------------------------------------ textures
@@ -151,8 +151,9 @@ function escDecode(a) {
 const ESC_TEX_CACHE = {};
 function escModelTex(name) {
   if (!ESC_TEX_CACHE[name]) {
+    // same orientation as three's ColladaLoader (default flipY), which the UVs were authored for
     const t = new THREE.TextureLoader().load(ESC_MODELS.tex[name]);
-    t.flipY = false;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;   // Generations UVs run outside 0..1
     ESC_TEX_CACHE[name] = t;
   }
   return ESC_TEX_CACHE[name];
@@ -205,6 +206,10 @@ function escSonicModel() {
     model = escBuildModel(ESC_MODELS.sonic);
     model.root.scale.multiplyScalar(ESC_SONIC_SCALE);
     if (model.meshes.MouthR) model.meshes.MouthR.visible = false;   // one mouth at a time
+    // the rip's bind pose has the eyelids shut; open them (the clips never touch them)
+    for (const n of ['EyeLidUp1_L', 'EyeLidUp2_L', 'EyeLidUp_C', 'EyeLidUp1_R', 'EyeLidUp2_R']) {
+      const b = model.root.getObjectByName(n); if (b) b.rotateY(-0.8);
+    }
     body.add(model.root);
     mixer = new THREE.AnimationMixer(model.root);
     for (const [k, c] of Object.entries(model.clips)) {
@@ -317,10 +322,12 @@ class EscapeCourse {
     s = this.at0;
     this.seg(140, { env: 'road', w: 16, pitch: -0.04 });
     this.hint(s + 15, "We're out! And the blast is right behind me!");
-    this.rings(s + 20, 10, 0, 5); this.add('car', s + 80, -4); this.add('car', s + 105, 4);
+    this.hint(s + 62, "Egg trucks! Too heavy to bust, so steer round them!");
+    this.rings(s + 20, 10, 0, 5); this.add('pawn', s + 55, 0); this.add('car', s + 80, -4); this.add('car', s + 105, 4); this.add('laserLow', s + 128);
     s = this.at0;
     this.seg(220, { env: 'road', w: 16, yaw: 1.1, bank: 0.45 });
-    this.rings(s + 20, 12, -5, 6); this.add('pawn', s + 120, 0); this.add('pawn', s + 132, 4); this.add('car', s + 170, -2);
+    this.rings(s + 20, 12, -5, 6); for (const x of [-5, 0, 5]) this.add('crate', s + 70, x);
+    this.add('pawn', s + 120, 0); this.add('pawn', s + 132, 4); this.add('car', s + 165, -2); this.add('car', s + 165, 5); this.add('laserHigh', s + 200);
     s = this.at0;
     this.seg(150, { env: 'road', w: 16 });
     this.hint(s + 2, 'The bridge is out! Jump, then home in {punch}!');
@@ -329,7 +336,8 @@ class EscapeCourse {
     for (const [ds, y, x] of [[58, 4.5, 0], [72, 5.5, 2], [86, 5.5, -2], [100, 4.5, 0]]) this.add('drone', s + ds, x, { y });
     s = this.at0;
     this.seg(220, { env: 'road', w: 16, yaw: -1.2, bank: -0.5 });
-    this.rings(s + 20, 12, 5, 6); this.add('car', s + 90, 0); this.add('car', s + 110, -5); this.add('crate', s + 150, 3); this.add('crate', s + 150, -3);
+    this.rings(s + 20, 12, 5, 6); this.add('pawn', s + 40, -3); this.add('pawn', s + 50, 3); this.add('laserLow', s + 70);
+    this.add('car', s + 95, 0); this.add('car', s + 115, -5); this.add('car', s + 115, 5); for (const x of [-4, 0, 4]) this.add('crate', s + 150, x); this.add('laserHigh', s + 190);
     s = this.at0;
     this.seg(40, { env: 'road', w: 16 }); this.add('dash', s + 10, 0);
     s = this.at0;
@@ -337,31 +345,31 @@ class EscapeCourse {
     for (let i = 0; i < 12; i++) this.add('ring', s + 8 + i * 10, 0, { y: 1 });
     s = this.at0;
     this.seg(110, { env: 'road', w: 16 });
-    this.add('laserLow', s + 40); this.add('car', s + 75, 3); this.add('car', s + 75, -3);
+    this.add('laserLow', s + 30); this.add('car', s + 60, 3); this.add('car', s + 60, -3); this.add('pawn', s + 78, 0); this.add('laserHigh', s + 98);
     s = this.at0;
     this.hint(s - 12, 'Corkscrew! Hang on!');
     this.seg(170, { env: 'road', w: 16, cork: { r: 10 } });
     for (let i = 0; i < 14; i++) this.add('ring', s + 10 + i * 11, 0, { y: 1 });
     s = this.at0;
     this.seg(120, { env: 'road', w: 16 });
-    this.add('pawn', s + 30, -4); this.add('pawn', s + 38, 0); this.add('pawn', s + 46, 4); this.add('laserHigh', s + 85);
+    for (const x of [-4, 4]) this.add('crate', s + 14, x);
+    this.add('pawn', s + 30, -4); this.add('pawn', s + 38, 0); this.add('pawn', s + 46, 4); this.add('laserLow', s + 66); this.add('laserHigh', s + 92);
     this.HIGHWAY_END = this.at0;
 
     // ===== C. straight down a skyscraper =====
     s = this.at0;
     this.seg(60, { env: 'roof', w: 14 });
     this.hint(s + 4, "End of the road... so I'll take the BUILDING!");
-    this.rings(s + 10, 8, 0, 5);
+    this.rings(s + 10, 4, 0, 5); this.add('laserLow', s + 34);
     s = this.at0;
-    this.seg(240, { env: 'glass', w: 14, pitch: -1.32 });
+    this.seg(240, { env: 'glass', w: 14, pitch: -1.5 });
     this.rings(s + 30, 28, 0, 6);
-    this.add('debris', s + 90, -3, { glass: true }); this.add('debris', s + 120, 3, { glass: true });
-    this.add('debris', s + 150, 0, { glass: true }); this.add('debris', s + 175, -4, { glass: true });
+    for (const [ds, x] of [[70, 3], [92, -3], [114, 0], [134, 4], [152, -4], [172, 1], [190, -2]]) this.add('debris', s + ds, x, { glass: true });
     this.add('drone', s + 205, 0, { y: 1.5 });
     this.FACADE = [s, this.at0];
     s = this.at0;
     this.seg(90, { env: 'road', w: 16, pitch: 0 });
-    this.add('dash', s + 50, 0);
+    for (const x of [-5, 0, 5]) this.add('crate', s + 40, x); this.add('dash', s + 70, 0);
 
     // ===== D. across the bay =====
     s = this.at0;
@@ -370,10 +378,12 @@ class EscapeCourse {
     s = this.at0;
     this.WATER = [s];
     this.seg(220, { env: 'water', w: 24, yaw: 0.5, bank: 0.1 });
-    this.rings(s + 10, 30, -3, 6); this.add('dash', s + 60, 3); this.add('rock', s + 100, 6); this.add('rock', s + 140, -6); this.add('dash', s + 180, -2);
+    this.rings(s + 10, 30, -3, 6); this.add('rock', s + 45, -8); this.add('dash', s + 60, 3); this.add('rock', s + 85, 0); this.add('rock', s + 100, 7);
+    this.add('rock', s + 125, -5); this.add('rock', s + 140, 3); this.add('dash', s + 165, -2); this.add('rock', s + 195, 6); this.add('rock', s + 195, -6);
     s = this.at0;
     this.seg(240, { env: 'water', w: 24, yaw: -0.6, bank: -0.1 });
-    this.rings(s + 5, 30, 3, 7); this.add('rock', s + 40, 0); this.add('dash', s + 80, 0); this.add('rock', s + 120, -7); this.add('rock', s + 120, 7);
+    this.rings(s + 5, 30, 3, 7); this.add('rock', s + 30, -3); this.add('rock', s + 55, 4); this.add('dash', s + 80, 0); this.add('rock', s + 105, -6);
+    this.add('rock', s + 120, 0); this.add('rock', s + 135, 7);
     for (const [ds, y, x] of [[160, 3.5, 0], [175, 4.5, 3], [190, 4.5, -3]]) this.add('drone', s + ds, x, { y });
     this.add('dash', s + 212, 0);
     this.WATER.push(this.at0);
@@ -382,14 +392,14 @@ class EscapeCourse {
     s = this.at0;
     this.seg(100, { env: 'road', w: 16, pitch: 0.05 });
     this.hint(s + 5, 'Almost clear!');
-    for (const x of [-5, 0, 5]) this.add('crate', s + 50, x);
+    this.add('car', s + 30, -4); for (const x of [-5, 0, 5]) this.add('crate', s + 55, x);
     this.add('dash', s + 82, 0);
     s = this.at0;
     this.seg(130, { env: 'road', w: 16, loop: { shift: -20 } });
     for (let i = 0; i < 12; i++) this.add('ring', s + 8 + i * 10, 0, { y: 1 });
     s = this.at0;
     this.seg(150, { env: 'road', w: 16 });
-    this.add('laserLow', s + 30); this.add('pawn', s + 60, -3); this.add('pawn', s + 70, 3); this.add('dash', s + 100, 0);
+    this.add('laserLow', s + 25); this.add('pawn', s + 48, -3); this.add('pawn', s + 56, 3); this.add('laserHigh', s + 76); this.add('car', s + 92, 4); this.add('car', s + 92, -4); this.add('dash', s + 112, 0);
     this.hint(s + 90, 'BOOST!!');
     this.END = this.at0;
     this.add('ramp', this.END - 22, 0, { w: 16, big: true });
@@ -493,7 +503,7 @@ class EscapeStage {
     this.lean = 0; this.dead = null; this.trick = 0; this.sink = 0; this.hitT = 0; this.dashT = 0; this.dashAir = 0;
     this.collapse = -70; this.shake = 0; this.flash = 0; this.boostFlash = 0; this.fovKick = 0;
     this.hintIdx = 0; this.objIdx = 0;
-    this.fx = []; this.lostRings = [];
+    this.fx = []; this.lostRings = []; this.chunks = [];
     game.time = 0;
     try { this.course = new EscapeCourse(); this.init3D(); } catch (e) { console.warn('3D escape unavailable', e); this.failed = true; this.phase = 'tbc'; }
   }
@@ -598,8 +608,16 @@ class EscapeStage {
       const lava = new THREE.Mesh(new THREE.PlaneGeometry(14, h.s1 - h.s0), new THREE.MeshBasicMaterial({ color: 0xff5a10, fog: false, side: THREE.DoubleSide }));
       lava.position.copy(C.at((h.s0 + h.s1) / 2, 0, -12)); C.basis(h.s0, this.m4); lava.quaternion.setFromRotationMatrix(this.m4); lava.rotateX(-Math.PI / 2); scene.add(lava);
     }
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), new THREE.MeshBasicMaterial({ color: 0xfff3d6, fog: false, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-    door.position.copy(C.at(C.BASE_END, 0, 4.5)); C.basis(C.BASE_END, this.m4); door.quaternion.setFromRotationMatrix(this.m4); scene.add(door); this.door = door;
+    // the hangar's end wall, with the exit and two blast doors that slide open as you come
+    C.basis(C.BASE_END, this.m4);
+    const wq = new THREE.Quaternion().setFromRotationMatrix(this.m4), wallMat = new THREE.MeshLambertMaterial({ map: T.wall, side: THREE.DoubleSide });
+    const exit = new THREE.Group(); exit.position.copy(C.at(C.BASE_END, 0, 0)); exit.quaternion.copy(wq); scene.add(exit);
+    const slab = (w, h, x, y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 1.2), wallMat); m.position.set(x, y, 0.6); exit.add(m); return m; };
+    slab(120, 60, -69, 10); slab(120, 60, 69, 10); slab(18, 40, 0, 30); slab(18, 30, 0, -15.2);
+    const light = new THREE.Mesh(new THREE.PlaneGeometry(18, 10), new THREE.MeshBasicMaterial({ color: 0xfff3d6, fog: false })); light.position.set(0, 5, 1.3); exit.add(light);
+    const doorMat = new THREE.MeshLambertMaterial({ map: T.hazard });
+    this.doors = [-1, 1].map((side) => { const d = new THREE.Mesh(new THREE.BoxGeometry(9, 10, 0.8), doorMat); d.position.set(side * 4.5, 5, 0.2); exit.add(d); return d; });
+    this.door = exit; this.tunnel.push(exit);
 
     this.buildWorld();
     this.buildObjects();
@@ -638,7 +656,7 @@ class EscapeStage {
     const bGeo = new THREE.BoxGeometry(1, 1, 1); bGeo.translate(0, 0.5, 0);
     const bMat = new THREE.MeshLambertMaterial({ map: T.windows, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.35 });
     const track = [];
-    for (let s = C.BASE_END - 100; s < C.WATER[0]; s += 4) track.push(C.frame(s).p);
+    for (let s = C.BASE_END - 100; s < C.END + 40; s += 4) track.push(C.frame(s).p);
     const clear = (pos, w) => track.every((p) => Math.hypot(p.x - pos.x, p.z - pos.z) > w * 0.75 + 34);
     const spots = [];
     for (let s = C.BASE_END + 20; s < C.FACADE[1] + 60; s += 18) {
@@ -657,10 +675,18 @@ class EscapeStage {
     scene.add(inst); this.outdoor.push(inst);
     // the skyscraper Sonic runs down: its face is the track
     const [fa, fb] = C.FACADE, mid = (fa + fb) / 2, mf = C.frame(mid);
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(36, 60, fb - fa + 30), new THREE.MeshLambertMaterial({ map: T.windows, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.3 }));
+    let behind = 0;      // how far behind the middle of the face the curved ends of the run dip
+    for (let s = fa; s <= fb; s += 2) behind = Math.max(behind, -C.frame(s).p.clone().sub(mf.p).dot(mf.n));
+    const towerMat = new THREE.MeshLambertMaterial({ map: T.windows, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.3 });
+    // top stops just under the roof edge (so the rooftop run never clips it), bottom runs past the street
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(36, 60, fb - fa + 40), towerMat);
     C.basis(mid, this.m4); tower.quaternion.setFromRotationMatrix(this.m4);
-    tower.position.copy(mf.p).addScaledVector(mf.n, -30.4);
+    tower.position.copy(mf.p).addScaledVector(mf.n, -(30 + behind + 0.8)).addScaledVector(mf.f, 30);
     scene.add(tower); this.outdoor.push(tower);
+    const roofS = fa - 30, rf = C.frame(roofS);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(36, 8, 70), towerMat);
+    C.basis(roofS, this.m4); roof.quaternion.setFromRotationMatrix(this.m4);
+    roof.position.copy(rf.p).addScaledVector(rf.n, -4.8); scene.add(roof); this.outdoor.push(roof);
     // highway support pillars
     const pGeo = new THREE.BoxGeometry(2.4, 1, 2.4); pGeo.translate(0, -0.5, 0);
     const pMat = new THREE.MeshLambertMaterial({ color: 0x6b6f78 });
@@ -679,7 +705,8 @@ class EscapeStage {
         b.position.copy(fr.p).addScaledVector(fr.r, side * (fr.hw + 0.8)); b.position.y = street + 0.3; scene.add(b); this.outdoor.push(b);
         if (Math.random() < 0.5) {
           const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(6 + Math.random() * 10, 0), rockMat);
-          rk.position.copy(fr.p).addScaledVector(fr.r, side * (40 + Math.random() * 80)); rk.position.y = street; scene.add(rk); this.outdoor.push(rk);
+          rk.position.copy(fr.p).addScaledVector(fr.r, side * (40 + Math.random() * 80)); rk.position.y = street;
+          if (track.every((p) => Math.hypot(p.x - rk.position.x, p.z - rk.position.z) > 34)) { scene.add(rk); this.outdoor.push(rk); }
         }
       }
     }
@@ -701,7 +728,9 @@ class EscapeStage {
     const C = this.course, T = this.tex, scene = this.scene, m4 = this.m4;
     this.ringGeo = new THREE.TorusGeometry(0.45, 0.1, 8, 20);
     this.ringMat = new THREE.MeshPhongMaterial({ color: 0xffc41f, emissive: 0x6a4400, shininess: 90, specular: 0xffffff });
-    const crateGeo = new THREE.BoxGeometry(2, 2, 2), crateMat = new THREE.MeshLambertMaterial({ map: T.crate });
+    const crateGeo = new THREE.BoxGeometry(2, 2, 2), crateMat = this.crateMat = new THREE.MeshLambertMaterial({ map: T.crate });
+    this.chunkGeo = new THREE.BoxGeometry(0.6, 0.45, 0.5);
+    this.pawnChunkMat = new THREE.MeshLambertMaterial({ color: 0xb8202a }); this.droneChunkMat = new THREE.MeshLambertMaterial({ color: 0x80869a });
     const debrisGeo = new THREE.DodecahedronGeometry(1.3, 0), debrisMat = new THREE.MeshLambertMaterial({ color: 0x5a5e68, emissive: 0x1a0500 });
     const shardMat = new THREE.MeshPhongMaterial({ color: 0x9cc8ff, transparent: true, opacity: 0.75, shininess: 100 });
     const rockGeo = new THREE.DodecahedronGeometry(1.6, 0), rockMat = new THREE.MeshLambertMaterial({ color: 0x6a645c });
@@ -859,7 +888,7 @@ class EscapeStage {
     if (!wantBoost) this.boosting = false;
     Sound.boostHold(this.boosting ? 1 : 0);
     if (this.boosting) {
-      this.boostT++; this.gauge = Math.max(0, this.gauge - (this.onWater ? 0.22 : 0.4));
+      this.boostT++; this.gauge = Math.max(0, this.gauge - (this.onWater ? 0.3 : 0.42));
       if (this.t % 2 === 0) {   // blue sparks streaming off him
         const p = this.course.at(this.s - 1.2, this.x + (Math.random() - 0.5) * 1.4, this.y + 0.4 + Math.random() * 1.4);
         this.sprite(this.blueMat, p, 1.2 + Math.random(), 18, 0, this.course.frame(this.s).f.clone().multiplyScalar(-0.15));
@@ -873,7 +902,7 @@ class EscapeStage {
     if (this.slide && !this.wasSlide) Sound.play('roll', { vol: 0.6 });
     this.wasSlide = this.slide;
     let target = this.boosting ? ESC_BOOST : this.slide ? ESC_SLIDE : ESC_RUN;
-    if (this.dashT > 0) { this.dashT--; target = Math.max(target, 72); }
+    if (this.dashT > 0) { this.dashT--; target = Math.max(target, 70); }
     this.speed += (target - this.speed) * (this.speed < target ? 0.025 : 0.015);
 
     if (inp.punchPressed) {
@@ -922,7 +951,7 @@ class EscapeStage {
     } else this.sink = 0;
 
     // ---- the collapse / blast wave behind you
-    const cv = 35 + Math.min(7, this.s / 400);
+    const cv = 34 + Math.min(6, this.s / 300);
     this.collapse += cv * ESC_DT;
     if (this.s - this.collapse > 110) this.collapse = this.s - 110;
     if (this.collapse >= this.s - 1) this.die('crushed');
@@ -969,12 +998,34 @@ class EscapeStage {
     return best;
   }
 
+  // ran into something solid: stop dead in front of it
+  bonk(o, d) {
+    Sound.play('bosshit', { vol: 0.7 }); Sound.punch(1);
+    this.shake = Math.max(this.shake, 14); this.boosting = false;
+    this.hurt('hit');
+    if (!this.dead) { this.s = o.s - d - 0.4; this.speed = 4; this.vx = 0; }
+  }
+
+  // broken pieces flying off something you smashed
+  shatter(pos, mat, n, size) {
+    const f = this.course.frame(this.s);
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(this.chunkGeo, mat);
+      m.scale.setScalar(size * (0.5 + Math.random()));
+      m.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * size, (Math.random() - 0.5) * size, (Math.random() - 0.5) * size));
+      this.scene.add(m);
+      const v = f.f.clone().multiplyScalar(0.25 + Math.random() * 0.45).addScaledVector(f.r, (Math.random() - 0.5) * 0.7).addScaledVector(f.n, 0.2 + Math.random() * 0.4);
+      this.chunks.push({ m, v, spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.5), t: 0, g: f.n.clone().multiplyScalar(-0.02) });
+    }
+  }
+
   smash(o, homing) {
     const g = this.g, C = this.course;
     o.dead = true; if (o.mesh) o.mesh.visible = false;
     const pos = C.at(o.s, o.x, (o.y || 0) + 1);
-    const crate = o.type === 'crate' || o.type === 'car';
-    this.burst(pos, crate ? 2 : 3, o.type === 'car' ? 1.4 : crate ? 0.8 : 1);
+    const crate = o.type === 'crate';
+    this.burst(pos, crate ? 1 : 2, crate ? 0.7 : 0.9);
+    this.shatter(pos, crate ? this.crateMat : o.type === 'pawn' ? this.pawnChunkMat : this.droneChunkMat, crate ? 10 : 8, crate ? 0.7 : 0.5);
     Sound.play(crate ? 'boom' : 'pop', { vol: 0.7 });
     if (this.boosting) Sound.punch(1.2);
     this.chain++;
@@ -1004,14 +1055,14 @@ class EscapeStage {
           }
           break;
         }
-        case 'crate': case 'car':
-          if (crossed && dx < (o.type === 'car' ? 1.9 : 1.6) && this.y < (o.type === 'car' ? 2.6 : 2)) {
-            if (this.boosting || this.homing) this.smash(o);
-            else { this.hurt('hit'); if (!this.dead) { this.s = o.s - 2.6; this.speed = 6; } }
+        case 'crate':
+          if (crossed && dx < 1.6 && this.y < 2) {
+            if (this.boosting || this.homing) { this.smash(o); this.speed *= 0.85; }
+            else { this.bonk(o, 1.6); }
           }
           break;
-        case 'rock':   // can't be smashed: steer round it
-          if (crossed && dx < 1.9 && this.y < 2.2) { this.hurt('hit'); if (!this.dead) { this.s = o.s - 2.4; this.speed = 30; } }
+        case 'car': case 'rock':   // solid: boost or not, you go round (or over) them
+          if (crossed && dx < (o.type === 'car' ? 1.9 : 1.9) && this.y < (o.type === 'car' ? 2.6 : 2.2)) this.bonk(o, 2.4);
           break;
         case 'pawn': case 'drone': {
           const oy = o.y || 0, oh = o.type === 'pawn' ? 2.6 : 1.4;
@@ -1025,7 +1076,7 @@ class EscapeStage {
         case 'laserHigh': if (crossed && top > 1.15 && this.y < 4.8) this.hurt('hit'); break;
         case 'dash':
           if (crossed && this.ground && dx < 2) {
-            this.dashT = 50; this.speed = Math.max(this.speed, 72); this.fovKick = 10;
+            this.dashT = 50; this.speed = Math.max(this.speed, 70); this.fovKick = 10;
             Sound.play('spring', { vol: 0.6, rate: 1.3 }); Sound.boostBurst(); this.gauge = Math.min(100, this.gauge + 5);
           }
           break;
@@ -1118,6 +1169,13 @@ class EscapeStage {
       if (r.t > 60) { this.scene.remove(r.m); r.dead = true; }
     }
     this.lostRings = this.lostRings.filter((r) => !r.dead);
+    for (const c of this.chunks) {
+      c.t++; c.v.add(c.g); c.m.position.add(c.v);
+      c.m.rotation.x += c.spin.x; c.m.rotation.y += c.spin.y; c.m.rotation.z += c.spin.z;
+      if (c.t > 45) c.m.scale.multiplyScalar(0.9);
+      if (c.t > 70) { this.scene.remove(c.m); c.dead = true; }
+    }
+    this.chunks = this.chunks.filter((c) => !c.dead);
   }
 
   // ------------------------------------------------------------ posing / camera
@@ -1247,6 +1305,11 @@ class EscapeStage {
       this.door.visible = inside;
     }
     this.alarmLight.intensity = inside ? 0.6 + 1.2 * pulse : 0;
+    if (this.doors) {   // blast doors slide open as you come
+      const k = Math.max(0, Math.min(1, (this.s - (C.BASE_END - 90)) / 40));
+      this.doors.forEach((d, i) => { d.position.x = (i ? 1 : -1) * (4.5 + 9.2 * k); });
+      if (k > 0 && !this.doorSound) { this.doorSound = true; Sound.play('charge', { rate: 0.5, vol: 0.6 }); }
+    }
     this.tex.water.offset.set(t * 0.0006, t * 0.0011);
     for (let i = Math.max(0, this.objIdx - 5); i < C.objs.length; i++) {
       const o = C.objs[i];

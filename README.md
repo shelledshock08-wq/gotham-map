@@ -56,7 +56,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Action | Keyboard | Gamepad | Touch |
 |---|---|---|---|
 | Steer | ← / → | D-pad / stick | ◀ ▶ |
-| Boost (hold; smashes crates, rubble and robots) | X | X | B |
+| Boost (hold; smashes crates and robots, but Egg trucks and rocks are solid) | X | X | B |
 | Jump / homing attack in mid-air / air dash | Z / Space | A | A |
 | Slide | hold ↓ | Down | ▼ |
 | Run on water | keep boosting (or hit the floating dash panels) | | |
