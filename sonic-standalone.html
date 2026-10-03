@@ -4421,6 +4421,7 @@ class Game {
   // ------------------------------------------------------------ game flow
   newGame() {
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
+    this.continues = 2;
     this.speech.reset();
     this.loadLevel(0);
   }
@@ -4589,14 +4590,32 @@ class Game {
     this.boss = null;
     this.final = new FinalBattle(this, egg, false);
   }
+  gameOver(resume) {
+    this.state = 'gameover'; this.goTimer = 0; this.resumeAt = resume;
+    document.getElementById('touch').classList.remove('super');
+    Sound.stopMusic(); Sound.stopTrack(); Sound.play('gameover'); this.saveHi();
+  }
+
+  // Classic rules: 3 fresh lives and the score resets. You go back to the
+  // final battle if you'd reached it, otherwise to your last star post.
+  useContinue() {
+    this.continues--;
+    this.lives = 3; this.score = 0; this.nextLifeScore = 50000;
+    this.state = 'play';
+    Sound.play('oneup');
+    if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
+      const p = this.player;
+      p.reset(this.arena.x + 300, this.arena.groundY);
+      p.y = this.arena.groundY - STAND_H; p.ground = true;
+      this.rings = 50;
+      this.final = new FinalBattle(this, null, this.resumeAt === 'brawl' ? 'brawl' : true);
+    } else this.respawn();
+  }
+
   finalDeath() {
     this.lives--;
     document.getElementById('touch').classList.remove('super');
-    if (this.lives <= 0) {
-      this.final = null;
-      this.state = 'gameover'; this.goTimer = 0; Sound.stopMusic(); Sound.stopTrack(); Sound.play('gameover'); this.saveHi();
-      return;
-    }
+    if (this.lives <= 0) { this.gameOver(this.final && this.final.reachedBrawl ? 'brawl' : 'final'); this.final = null; return; }
     // retry the showdown straight from the transformation
     const p = this.player;
     p.reset(this.arena.x + 300, this.arena.groundY);
@@ -4631,10 +4650,17 @@ class Game {
         Sound.pauseTrack(true);
         if (inp.startPressed) { this.state = 'play'; Sound.pauseTrack(false); }
         return;
-      case 'gameover':
+      case 'gameover': {
         this.goTimer++;
-        if (this.goTimer > 90 && (inp.startPressed || inp.jumpPressed || inp.tapped || this.goTimer > 600)) this.toTitle();
+        const press = inp.startPressed || inp.jumpPressed || inp.tapped;
+        if (this.continues > 0) {
+          // classic Continue screen: 10 seconds to take it
+          if (this.goTimer > 150 && press) this.useContinue();
+          else if (this.goTimer > 150 + 600) this.toTitle();
+          else if (this.goTimer > 150 && (this.goTimer - 150) % 60 === 0) Sound.play('select', { vol: 0.4 });
+        } else if (this.goTimer > 90 && (press || this.goTimer > 600)) this.toTitle();
         return;
+      }
       case 'ending':
         this.endTimer++;
         for (const e of this.endAnimals) e.update(this);
@@ -4698,7 +4724,7 @@ class Game {
     if (p.state === 'dead' && !this.deathHandled && p.deadTimer > 110) {
       this.deathHandled = true;
       this.lives--;
-      if (this.lives <= 0) { this.state = 'gameover'; this.goTimer = 0; Sound.stopMusic(); Sound.play('gameover'); this.saveHi(); }
+      if (this.lives <= 0) this.gameOver('act');
       else this.respawn();
       return;
     }
@@ -4949,7 +4975,18 @@ class Game {
     ctx.fillStyle = `rgba(0,0,0,${0.6 * e})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     this.text(ctx, 'GAME', -200 + (VIEW_W / 2 - 20 + 200) * e, VIEW_H / 2, 64, '#fff', 'right', '#1d3fd1');
     this.text(ctx, 'OVER', VIEW_W + 200 - (VIEW_W + 200 - VIEW_W / 2 - 20) * e, VIEW_H / 2, 64, '#fff', 'left', '#1d3fd1');
-    if (this.goTimer > 90) this.text(ctx, `SCORE ${this.score}`, VIEW_W / 2, VIEW_H / 2 + 80, 20, '#ffd23f', 'center');
+    if (this.goTimer > 90 && this.goTimer <= 150) this.text(ctx, `SCORE ${this.score}`, VIEW_W / 2, VIEW_H / 2 + 80, 20, '#ffd23f', 'center');
+    if (this.goTimer > 150 && this.continues > 0) {
+      const left = Math.max(0, 9 - Math.floor((this.goTimer - 150) / 60));
+      ctx.fillStyle = '#05081a'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      this.text(ctx, 'CONTINUE?', VIEW_W / 2, 200, 48, '#fff', 'center', '#1d3fd1');
+      this.text(ctx, String(left), VIEW_W / 2, 330, 72, '#ffd23f', 'center', '#000');
+      drawSonicFrame(ctx, animFrame('tap', this.goTimer * 0.06), VIEW_W / 2, 520, { scale: 4 });
+      const where = this.resumeAt === 'brawl' ? 'THE BRAWL' : this.resumeAt === 'final' ? 'THE SUPER BATTLE' : 'YOUR LAST STAR POST';
+      this.text(ctx, `RESUME AT ${where}`, VIEW_W / 2, 580, 16, '#c9d4ff', 'center');
+      this.text(ctx, `CONTINUES LEFT: ${this.continues}   (SCORE RESETS)`, VIEW_W / 2, 620, 14, '#fff', 'center');
+      if (Math.floor(this.goTimer / 30) % 2) this.text(ctx, 'PRESS START', VIEW_W / 2, 670, 20, '#ffd23f', 'center');
+    }
   }
 
   drawLoading(ctx) {
