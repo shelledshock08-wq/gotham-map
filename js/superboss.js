@@ -1041,8 +1041,15 @@ class FinalBattle {
   updateClash(inp) {
     const C = this.clash, R = this.robot, h = this.hero;
     C.t++;
-    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) { C.v += 0.05; this.zoom = Math.max(this.zoom, 1.02); }
-    C.v -= 0.0055 * R.speed();
+    // Tuned so ~5 presses/sec slowly wins and ~8/sec wins in about 2 seconds.
+    // Eggman pushes a little harder late in the fight; losing badly gives a comeback boost.
+    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) {
+      C.v += C.v < 0.3 ? 0.1 : 0.075;
+      C.pulse = 6; this.zoom = Math.max(this.zoom, 1.02);
+    }
+    if (inp.laser) C.v += 0.0012;                    // holding the beam button helps a little
+    C.v -= 0.0045 + 0.001 * (R.speed() - 1);
+    if (C.pulse) C.pulse--;
     if (h.beam) { h.beam.t = 0; h.beam.ang = angTo(h.x, h.y, R.headPos().x, R.headPos().y); }
     this.shake = Math.max(this.shake, 4);
     const p = this.clashPoint();
@@ -1395,7 +1402,8 @@ class FinalBattle {
       ctx.fillStyle = '#ff2a2a'; ctx.fillRect(x, y, w, 20);
       ctx.fillStyle = '#ffd23f'; ctx.fillRect(x, y, w * this.clash.v, 20);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, 20);
-      ctx.fillStyle = '#fff'; ctx.fillRect(x + w * this.clash.v - 3, y - 6, 6, 32);
+      const pz = this.clash.pulse ? 6 : 0;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x + w * this.clash.v - 3 - pz / 2, y - 6 - pz, 6 + pz, 32 + pz * 2);
       g.text(ctx, 'SONIC', x - 10, y + 17, 12, '#ffd23f', 'right', '#000');
       g.text(ctx, 'EGGMAN', x + w + 10, y + 17, 12, '#ff6060', 'left', '#000');
       if (Math.floor(this.clash.t / 8) % 2) {

@@ -4,6 +4,7 @@
 const Input = {
   keys: new Set(),
   hits: new Set(),
+  touchHits: new Set(),
   touch: { left: false, right: false, up: false, down: false, jump: false, start: false, laser: false, clones: false, grab: false },
   prev: { jump: false, start: false, up: false, down: false, left: false, right: false, punch: false, laser: false, clones: false, grab: false },
   state: null,
@@ -39,6 +40,7 @@ const Input = {
     for (const b of btns) {
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault(); Sound.init(); this.lastDevice = 'touch';
+        this.touchHits.add(b.dataset.k);   // remember taps shorter than a frame
         try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         active.set(e.pointerId, b.dataset.k); refresh();
       });
@@ -96,10 +98,14 @@ const Input = {
     const tapClones = hit('KeyC', 'KeyL'), tapGrab = hit('KeyV', 'ShiftLeft', 'ShiftRight', 'KeyI');
     const tapStart = hit('Enter', 'Escape', 'KeyP');
     this.hits.clear();
+    const th = this.touchHits;
+    const tJump = th.has('jump') || th.has('laser') || th.has('clones') || th.has('grab');
+    const tPunch = th.has('jump'), tLaser = th.has('laser'), tClones = th.has('clones'), tGrab = th.has('grab'), tStart = th.has('start');
+    th.clear();
     const s = {
       left, right, up, down, jump, start,
-      jumpPressed: (jump && !this.prev.jump) || tapJump,
-      startPressed: (start && !this.prev.start) || tapStart,
+      jumpPressed: (jump && !this.prev.jump) || tapJump || tJump,
+      startPressed: (start && !this.prev.start) || tapStart || tStart,
       upPressed: up && !this.prev.up,
       downPressed: down && !this.prev.down,
       leftPressed: left && !this.prev.left,
@@ -107,10 +113,10 @@ const Input = {
       tapped,
       mutePressed: k.has('KeyM') && !this.prev.mute,
       punch, laser, clones, grab,
-      punchPressed: (punch && !this.prev.punch) || tapPunch,
-      laserPressed: (laser && !this.prev.laser) || tapLaser,
-      clonesPressed: (clones && !this.prev.clones) || tapClones,
-      grabPressed: (grab && !this.prev.grab) || tapGrab,
+      punchPressed: (punch && !this.prev.punch) || tapPunch || tPunch,
+      laserPressed: (laser && !this.prev.laser) || tapLaser || tLaser,
+      clonesPressed: (clones && !this.prev.clones) || tapClones || tClones,
+      grabPressed: (grab && !this.prev.grab) || tapGrab || tGrab,
     };
     this.prev = { jump, start, up, down, left, right, mute: k.has('KeyM'), punch, laser, clones, grab };
     this.state = s;

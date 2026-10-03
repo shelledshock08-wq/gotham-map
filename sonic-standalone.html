@@ -3454,8 +3454,15 @@ class FinalBattle {
   updateClash(inp) {
     const C = this.clash, R = this.robot, h = this.hero;
     C.t++;
-    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) { C.v += 0.05; this.zoom = Math.max(this.zoom, 1.02); }
-    C.v -= 0.0055 * R.speed();
+    // Tuned so ~5 presses/sec slowly wins and ~8/sec wins in about 2 seconds.
+    // Eggman pushes a little harder late in the fight; losing badly gives a comeback boost.
+    if (inp.punchPressed || inp.laserPressed || inp.jumpPressed) {
+      C.v += C.v < 0.3 ? 0.1 : 0.075;
+      C.pulse = 6; this.zoom = Math.max(this.zoom, 1.02);
+    }
+    if (inp.laser) C.v += 0.0012;                    // holding the beam button helps a little
+    C.v -= 0.0045 + 0.001 * (R.speed() - 1);
+    if (C.pulse) C.pulse--;
     if (h.beam) { h.beam.t = 0; h.beam.ang = angTo(h.x, h.y, R.headPos().x, R.headPos().y); }
     this.shake = Math.max(this.shake, 4);
     const p = this.clashPoint();
@@ -3808,7 +3815,8 @@ class FinalBattle {
       ctx.fillStyle = '#ff2a2a'; ctx.fillRect(x, y, w, 20);
       ctx.fillStyle = '#ffd23f'; ctx.fillRect(x, y, w * this.clash.v, 20);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, 20);
-      ctx.fillStyle = '#fff'; ctx.fillRect(x + w * this.clash.v - 3, y - 6, 6, 32);
+      const pz = this.clash.pulse ? 6 : 0;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x + w * this.clash.v - 3 - pz / 2, y - 6 - pz, 6 + pz, 32 + pz * 2);
       g.text(ctx, 'SONIC', x - 10, y + 17, 12, '#ffd23f', 'right', '#000');
       g.text(ctx, 'EGGMAN', x + w + 10, y + 17, 12, '#ff6060', 'left', '#000');
       if (Math.floor(this.clash.t / 8) % 2) {
@@ -4262,6 +4270,7 @@ class SpeechSystem {
 const Input = {
   keys: new Set(),
   hits: new Set(),
+  touchHits: new Set(),
   touch: { left: false, right: false, up: false, down: false, jump: false, start: false, laser: false, clones: false, grab: false },
   prev: { jump: false, start: false, up: false, down: false, left: false, right: false, punch: false, laser: false, clones: false, grab: false },
   state: null,
@@ -4297,6 +4306,7 @@ const Input = {
     for (const b of btns) {
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault(); Sound.init(); this.lastDevice = 'touch';
+        this.touchHits.add(b.dataset.k);   // remember taps shorter than a frame
         try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         active.set(e.pointerId, b.dataset.k); refresh();
       });
@@ -4354,10 +4364,14 @@ const Input = {
     const tapClones = hit('KeyC', 'KeyL'), tapGrab = hit('KeyV', 'ShiftLeft', 'ShiftRight', 'KeyI');
     const tapStart = hit('Enter', 'Escape', 'KeyP');
     this.hits.clear();
+    const th = this.touchHits;
+    const tJump = th.has('jump') || th.has('laser') || th.has('clones') || th.has('grab');
+    const tPunch = th.has('jump'), tLaser = th.has('laser'), tClones = th.has('clones'), tGrab = th.has('grab'), tStart = th.has('start');
+    th.clear();
     const s = {
       left, right, up, down, jump, start,
-      jumpPressed: (jump && !this.prev.jump) || tapJump,
-      startPressed: (start && !this.prev.start) || tapStart,
+      jumpPressed: (jump && !this.prev.jump) || tapJump || tJump,
+      startPressed: (start && !this.prev.start) || tapStart || tStart,
       upPressed: up && !this.prev.up,
       downPressed: down && !this.prev.down,
       leftPressed: left && !this.prev.left,
@@ -4365,10 +4379,10 @@ const Input = {
       tapped,
       mutePressed: k.has('KeyM') && !this.prev.mute,
       punch, laser, clones, grab,
-      punchPressed: (punch && !this.prev.punch) || tapPunch,
-      laserPressed: (laser && !this.prev.laser) || tapLaser,
-      clonesPressed: (clones && !this.prev.clones) || tapClones,
-      grabPressed: (grab && !this.prev.grab) || tapGrab,
+      punchPressed: (punch && !this.prev.punch) || tapPunch || tPunch,
+      laserPressed: (laser && !this.prev.laser) || tapLaser || tLaser,
+      clonesPressed: (clones && !this.prev.clones) || tapClones || tClones,
+      grabPressed: (grab && !this.prev.grab) || tapGrab || tGrab,
     };
     this.prev = { jump, start, up, down, left, right, mute: k.has('KeyM'), punch, laser, clones, grab };
     this.state = s;
