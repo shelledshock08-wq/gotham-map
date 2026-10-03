@@ -19,7 +19,7 @@ def data_uri(rel):
 html = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
 
 embedded = {}
-subs = ['assets/tiles', 'assets/enemies', 'assets/bg', 'assets/sfx', 'assets/sonic']
+subs = ['assets/tiles', 'assets/enemies', 'assets/bg', 'assets/sfx', 'assets/sonic', 'assets/voice']
 if WITH_MUSIC and os.path.isdir(os.path.join(ROOT, 'assets/music')): subs.append('assets/music')
 for sub in subs:
     for name in sorted(os.listdir(os.path.join(ROOT, sub))):

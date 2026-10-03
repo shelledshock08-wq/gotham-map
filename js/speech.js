@@ -7,6 +7,11 @@ const KEY_LABELS = {
   pad:   { punch: 'A', jump: 'A', laser: 'X', clones: 'Y', grab: 'B', down: '↓' },
   touch: { punch: 'A', jump: 'A', laser: 'B', clones: 'X', grab: 'Y', down: '▼' },
 };
+// Must match norm() in tools/make_voices.py
+function voiceKey(text) {
+  return text.replace(/\{\w+\}/g, ' ').toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+}
+
 function keyLabel(action) {
   const dev = (window.Input && Input.lastDevice) || 'kb';
   return (KEY_LABELS[dev] || KEY_LABELS.kb)[action] || action.toUpperCase();
@@ -56,8 +61,11 @@ class SpeechSystem {
     const cur = this.list.find((b) => b.who === who);
     if (cur && (cur.prio || 0) > (opts.prio || 0) && cur.t < cur.dur * 0.6) return false;
     this.list = this.list.filter((b) => b.who !== who);
-    this.list.push({ who, text, t: 0, dur: opts.dur || 170, big: !!opts.big, prio: opts.prio || 0 });
-    if (who === 'sonic') Sound.play('select', { vol: 0.25, rate: 1.6 });
+    let dur = opts.dur || 170;
+    const clip = typeof VOICE_LINES !== 'undefined' && VOICE_LINES[voiceKey(text)];
+    if (clip) { Sound.voice(who, clip[0], clip[1]); dur = Math.max(dur, Math.round(clip[1] * 60) + 50); }
+    else if (who === 'sonic') Sound.play('select', { vol: 0.25, rate: 1.6 });
+    this.list.push({ who, text, t: 0, dur, big: !!opts.big, prio: opts.prio || 0 });
     return true;
   }
 

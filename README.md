@@ -49,7 +49,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - Springs (yellow and red, up and sideways), spikes, checkpoints (star posts), and a spinning end-of-act signpost.
 - Badniks: slime, ladybug, mouse, hopping frog, hovering fly, a bee that fires stingers, and an indestructible saw. Defeating one frees an animal, and chained hits score 100, 200, 500 and then 1000.
 - Homing attack with a lock-on reticle: chain enemies in mid-air (flying badniks are placed over pits for this). Hits get impact freeze frames, screen shake and a combo counter; from the 3rd hit in a chain each kill also gives a ring.
-- Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen.
+- Speech bubbles: Sonic and Eggman talk, and Sonic calls out what to do next with the right button for your keyboard, gamepad or touch screen. Every line is voiced; music ducks while they speak.
 - 3 acts: **Emerald Meadow**, **Sunset Dunes** and **Starlight Fortress**. The last act ends in a boss fight with Dr. Eggman's egg-craft (8 hits, two phases).
 - **Final battle:** after the egg-craft falls, it docks as the head of the giant **Egg Colossus**. The Chaos Emeralds turn Sonic into Super Sonic for a free-flight fight with Frontiers-style moves: light fists, a charged laser, light clones, ripping off the robot's arms, missile pods and chest plate and throwing them back at its core, and beam clashes against Eggman's eye laser. Super form drains a ring per second; if you run out you lose a life and retry from the transformation.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
@@ -70,6 +70,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/input.js` | Keyboard, gamepad and touch input |
 | `js/game.js` | State machine, camera, HUD, main loop |
 | `js/speech.js` | Speech bubbles and button prompts |
+| `js/voicelines.js` | Generated map of dialogue lines to voice clips |
 | `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 
 ## Credits & licenses
@@ -79,6 +80,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **Sonic sprites:** fan-ripped 8-bit Sonic sprite sheet from [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML), downsampled to native resolution. Super Sonic is a gold recolor of the same frames.
 - **Rings, monitors, bosses, Egg Colossus, effects, chiptune music:** drawn and composed in code for this project.
 - **Final battle song:** the game plays `assets/music/with_me.mp3` if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).
+- **Voices:** generated offline with [Piper](https://github.com/rhasspy/piper) neural TTS (voices `en-us-ryan-high` for Sonic and `en-gb-alan-low` for Eggman, pitch/EQ-shaped with ffmpeg). These are original AI voices, not clones of the official voice actors. Regenerate with `python3 tools/make_voices.py` after editing lines.
 - **Font:** Press Start 2P (SIL OFL), bundled in `assets/fonts` (from `@fontsource/press-start-2p`).
 
 This is an unofficial, non-commercial fan game. Sonic the Hedgehog, Super Sonic, Dr. Eggman and the original sprites are property of SEGA. This project is not affiliated with or endorsed by SEGA. Don't sell it or monetize it.
