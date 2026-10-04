@@ -739,14 +739,20 @@ class TornadoStage {
   launchMissile(target, i) {
     if (!this.scene) return;
     const P = this.planePos(this.v3), side = i % 2 ? 1 : -1;
-    const m = new THREE.Group(); m.scale.setScalar(1.6);
+    const m = new THREE.Group(); m.scale.setScalar(2.3);
     const body = new THREE.Mesh(this.missileGeo, this.missileMat); m.add(body);
     const tip = new THREE.Mesh(this.missileTipGeo, this.missileTipMat); tip.position.z = 0.5; m.add(tip);
     const fl = new THREE.Sprite(this.flameMat); fl.scale.set(0.6, 0.6, 1); fl.position.z = -0.6; m.add(fl);
+    const cone = new THREE.Mesh(this.exhaustGeo || (this.exhaustGeo = new THREE.ConeGeometry(0.16, 1.4, 10, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -1.25)), new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.add(cone);
+    // launch flash at the pylon
+    const mf = new THREE.Sprite(this.glowMat.clone()); mf.material.color.setHex(0xffe0a0); mf.position.set(P.x + side * (1.6 + (i >> 1) * 0.5), P.y - 0.1, 0.6); this.scene.add(mf);
+    this.fx.push({ m: mf, t: 0, dur: 10, size: 3, v: new THREE.Vector3(), own: true });
+    this.shake = Math.max(this.shake, 4); this.fovKick = Math.max(this.fovKick || 0, 2);
     m.position.set(P.x + side * (1.6 + (i >> 1) * 0.5), P.y - 0.1, 0.6); this.scene.add(m);
     // drop off the pylon, then the motor lights and it curls toward its lock
-    this.shots.push({ m, flame: fl, v: new THREE.Vector3(side * 0.12, -0.06, 0.5), t: 0, dmg: 5, missile: true, target, spin: Math.random() * 6, side });
-    Sound.play('release', { vol: 0.7, rate: 0.8 + i * 0.05 });
+    this.shots.push({ m, flame: fl, cone, v: new THREE.Vector3(side * 0.12, -0.06, 0.5), t: 0, dmg: 5, missile: true, target, spin: Math.random() * 6, side });
+    Sound.play('release', { vol: 0.8, rate: 0.7 + i * 0.05 }); Sound.play('boom', { vol: 0.25, rate: 2.2 });
   }
 
   // ------------------------------------------------------- spawning
@@ -1111,6 +1117,7 @@ class TornadoStage {
     const playing = this.phase === 'sky' || this.phase === 'board';
     for (const f of this.foes) {
       if (f.frozenT > 0) { if (--f.frozenT === 0) this.thaw(f); continue; }
+      if (f.held || (this.flight && this.flight.thrown.some((T) => T.f === f))) continue;
       f.t++;
       if (f.kind === 'bird') {
         // infected birds swoop in to land on the wing (plane space)
@@ -1185,9 +1192,9 @@ class TornadoStage {
           const wob = Math.max(0, 1 - (s.t - 8) / 30) * 0.35;
           want.x += Math.cos(s.t * 0.5 + s.spin) * wob; want.y += Math.sin(s.t * 0.5 + s.spin) * wob;
           s.v.lerp(want, s.t < 20 ? 0.08 : 0.2);
-          s.flame.scale.setScalar(1.6 + Math.random() * 0.9);
+          s.flame.scale.setScalar(1.0 + Math.random() * 0.5); s.cone.material.opacity = 0.7 + Math.random() * 0.3; s.cone.scale.z = 0.8 + Math.random() * 0.6;
           const sm = new THREE.Sprite(this.smokeMat.clone()); sm.material.color.setHex(0xe8dcd8); sm.position.copy(s.m.position); this.scene.add(sm);
-          this.fx.push({ m: sm, t: 0, dur: 55, size: 1.3, vy: 0, smoke: true, v: new THREE.Vector3(0, 0.01, -1.1) });
+          this.fx.push({ m: sm, t: 0, dur: 70, size: 2.0, vy: 0, smoke: true, v: new THREE.Vector3(0, 0.01, -1.1) });
           if (s.t % 2) { const sp = new THREE.Sprite(this.flameMat); sp.position.copy(s.m.position); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 8, size: 0.9, v: new THREE.Vector3(0, 0, -1.1), shrink: true }); }
         } else s.v.y -= 0.01;
         s.m.lookAt(s.m.position.clone().add(s.v));
@@ -1222,14 +1229,15 @@ class TornadoStage {
     ring.position.copy(pos); ring.quaternion.copy(this.camera.quaternion); S.add(ring);
     this.fx.push({ m: ring, t: 0, dur: 20, size: 2, grow: 16, v: new THREE.Vector3(0, 0, -0.6), own: true, ring: true });
     for (let i = 0; i < 4; i++) { const sm = new THREE.Sprite(this.smokeMat.clone()); sm.position.copy(pos); S.add(sm); this.fx.push({ m: sm, t: 0, dur: 60, size: 4, vy: 0.02, smoke: true, v: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.04, -0.6) }); }
-    this.shake = Math.max(this.shake, 9); this.flash = Math.max(this.flash, 0.08);
-    Sound.play('boom', { vol: 0.9, rate: 0.7 + Math.random() * 0.2 });
+    this.shake = Math.max(this.shake, 12); this.flash = Math.max(this.flash, 0.12); this.fovKick = Math.max(this.fovKick || 0, 4);
+    Sound.play('boom', { vol: 1, rate: 0.6 + Math.random() * 0.2 });
   }
 
   killFoe(f) {
     f.dead = true; f.hp = 0;
     const pos = new THREE.Vector3(f.x, f.y, f.z);
-    this.burstAt(pos, f.kind === 'jet' ? 2.4 : 1.4);
+    if (f.kind === 'jet' || f.kind === 'drone') this.explode(pos, f.kind === 'jet' ? 1.6 : 1, f.kind === 'jet');
+    else this.burstAt(pos, 1.4);
     for (let i = 0; i < 6; i++) {
       const c = new THREE.Mesh(this.bitGeo || (this.bitGeo = new THREE.BoxGeometry(0.12, 0.03, 0.2)), new THREE.MeshLambertMaterial({ color: i % 3 ? 0x59605a : 0x7dff4a }));
       c.scale.setScalar(4); c.position.copy(pos); this.scene.add(c);
@@ -1242,6 +1250,33 @@ class TornadoStage {
     if (f.kind !== 'bird') this.hull = Math.min(100, this.hull + 1);
     // power-ups: rings patch the plane up, the capsule gives hyper lasers
     if (f.kind !== 'bird') { const r = Math.random(); if (r < 0.22) this.dropItem(pos, 'ring'); else if (r < 0.3) this.dropItem(pos, 'laser'); }
+  }
+
+  // a proper kill: a rolling fireball, a shockwave, and the wreck breaking up
+  // into burning pieces that fall away trailing smoke
+  explode(pos, big = 1, wreck = true) {
+    const S = this.scene;
+    for (let i = 0; i < 10; i++) {
+      const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex([0xffffff, 0xfff0a0, 0xffb040, 0xff6a10, 0xd02008][i % 5]);
+      sp.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 3 * big, (Math.random() - 0.5) * 2 * big, (Math.random() - 0.5) * 3 * big)); S.add(sp);
+      this.fx.push({ m: sp, t: 0, dur: 18 + i * 3, size: (4 + i * 0.8) * big, v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.04, -0.5), own: true });
+    }
+    for (let i = 0; i < 6; i++) { const sm = new THREE.Sprite(this.smokeMat.clone()); sm.material.color.setHex(0x2a1e1e); sm.position.copy(pos); S.add(sm); this.fx.push({ m: sm, t: 0, dur: 70, size: 5 * big, vy: 0.02, smoke: true, v: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.06, -0.55) }); }
+    const ring = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 28)), new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.position.copy(pos); ring.quaternion.copy(this.camera.quaternion); S.add(ring);
+    this.fx.push({ m: ring, t: 0, dur: 20, size: 2 * big, grow: 14 * big, v: new THREE.Vector3(0, 0, -0.5), own: true, ring: true });
+    if (wreck) {
+      const parts = [[new THREE.BoxGeometry(2.6, 0.12, 1.2), 0x59605a], [new THREE.BoxGeometry(2.4, 0.12, 1.1), 0x59605a], [new THREE.CylinderGeometry(0.4, 0.5, 2.4, 8), 0x4a504a], [new THREE.ConeGeometry(0.4, 1.3, 8), 0xa01818]];
+      for (const [geo, col] of parts) {
+        const c = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col, emissive: 0x1a0800 }));
+        c.scale.setScalar(big * 0.7); c.position.copy(pos); S.add(c);
+        this.debris.push({ m: c, t: 0, fire: true, v: new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.1 + Math.random() * 0.3, -0.3 - Math.random() * 0.4), spin: { x: (Math.random() - 0.5) * 0.3, z: (Math.random() - 0.5) * 0.3 } });
+      }
+    }
+    const d = pos.distanceTo(this.camera.position), near = Math.max(0, 1 - d / 120);
+    this.shake = Math.max(this.shake, 6 + near * 14); this.flash = Math.max(this.flash, 0.06 + near * 0.15);
+    Sound.play('boom', { vol: 0.7 + near * 0.3, rate: 0.55 + Math.random() * 0.2 });
+    this.g.later(6, () => Sound.play('boom', { vol: 0.4, rate: 0.9 }));
   }
 
   dropItem(pos, kind) {
@@ -1440,8 +1475,14 @@ class TornadoStage {
     this.fx = this.fx.filter((f) => !f.dead);
     for (const d of this.debris) {
       d.t++; d.v.y -= 0.012; d.m.position.add(d.v);
+      if (d.fire && d.t % 3 === 0 && d.t < 150) {
+        const f = new THREE.Sprite(this.glowMat.clone()); f.material.color.setHex(d.t % 6 ? 0xff7a20 : 0xffd060); f.position.copy(d.m.position); this.scene.add(f);
+        this.fx.push({ m: f, t: 0, dur: 14, size: 1.6, v: new THREE.Vector3(0, 0.02, -0.3), own: true, shrink: true });
+        const sm = new THREE.Sprite(this.smokeMat.clone()); sm.material.color.setHex(0x2a2222); sm.position.copy(d.m.position); this.scene.add(sm);
+        this.fx.push({ m: sm, t: 0, dur: 45, size: 1.8, vy: 0.02, smoke: true, v: new THREE.Vector3(0, 0.03, -0.35) });
+      }
       d.m.rotation.x += d.spin.x; d.m.rotation.z += d.spin.z;
-      if (d.t > 200) { this.scene.remove(d.m); if (d.m.material && d.m.geometry === this.bitGeo) d.m.material.dispose(); d.dead = true; }
+      if (d.t > 200) { this.scene.remove(d.m); if (d.m.material && (d.m.geometry === this.bitGeo || d.fire)) d.m.material.dispose(); if (d.fire) d.m.geometry.dispose(); d.dead = true; }
     }
     this.debris = this.debris.filter((d) => !d.dead);
     // world scroll: clouds and the sea rush past
@@ -1529,11 +1570,11 @@ class TornadoStage {
     Sound.play('checkpoint', { rate: 1.2 });
     const F = this.fighters.sonic; F.atk = null; if (F.hold) this.dropHeld(F);
     switch (n) {
-      case 1: this.startFlight(); break;
+      case 1: this.startFlight(false); break;
       case 2: this.freezeT = 480; this.freezeFire = 100; Sound.play('shield', { rate: 0.5 }); g.speech.say('tails', 'Freeze ray! Get them off the wing!', { dur: 90, prio: 6 }); break;
       case 3: this.shieldT = 480; this.shieldMesh.visible = true; Sound.play('shield'); g.speech.say('tails', 'Shield up! Hold on, we\'re ramming them!', { dur: 100, prio: 6 }); break;
       case 4: this.autoT = 480; this.startStrike(['sonic', 'tails'], { max: 99, speed: 1.9, both: true, limit: 450 }); g.speech.say('tails', 'Autopilot on! Together, Sonic!', { dur: 90, prio: 6 }); break;
-      case 5: this.superT = 720; this.goSuper(true); this.startStrike(['sonic'], { max: 999, speed: 3.0, both: true, limit: 720, super: true }); g.speech.say('sonic', 'Time to stop playing around.', { dur: 100, prio: 6 }); break;
+      case 5: this.startFlight(true); break;
     }
   }
 
@@ -1570,7 +1611,7 @@ class TornadoStage {
     if (this.superT > 0) {
       this.superT--;
       if (this.t % 2 === 0) this.sparkAt(this.sonic.root, 0xffe060, 2);
-      if (!this.superT) this.goSuper(false);
+      if (!this.superT && !this.flight) this.goSuper(false);
     }
     if (this.striker) this.updateStrike();
   }
@@ -1617,28 +1658,39 @@ class TornadoStage {
 
   // ---- 1: SONIC MISSILE. Tails fires Sonic into the sky and YOU fly him:
   // steer, and homing-attack (punch) through the birds, Zombots and jets.
-  startFlight() {
+  // ---- 5: SUPER SONIC uses the same flight, with the moveset from the Egg
+  // Colossus fight and the brawl: lock-on fists, the charged laser, light
+  // clones, and grabbing one to beat it to a pulp before throwing it.
+  startFlight(sup = false) {
     const S = this.scene, M = this.sonic, F = this.fighters.sonic;
     F.atk = null; if (F.hold) this.dropHeld(F);
     this.away.sonic = true; M.root.updateWorldMatrix(true, false); S.attach(M.root);
     const pos = new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld);
-    this.flight = { t: 0, pos, v: new THREE.Vector3(0, 0.55, 0.5), homing: null, combo: 0, returning: false };
-    // a flock of infected birds to tear through
+    this.flight = { t: 0, pos, v: new THREE.Vector3(0, 0.55, 0.5), homing: null, combo: 0, returning: false, sup,
+      dur: sup ? 900 : 660, stage: 0, stageT: 0, charge: 0, beam: null, laserCD: 0, cloneCD: 0, clones: [], hold: null, pummel: 0, thrown: [], strike: 0 };
     if (!this.birdTpl) this.spawnWave('none', 0);
-    const P = this.planePos(new THREE.Vector3());
-    for (let i = 0; i < 7; i++) {
-      const m = this.birdTpl.clone(); m.scale.setScalar(1.8); this.scene.add(m);
-      this.foes.push({ kind: 'flyer', m, x: P.x + (Math.random() - 0.5) * 18, y: P.y + 5 + Math.random() * 8, z: 40 + i * 9, bx: 0, t: 0, hp: 1, r: 1.6, ph: Math.random() * 6 });
-    }
+    for (let i = 0; i < 7; i++) this.spawnFlyer(30 + i * 9);
     Sound.play('boom', { rate: 1.2, vol: 0.7 }); Sound.boostBurst(); this.flash = 0.3; this.shake = 10;
-    this.g.speech.say('tails', 'Launching you, Sonic! Go get them!', { dur: 90, prio: 6 });
-    this.g.later(40, () => this.g.speech.say('sonic', `Homing attack with [${keyLabel('punch')}]!`, { dur: 90, prio: 5 }));
+    if (sup) {
+      this.superT = this.flight.dur; this.goSuper(true);
+      this.g.speech.say('sonic', 'Time to stop playing around.', { dur: 100, prio: 6 });
+      this.g.later(70, () => this.g.speech.say('sonic', `[${keyLabel('punch')}] fists  hold [${keyLabel('laser')}] laser  [${keyLabel('clones')}] clones  [${keyLabel('grab')}] grab!`, { dur: 150, prio: 5 }));
+    } else {
+      this.g.speech.say('tails', 'Launching you, Sonic! Go get them!', { dur: 90, prio: 6 });
+      this.g.later(40, () => this.g.speech.say('sonic', `Homing attack with [${keyLabel('punch')}]!`, { dur: 90, prio: 5 }));
+    }
   }
 
-  flightTarget() {
-    const fl = this.flight; let best = null, bd = 48;
+  spawnFlyer(dz) {
+    const fl = this.flight, P = this.planePos(new THREE.Vector3()), at = fl ? fl.pos : P;
+    const m = this.birdTpl.clone(); m.scale.setScalar(1.8); this.scene.add(m);
+    this.foes.push({ kind: 'flyer', m, x: at.x + (Math.random() - 0.5) * 22, y: Math.max(P.y + 2, at.y + (Math.random() - 0.4) * 12), z: at.z + dz, t: 0, hp: 1, r: 1.6, ph: Math.random() * 6 });
+  }
+
+  flightTarget(range = 48) {
+    const fl = this.flight; let best = null, bd = range;
     for (const f of this.foes) {
-      if (f.dead || f.hp <= 0) continue;
+      if (f.dead || f.hp <= 0 || (fl.hold && fl.hold.f === f)) continue;
       const d = Math.hypot(f.x - fl.pos.x, f.y - fl.pos.y, f.z - fl.pos.z);
       if (f.z < fl.pos.z - 3) continue;
       const score = d + Math.abs(f.x - fl.pos.x) * 0.5;
@@ -1647,61 +1699,257 @@ class TornadoStage {
     return best;
   }
 
+  // a hit from Sonic in the sky: damage, a flash, and a proper death when it dies
+  skyHit(f, dmg, power, word) {
+    f.hp -= dmg;
+    const p = new THREE.Vector3(f.x, f.y, f.z);
+    const fl = this.glowMat.clone(); fl.color.setHex(0xffffff);
+    const sp = new THREE.Sprite(fl); sp.position.copy(p); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 8, size: 2.5 * power, v: new THREE.Vector3(), own: true });
+    this.pops.push({ text: word, p: p.clone().add(new THREE.Vector3(0, 1, 0)), t: 0, big: power > 1.4, rot: (Math.random() - 0.5) * 0.4 });
+    Sound.punch(power * 1.2); if (power > 1.4) Sound.play('bosshit', { vol: 0.6 });
+    this.shake = Math.max(this.shake, 4 + power * 4); this.g.hitStop = Math.max(this.g.hitStop || 0, power > 1.4 ? 5 : 3); this.fovKick = Math.max(this.fovKick || 0, power * 3);
+    if (f.hp <= 0) { if (f.kind === 'flyer' || f.kind === 'bird') this.gore(p, 14); this.killFoe(f); this.rings += 1; }
+  }
+
+  // a beating leaves a mess: oil, blood and infected green, and bits of them
+  gore(p, n) {
+    for (let i = 0; i < n; i++) {
+      const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.blending = THREE.NormalBlending;
+      sp.material.color.setHex([0x7a0a0a, 0x4a0606, 0x3a7a1a, 0x1a1a1a][i % 4]); sp.position.copy(p); this.scene.add(sp);
+      const a = Math.random() * 6.3, v = 0.1 + Math.random() * 0.25;
+      this.fx.push({ m: sp, t: 0, dur: 22 + Math.random() * 14, size: 0.5 + Math.random() * 0.6, v: new THREE.Vector3(Math.cos(a) * v, Math.sin(a) * v - 0.05, (Math.random() - 0.5) * v), own: true, shrink: true });
+    }
+    for (let i = 0; i < n / 2; i++) {
+      const c = new THREE.Mesh(this.bitGeo || (this.bitGeo = new THREE.BoxGeometry(0.12, 0.03, 0.2)), new THREE.MeshLambertMaterial({ color: i % 2 ? 0x4a7a8c : 0x6a0a0a }));
+      c.scale.setScalar(2); c.position.copy(p); this.scene.add(c);
+      this.debris.push({ m: c, t: 90, v: new THREE.Vector3((Math.random() - 0.5) * 0.4, Math.random() * 0.3, (Math.random() - 0.5) * 0.4 - 0.2), spin: { x: Math.random() * 0.4, z: Math.random() * 0.4 } });
+    }
+  }
+
   updateFlight(inp) {
     const fl = this.flight, M = this.sonic, P = this.planePos(new THREE.Vector3());
     fl.t++;
-    if (!fl.returning && (fl.t > 660 || fl.pos.y < P.y - 9)) { fl.returning = true; fl.homing = null; this.g.speech.say('sonic', 'Coming back down!', { dur: 60 }); }
+    // there's always something to hit until he's back on the plane
+    if (!fl.returning) {
+      const live = this.foes.filter((f) => !f.dead && f.hp > 0 && f.z > fl.pos.z - 4 && f.z < fl.pos.z + 90).length;
+      if (live < (fl.sup ? 9 : 6) && fl.t % 18 === 0) this.spawnFlyer(45 + Math.random() * 30);
+      if (fl.sup && fl.t % 150 === 75) this.spawnWave(Math.random() < 0.5 ? 'drones' : 'vee', fl.sup ? 3 : 2);
+    }
+    if (!fl.returning && (fl.t > fl.dur || (!fl.sup && fl.pos.y < P.y - 9))) {
+      fl.returning = true; fl.homing = null; this.flightDrop();
+      this.g.speech.say('sonic', fl.sup ? "That's enough." : 'Coming back down!', { dur: 60 });
+      if (fl.sup) { this.superT = 0; this.goSuper(false); }
+    }
+    for (const c of fl.clones) this.updateClone(c);
+    fl.clones = fl.clones.filter((c) => !c.dead);
+    this.updateThrown();
+    let pose = 'superman';
     if (fl.returning) {
       const to = this.plane.root.localToWorld(new THREE.Vector3(this.fighters.sonic.x, TW.wingY + 0.3, TW.wingZ));
       const d = to.clone().sub(fl.pos);
-      if (d.length() < 0.8) {
-        this.away.sonic = false; this.plane.root.attach(M.root); M.root.rotation.set(0, 0, 0);
-        M.ball.visible = false; M.body.visible = true; this.flight = null; this.placeChars();
-        Sound.play('skid', { vol: 0.5 }); return;
-      }
+      if (d.length() < 0.8) { this.endFlight(); Sound.play('skid', { vol: 0.5 }); return; }
       fl.pos.add(d.multiplyScalar(Math.min(1, 1.6 / d.length())));
+      pose = 'ball';
+    } else if (fl.hold) {
+      pose = this.updatePummel(inp);
     } else if (fl.homing) {
       const f = fl.homing;
       if (f.dead || f.hp <= 0) fl.homing = null;
       else {
         const to = new THREE.Vector3(f.x, f.y, f.z), d = to.clone().sub(fl.pos), dist = d.length();
-        fl.pos.add(d.multiplyScalar(Math.min(1, 2.8 / dist)));
+        fl.pos.add(d.multiplyScalar(Math.min(1, (fl.sup ? 3.4 : 2.8) / dist)));
+        pose = fl.sup ? 'lunge' : 'ball';
         if (dist < 1.8) {
-          // bonk: it comes apart, Sonic bounces up for the next one
-          this.shatter(f.m, f.kind === 'jet' ? 0x59605a : f.kind === 'drone' ? 0x6f6a52 : 0x4a7a8c, 18);
-          this.killFoe(f);
-          fl.combo++; fl.homing = null; fl.v.set(0, 0.42, 0.12);
-          this.pops.push({ text: fl.combo > 1 ? `HOMING x${fl.combo}` : 'HOMING!', p: fl.pos.clone(), t: 0, big: true, rot: (Math.random() - 0.5) * 0.3 });
-          Sound.punch(1.6); Sound.play('spring', { rate: 1.3, vol: 0.6 }); this.shake = 9; this.g.hitStop = 4; this.fovKick = 6;
-          this.rings += 1;
+          if (fl.sup) {
+            // the light fist combo: two quick hits, the third an uppercut that launches it
+            const third = fl.stage === 2;
+            fl.strike = 14; fl.strikeSide = fl.stage;
+            this.skyHit(f, third ? 4 : 1, third ? 2 : 1.2, third ? 'UPPERCUT!' : ['POW!', 'BAM!'][fl.stage]);
+            if (third && f.hp > 0) { f.hp = 0; this.killFoe(f); }
+            fl.stage = (fl.stage + 1) % 3; fl.stageT = 40;
+            fl.homing = null; fl.v.set(0, 0.05, 0);
+            fl.pos.add(d.normalize().multiplyScalar(-1.2));   // stay right in its face
+          } else {
+            // bonk: it comes apart, Sonic bounces up for the next one
+            this.shatter(f.m, f.kind === 'jet' ? 0x59605a : f.kind === 'drone' ? 0x6f6a52 : 0x4a7a8c, 18);
+            this.killFoe(f);
+            fl.combo++; fl.homing = null; fl.v.set(0, 0.42, 0.12);
+            this.pops.push({ text: fl.combo > 1 ? `HOMING x${fl.combo}` : 'HOMING!', p: fl.pos.clone(), t: 0, big: true, rot: (Math.random() - 0.5) * 0.3 });
+            Sound.punch(1.6); Sound.play('spring', { rate: 1.3, vol: 0.6 }); this.shake = 9; this.g.hitStop = 4; this.fovKick = 6;
+            this.rings += 1;
+          }
         }
       }
     } else {
       const hx = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0, hy = inp ? (inp.up ? 1 : 0) - (inp.down ? 1 : 0) : 0;
-      fl.v.x = (fl.v.x - hx * 0.03) * 0.93;
-      fl.v.y = Math.max(-0.5, fl.v.y - 0.01 + hy * 0.008);
-      fl.v.z = Math.max(0.12, fl.v.z * 0.97);
+      if (fl.sup) {
+        // Super Sonic flies wherever you point him; no gravity
+        fl.v.x = (fl.v.x - hx * 0.07) * 0.88; fl.v.y = (fl.v.y + hy * 0.06) * 0.88; fl.v.z += ((22 + P.z) - fl.pos.z) * 0.002; fl.v.z *= 0.9;
+      } else {
+        fl.v.x = (fl.v.x - hx * 0.03) * 0.93;
+        fl.v.y = Math.max(-0.5, fl.v.y - 0.01 + hy * 0.008);
+        fl.v.z = Math.max(0.12, fl.v.z * 0.97);
+      }
       fl.pos.add(fl.v);
       fl.pos.z = Math.min(70, fl.pos.z);
+      if (fl.sup) fl.pos.y = Math.max(P.y - 3, Math.min(P.y + 26, fl.pos.y));
       if (inp && inp.punchPressed) {
-        const tg = this.flightTarget();
+        const tg = this.flightTarget(fl.sup ? 60 : 48);
         if (tg) { fl.homing = tg; Sound.play('release', { rate: 1.5, vol: 0.7 }); }
         else { fl.v.z = 1.2; fl.v.y = Math.max(fl.v.y, 0.05); Sound.play('release', { vol: 0.5 }); }   // air dash
       }
+      if (fl.sup && inp) this.superMoves(inp);
+      if (fl.charge > 0) pose = 'charge';
     }
-    // pose: a ball while homing, falling otherwise
+    if (fl.stageT > 0 && --fl.stageT === 0) fl.stage = 0;
+    if (fl.strike > 0) { fl.strike--; pose = fl.strikeSide === 2 ? 'uppercut' : fl.strikeSide ? 'cross' : 'jab'; }
+    if (fl.beam) this.updateBeam();
+    this.poseFlight(pose);
+  }
+
+  // ---- Super Sonic's moves (hold the laser, light clones, the grab)
+  superMoves(inp) {
+    const fl = this.flight;
+    if (fl.laserCD > 0) fl.laserCD--;
+    if (fl.cloneCD > 0) fl.cloneCD--;
+    if (inp.laser && fl.laserCD <= 0 && !fl.beam) {
+      fl.charge = Math.min(60, fl.charge + 1);
+      if (fl.charge % 10 === 1) Sound.play('charge', { rate: 0.8 + fl.charge / 60, vol: 0.5 });
+      if (this.t % 2 === 0) this.sparkAt(this.sonic.root, 0xffe060, 2);
+    } else if (fl.charge > 0) this.fireLaser();
+    if (inp.clonesPressed && fl.cloneCD <= 0) {
+      // light clones: golden afterimages that home in on the nearest four
+      const targets = this.foes.filter((f) => !f.dead && f.hp > 0 && f.z > fl.pos.z - 4).sort((a, b) => Math.hypot(a.x - fl.pos.x, a.y - fl.pos.y, a.z - fl.pos.z) - Math.hypot(b.x - fl.pos.x, b.y - fl.pos.y, b.z - fl.pos.z)).slice(0, 4);
+      for (const f of targets) {
+        const m = new THREE.Sprite(this.glowMat.clone()); m.material.color.setHex(0xffd040); m.scale.setScalar(2.2); m.position.copy(fl.pos); this.scene.add(m);
+        fl.clones.push({ m, f, t: 0 });
+      }
+      if (targets.length) { fl.cloneCD = 100; Sound.play('shield', { rate: 1.4 }); this.pops.push({ text: 'LIGHT CLONES!', p: fl.pos.clone().add(new THREE.Vector3(0, 1.5, 0)), t: 0, big: true, rot: 0 }); }
+    }
+    if (inp.grabPressed) {
+      const f = this.flightTarget(14);
+      if (f) { fl.hold = { f, t: 0, hits: 0 }; f.held = true; Sound.play('charge', { rate: 1.6, vol: 0.6 }); this.g.speech.say('sonic', 'Come here.', { dur: 50, cool: 200 }); }
+    }
+  }
+
+  fireLaser() {
+    const fl = this.flight, k = fl.charge / 60;
+    fl.charge = 0; fl.laserCD = 50;
+    const from = fl.pos.clone().add(new THREE.Vector3(0, 0.4, 0.6));
+    const tg = this.flightTarget(80);
+    const dir = tg ? new THREE.Vector3(tg.x, tg.y, tg.z).sub(from).normalize() : new THREE.Vector3(0, 0, 1);
+    const len = 170, w = 0.5 + k * 1.8;
+    const grp = new THREE.Group();
+    for (const [r, col, op] of [[w, 0xffc020, 0.45], [w * 0.45, 0xffffff, 0.95]]) grp.add(new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })));
+    grp.position.copy(from).addScaledVector(dir, len / 2); grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    this.scene.add(grp);
+    fl.beam = { m: grp, t: 0, dur: 24 + k * 16, from, dir, w: w * 2.2 + 1 };
+    this.flash = 0.4 + k * 0.4; this.shake = 12 + k * 14; this.fovKick = 8;
+    Sound.zap(0.8); Sound.play('boom', { rate: 0.6, vol: 0.8 }); Sound.play('release', { rate: 0.7 });
+  }
+
+  updateBeam() {
+    const B = this.flight.beam;
+    B.t++;
+    B.m.children.forEach((c) => { c.material.opacity *= B.t > B.dur - 8 ? 0.8 : 1; c.scale.x = c.scale.z = 1 + Math.sin(B.t) * 0.08; });
+    // everything along the beam burns
+    for (const f of this.foes) {
+      if (f.dead || f.hp <= 0) continue;
+      const v = new THREE.Vector3(f.x, f.y, f.z).sub(B.from), along = v.dot(B.dir);
+      if (along < 0 || along > 170) continue;
+      if (v.addScaledVector(B.dir, -along).length() < B.w + f.r * 0.5) { this.skyHit(f, 99, 1.6, 'BURN!'); }
+    }
+    if (B.t >= B.dur) { this.scene.remove(B.m); B.m.children.forEach((c) => { c.geometry.dispose(); c.material.dispose(); }); this.flight.beam = null; }
+  }
+
+  updateClone(c) {
+    c.t++;
+    if (c.f.dead || c.f.hp <= 0) { c.f = this.flightTarget(80); if (!c.f) { this.scene.remove(c.m); c.dead = true; return; } }
+    const to = new THREE.Vector3(c.f.x, c.f.y, c.f.z), d = to.clone().sub(c.m.position);
+    c.m.position.add(d.multiplyScalar(Math.min(1, 2.6 / Math.max(0.01, d.length()))));
+    if (this.t % 2 === 0) { const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(0xffe060); sp.position.copy(c.m.position); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 12, size: 1.2, v: new THREE.Vector3(), own: true, shrink: true }); }
+    if (c.m.position.distanceTo(to) < 1.6 || c.t > 120) { if (c.t <= 120) this.skyHit(c.f, 99, 1.3, 'SMASH!'); this.scene.remove(c.m); c.dead = true; }
+  }
+
+  // the brawl: hold it by the throat and keep hitting; let go (or a fifth hit) to throw
+  updatePummel(inp) {
+    const fl = this.flight, H = fl.hold, f = H.f;
+    H.t++;
+    if (f.dead) { fl.hold = null; return 'superman'; }
+    // drag it in front of Sonic
+    const at = fl.pos.clone().add(new THREE.Vector3(0, 0.2, 1.4));
+    f.x += (at.x - f.x) * 0.3; f.y += (at.y - f.y) * 0.3; f.z += (at.z - f.z) * 0.3; f.m.position.set(f.x, f.y, f.z);
+    f.m.rotation.z = Math.sin(H.t * 0.4) * 0.4;
+    if (inp && inp.punchPressed) {
+      H.hits++; fl.strike = 10; fl.strikeSide = H.hits % 2;
+      const p = new THREE.Vector3(f.x, f.y, f.z);
+      this.gore(p, 10);
+      this.pops.push({ text: ['POW!', 'CRUNCH!', 'WHAM!', 'CRACK!', 'SPLAT!'][H.hits % 5], p: p.clone().add(new THREE.Vector3(0, 1.2, 0)), t: 0, big: H.hits > 3, rot: (Math.random() - 0.5) * 0.5 });
+      Sound.punch(1.3 + H.hits * 0.1); if (H.hits > 2) Sound.play('bosshit', { vol: 0.5, rate: 0.9 });
+      this.shake = 8; this.g.hitStop = 3; this.fovKick = 4;
+    }
+    if (H.hits >= 5 || (inp && inp.grabPressed && H.t > 6) || H.t > 240) {
+      // throw it at the next one
+      const next = this.flightTarget(90);
+      const dir = next ? new THREE.Vector3(next.x - f.x, next.y - f.y, next.z - f.z).normalize() : new THREE.Vector3(0, 0.2, 1).normalize();
+      f.held = false; fl.thrown.push({ f, v: dir.multiplyScalar(2.2), t: 0 });
+      fl.hold = null; fl.strike = 12; fl.strikeSide = 2;
+      Sound.play('release', { rate: 0.9 }); this.pops.push({ text: 'THROW!', p: new THREE.Vector3(f.x, f.y + 1, f.z), t: 0, big: true, rot: 0.1 });
+    }
+    return 'hold';
+  }
+
+  updateThrown() {
+    const fl = this.flight;
+    for (const T of fl.thrown) {
+      T.t++; const f = T.f;
+      if (f.dead) { T.dead = true; continue; }
+      f.x += T.v.x; f.y += T.v.y; f.z += T.v.z; f.m.position.set(f.x, f.y, f.z); f.m.rotation.x += 0.4;
+      for (const o of this.foes) {
+        if (o === f || o.dead || o.hp <= 0) continue;
+        if (Math.hypot(o.x - f.x, o.y - f.y, o.z - f.z) < o.r + 1.4) { this.skyHit(o, 99, 1.8, 'CRASH!'); T.t = 99; break; }
+      }
+      if (T.t > 45) { f.hp = 0; this.gore(new THREE.Vector3(f.x, f.y, f.z), 16); this.killFoe(f); T.dead = true; }
+    }
+    fl.thrown = fl.thrown.filter((T) => !T.dead);
+  }
+
+  flightDrop() {
+    const fl = this.flight;
+    if (fl.hold) { fl.hold.f.held = false; fl.hold = null; }
+    if (fl.beam) { this.scene.remove(fl.beam.m); fl.beam = null; }
+    for (const c of fl.clones) this.scene.remove(c.m);
+    fl.clones = []; fl.charge = 0;
+  }
+
+  // Sonic in the air: a ball for homing, otherwise flying superman-style (no flapping)
+  poseFlight(pose) {
+    const fl = this.flight, M = this.sonic;
     M.root.position.copy(fl.pos);
-    const ball = !!fl.homing || fl.returning;
+    const ball = pose === 'ball';
     M.ball.visible = ball; M.body.visible = !ball; if (ball) M.ball.rotation.x += 0.6;
-    M.root.rotation.set(0, 0, 0);
-    if (!ball) { this.playClip(M, fl.v.y > 0 ? 'spring' : 'fall'); if (M.mixer) M.mixer.update(1 / 60); escLimbPose(M, 'air', { t: this.t }); }
-    if (this.t % 2 === 0) { const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(0x4aa8ff); sp.position.copy(fl.pos); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 14, size: 1.0, v: new THREE.Vector3(0, 0, -0.4), own: true, shrink: true }); }
+    M.root.rotation.set(0, Math.atan2(fl.v.x * 0.6, 1), -fl.v.x * 1.2);
+    M.body.rotation.set(0, 0, 0); M.body.position.set(0, 0, 0);
+    if (ball) return;
+    this.playClip(M, 'fall'); if (M.mixer) M.mixer.update(1 / 60);
+    escFists(M, true);
+    const k = fl.strike > 0 ? 1 - fl.strike / 14 : 0;
+    switch (pose) {
+      case 'jab': case 'cross': escMocap(M, (pose === 'jab' ? 'jab' : 'cross') + '0', k * MOCAP[pose + '0'].length / 30, { loop: false, k: 0.9 }); break;
+      case 'uppercut': escMocap(M, 'uppercut0', k * MOCAP.uppercut0.length / 30, { loop: false, k: 0.9 }); break;
+      case 'hold': escLimbPose(M, 'cross', { t: this.t, k: 0.7 }); break;
+      case 'charge': escLimbPose(M, 'jab', { t: this.t, side: 'R', k: 0.6 }); escLimbPose(M, 'jab', { t: this.t, side: 'L', k: 0.3 }); break;
+      case 'lunge': M.body.rotation.x = 0.9; escLimbPose(M, 'jab', { t: this.t, side: 'R', k: 0.7 }); break;
+      default: M.body.rotation.x = 1.15; escLimbPose(M, 'superman', { t: this.t, k: 0.4 });
+    }
+    if (this.t % 2 === 0) { const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(fl.sup ? 0xffd040 : 0x4aa8ff); sp.position.copy(fl.pos); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 14, size: fl.sup ? 1.6 : 1.0, v: new THREE.Vector3(0, 0, -0.4), own: true, shrink: true }); }
   }
 
   endFlight() {
     const M = this.sonic;
+    if (this.flight) { this.flightDrop(); if (this.flight.sup && this.superT > 0) { this.superT = 0; this.goSuper(false); } }
     this.away.sonic = false; this.plane.root.attach(M.root); M.root.rotation.set(0, 0, 0);
-    M.ball.visible = false; M.body.visible = true; this.flight = null;
+    M.ball.visible = false; M.body.visible = true; M.body.rotation.set(0, 0, 0); this.flight = null; this.placeChars();
   }
 
   // Sonic (and Tails) leave the plane and tear through targets one by one
@@ -2280,7 +2528,10 @@ class TornadoStage {
         const p = scr(new THREE.Vector3(tg.x, tg.y, tg.z));
         if (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(t * 0.1); ctx.strokeStyle = fl.homing ? '#ff3b3b' : '#ffd23f'; ctx.lineWidth = 4; ctx.strokeRect(-26, -26, 52, 52); ctx.restore(); }
       }
-      g.text(ctx, `SKY ATTACK  [${keyLabel('punch')}] HOMING ATTACK  ARROWS STEER  ${Math.max(0, Math.ceil((660 - fl.t) / 60))}s`, VIEW_W / 2, VIEW_H - 60, 14, '#7fe3ff', 'center');
+      const left = Math.max(0, Math.ceil((fl.dur - fl.t) / 60));
+      if (fl.sup) g.text(ctx, `SUPER SONIC  [${keyLabel('punch')}] FISTS  HOLD [${keyLabel('laser')}] LASER  [${keyLabel('clones')}] LIGHT CLONES  [${keyLabel('grab')}] GRAB + MASH [${keyLabel('punch')}]  ${left}s`, VIEW_W / 2, VIEW_H - 60, 13, '#ffd23f', 'center');
+      else g.text(ctx, `SKY ATTACK  [${keyLabel('punch')}] HOMING ATTACK  ARROWS STEER  ${left}s`, VIEW_W / 2, VIEW_H - 60, 14, '#7fe3ff', 'center');
+      if (fl.charge > 0) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(VIEW_W / 2 - 100, VIEW_H - 100, 200, 12); ctx.fillStyle = '#ffd23f'; ctx.fillRect(VIEW_W / 2 - 100, VIEW_H - 100, 200 * fl.charge / 60, 12); }
     }
     if (this.freezeT > 0) { ctx.fillStyle = `rgba(120,200,255,${0.12 + 0.05 * Math.sin(t * 0.2)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.superT > 0) { ctx.fillStyle = `rgba(255,210,60,${0.08 + 0.04 * Math.sin(t * 0.3)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
@@ -2329,7 +2580,7 @@ class TornadoStage {
       g.text(ctx, String(i + 1), x + 6, y + 18, 14, ok ? '#fff' : '#777', 'left', null);
       g.text(ctx, String(sp.cost), x + 50, y + 34, 10, ok ? '#ffd23f' : '#777', 'right', null);
     });
-    const act = this.flight ? 'SONIC MISSILE' : this.striker ? (this.superT > 0 ? 'SUPER SONIC' : 'AUTOPILOT COMBO') : this.freezeT > 0 ? `FREEZE ${Math.ceil(this.freezeT / 60)}` : this.shieldT > 0 ? `SHIELD ${Math.ceil(this.shieldT / 60)}  ${keyLabel('up')}${keyLabel('down')} CLIMB` : null;
+    const act = this.flight ? (this.flight.sup ? 'SUPER SONIC' : 'SONIC MISSILE') : this.striker ? (this.superT > 0 ? 'SUPER SONIC' : 'AUTOPILOT COMBO') : this.freezeT > 0 ? `FREEZE ${Math.ceil(this.freezeT / 60)}` : this.shieldT > 0 ? `SHIELD ${Math.ceil(this.shieldT / 60)}  ${keyLabel('up')}${keyLabel('down')} CLIMB` : null;
     if (act) g.text(ctx, act, sx, sy + 72, 12, '#7fe3ff');
     const left = this.phase === 'sky' ? TW.SKY - t : TW.BOARD - t;
     if (this.phase === 'board') g.text(ctx, `COAST IN ${Math.max(0, Math.ceil(left / 60))}s`, VIEW_W / 2, 44, 16, '#fff', 'center');

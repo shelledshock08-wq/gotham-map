@@ -271,7 +271,7 @@ function escLimbPose(M, name, opts = {}) {
   const set = (bone, x, y, z, kk = k) => { if (B[bone]) escAimBone(B[bone], _lw.set(x, y, z).normalize().applyQuaternion(q), kk); };
   const arms = (fn) => { for (const [sd, s] of [['L', 1], ['R', -1]]) fn(sd, s); };
   const sw = Math.sin(t * 0.35);
-  escFists(M, ['guard', 'jab', 'cross', 'kick', 'flykick', 'pilot', 'sprint'].includes(name));
+  escFists(M, ['guard', 'jab', 'cross', 'kick', 'flykick', 'pilot', 'sprint', 'superman'].includes(name));
   switch (name) {
     case 'relax': arms((sd, s) => { set('UpperArm_' + sd, s * 0.3, -0.94, 0.05); set('ForeArm_' + sd, s * 0.15, -0.85, 0.4); }); break;
     case 'guard':   // Sonic Battle stance: fists up at the chin, elbows in, a little bounce
@@ -304,6 +304,11 @@ function escLimbPose(M, name, opts = {}) {
       arms((sd, s) => { const w = Math.sin(t * 0.07 + s) * 0.12; set('UpperArm_' + sd, s * 0.22, -0.1 + w, 1); set('ForeArm_' + sd, s * 0.05, -0.15 - w, 1); });
       break;
     }
+    case 'superman':   // flying flat out: one fist forward, the other at his side, legs trailing
+      set('UpperArm_R', -0.1, 1, 0.15); set('ForeArm_R', -0.1, 1, 0.1);
+      set('UpperArm_L', 0.3, -0.8, 0.25); set('ForeArm_L', 0.2, -0.85, 0.3);
+      set('Thigh_L', 0.08, -1, -0.05); set('Calf_L', 0.05, -1, -0.25); set('Thigh_R', -0.08, -1, 0.05); set('Calf_R', -0.05, -1, -0.1);
+      break;
     case 'claw':   // both arms raised to rake down
       arms((sd, s) => { set('UpperArm_' + sd, s * 0.45, 0.8, 0.35); set('ForeArm_' + sd, s * 0.15, 0.85, 0.5); });
       break;
