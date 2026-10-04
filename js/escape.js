@@ -218,9 +218,38 @@ const ESC_LIMBS = ['UpperArm_L', 'ForeArm_L', 'UpperArm_R', 'ForeArm_R', 'Thigh_
 function escLimbBones(M) {
   if (M.limbs) return M.limbs;
   const b = {};
-  if (M.model) for (const n of ESC_LIMBS.concat(['Spine1', 'Head'])) b[n] = M.model.root.getObjectByName(n);
+  if (M.model) for (const n of ESC_LIMBS.concat(['Spine', 'Spine1', 'Neck', 'Head'])) b[n] = M.model.root.getObjectByName(n);
   return (M.limbs = b);
 }
+// Play a motion-capture clip (js/mocap.js) on a rig: every frame stores the
+// direction of each limb, the torso and the neck in character space, so we aim
+// the matching bones. t is in seconds; loop or clamp at the end. k blends.
+const _mq = new THREE.Quaternion(), _mv = new THREE.Vector3();
+function escMocap(M, name, t, opts = {}) {
+  if (typeof MOCAP === 'undefined' || !MOCAP[name]) return null;
+  const B = escLimbBones(M);
+  if (!B.UpperArm_L) return null;
+  const C = MOCAP[name], n = C.length;
+  let f = t * 30;
+  f = opts.loop === false ? Math.min(n - 1.001, Math.max(0, f)) : ((f % n) + n) % n;
+  const i0 = Math.floor(f), i1 = (i0 + 1) % n, w = f - i0, a = C[i0], b = C[opts.loop === false ? Math.min(n - 1, i0 + 1) : i1];
+  M.body.updateWorldMatrix(true, false);
+  M.body.getWorldQuaternion(_mq);
+  const k = opts.k == null ? 0.6 : opts.k, mir = !!opts.mirror, torso = opts.torso !== false;
+  for (let s = 0; s < MOCAP_SEGS.length; s++) {
+    let nm = MOCAP_SEGS[s];
+    if ((nm === 'Spine' || nm === 'Neck') && !torso) continue;
+    if (opts.armsOnly && !/Arm/.test(nm)) continue;
+    if (mir) nm = nm.replace(/_L$/, '_#').replace(/_R$/, '_L').replace(/_#$/, '_R');
+    const bone = B[nm]; if (!bone) continue;
+    const j = s * 3;
+    _mv.set((a[j] + (b[j] - a[j]) * w) * (mir ? -1 : 1), a[j + 1] + (b[j + 1] - a[j + 1]) * w, a[j + 2] + (b[j + 2] - a[j + 2]) * w).normalize().applyQuaternion(_mq);
+    escAimBone(bone, _mv.clone(), k);
+  }
+  const h = a[a.length - 1] + (b[b.length - 1] - a[a.length - 1]) * w;
+  return { h, frames: n, dur: n / 30 };
+}
+
 // Curl the fingers into fists (the rigs' finger bones bend about their local Y)
 function escFists(M, on) {
   if (!M.fingers) {
@@ -1331,7 +1360,9 @@ class EscapeStage {
     if (M.mixer) M.mixer.update(ESC_DT);
     const armPose = this.phase === 'intro' || this.phase === 'tbc' || (this.phase === 'outro' && this.speed < 3 && this.ground) ? 'relax'
       : this.dead || this.hitT > 0 ? 'hurt' : this.slide ? 'run' : !this.ground ? 'air' : this.boosting || sp > 58 ? 'sprint' : 'run';
-    if (armPose && !inBall) escLimbPose(M, armPose, { t: t * (0.6 + sp / 50) });
+    // running arms come from the motion capture; the other states are posed
+    if (armPose === 'run' && !inBall && typeof MOCAP !== 'undefined') { escFists(M, false); escMocap(M, 'run', t / 60 * (0.6 + sp / 50) * 1.3, { armsOnly: true, k: 0.5 }); }
+    else if (armPose && !inBall) escLimbPose(M, armPose, { t: t * (0.6 + sp / 50) });
     // boost FX
     const B = this.boosting, fl = 0.85 + Math.random() * 0.3;
     M.aura.material.opacity += ((B ? 0.3 * fl : 0) - M.aura.material.opacity) * 0.35;

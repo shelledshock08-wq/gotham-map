@@ -63,7 +63,10 @@ function torTailsModel() {
 // colour, with black sclera and red eyes, spikes pushing out of them, and the
 // reaching, hunched pose of something that isn't really alive anymore.
 const TOR_INFECTED = { skin: 0x5d6b5a, dark: 0x2c332b, glow: 0x7dff4a, purple: 0x8a3cff };
-const TOR_ZOMBIE_COLORS = [0x4a5f7a, 0x4f6a52, 0x7a4646, 0x63587a, 0x6f6a52, 0x56676e, 0x7a5a44];
+const TOR_ZOMBIE_COLORS = [0x4a5f7a, 0x4f6a52, 0x7a4646, 0x63587a, 0x6f6a52, 0x56676e, 0x7a5a44, 0x3f6b6b, 0x8a6a3a,
+  0x7a5266, 0x7a7448, 0x5c5c62, 0x5a4636, 0x37435e, 0x5e3242, 0x4c3e6a, 0x6a7a5a, 0x8a5a4a];
+// fan-OC species, built by reshaping the two rigs and bolting on parts
+const TOR_SPECIES = ['hedgehog', 'fox', 'bunny', 'wolf', 'bear', 'cat', 'echidna', 'hawk'];
 const TOR_ZBASE = {};
 const TOR_ZTEX = new Map();
 
@@ -98,8 +101,8 @@ function torZombieTex(src, color, eye) {
         continue;
       }
       if (l > 0.78 && sat < 45) { a[i] = cr * 0.45 + 70 + n; a[i + 1] = cg * 0.45 + 70 + n; a[i + 2] = cb * 0.45 + 74 + n; continue; }   // gloves, muzzle
-      const k = 0.3 + l * 0.75;
-      a[i] = cr * k + n; a[i + 1] = cg * k + n; a[i + 2] = cb * k + n;
+      const k = 0.5 + l * 0.95;
+      a[i] = Math.min(255, cr * k + n); a[i + 1] = Math.min(255, cg * k + n); a[i + 2] = Math.min(255, cb * k + n);
     }
     g.putImageData(d, 0, 0); tex.needsUpdate = true; return true;
   };
@@ -130,24 +133,26 @@ function torZombieBase(species) {
 
 function torZombotModel(opts = {}) {
   const holder = new THREE.Group(), body = new THREE.Group(); holder.add(body);
-  const species = opts.species || (Math.random() < 0.55 ? 'hedgehog' : 'fox');
+  const species = opts.species || TOR_SPECIES[(Math.random() * TOR_SPECIES.length) | 0];
   const color = opts.color || TOR_ZOMBIE_COLORS[(Math.random() * TOR_ZOMBIE_COLORS.length) | 0];
-  const base = torZombieBase(species);
+  const rig = species === 'hedgehog' || species === 'echidna' ? 'hedgehog' : 'fox';
+  const base = torZombieBase(rig);
   const M = { root: holder, body, model: null, species, color };
   if (!base) {
     const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), new THREE.MeshLambertMaterial({ color })); b.position.y = 0.6; body.add(b);
     holder.userData.zombie = M; return holder;
   }
   const root = torCloneRig(base.root);
-  const H = opts.height || (species === 'hedgehog' ? 1.05 : 0.95);
+  const H = (opts.height || (rig === 'hedgehog' ? 1.05 : 0.95)) * (species === 'bear' ? 1.15 : species === 'bunny' ? 0.92 : 1) * (0.9 + Math.random() * 0.2);
   root.scale.multiplyScalar(H / base.h);
   root.traverse((o) => {
     if (!o.isMesh) return;
     const mats = [].concat(o.material).map((mt) => new THREE.MeshPhongMaterial({
       map: mt.map ? torZombieTex(mt.map, color, /eye/.test(mt.map.name || '')) : null, color: mt.map ? 0xffffff : color,
-      shininess: 18, specular: 0x2a2a2a,   // dull, not chrome
+      shininess: 22, specular: 0x3a3a3a, emissive: 0x000000,   // dull, not chrome
     }));
     o.material = Array.isArray(o.material) ? mats : mats[0];
+    M.mats = (M.mats || []).concat(mats);
   });
   body.add(root);
   M.model = { root };
@@ -165,6 +170,45 @@ function torZombotModel(opts = {}) {
   spike('Head', 0.06, 0.92, -0.1, 0.3, 0.7, -0.6); spike('Head', -0.07, 0.95, -0.08, -0.4, 0.8, -0.5, 0.8);
   spike('Spine1', 0, 0.62, -0.14, 0, 0.3, -1, 1.2); spike('Spine1', 0.05, 0.54, -0.13, 0.2, 0.1, -1); spike('Spine1', -0.05, 0.7, -0.12, -0.2, 0.4, -1, 0.9);
   spike('Shoulder_L', 0.17, 0.66, -0.03, 1, 0.7, -0.3, 0.8); spike('Shoulder_R', -0.17, 0.66, -0.03, -1, 0.7, -0.3, 0.8);
+  // species: reshape bones (ears, tails, bulk) and bolt on parts (snouts, beaks, dreadlocks)
+  const bone = (n) => root.getObjectByName(n);
+  const hideTails = (which) => { for (const sd of which) for (let i = 1; i <= 5; i++) { const b = bone(`Tail${i}_${sd}`); if (b) { b.scale.setScalar(i === 1 ? 0.001 : 1); } } };
+  const ears = (sx, sy, sz) => { for (const sd of ['L', 'R']) { const b = bone('Ear_' + sd); if (b) b.scale.set(sx, sy, sz); } };
+  const skinMat = new THREE.MeshPhongMaterial({ color, shininess: 18, specular: 0x2a2a2a });
+  const part = (boneName, geo, x, y, z, rx = 0, ry = 0, rz = 0, mat = skinMat) => {
+    const b = bone(boneName); if (!b) return;
+    const m = new THREE.Mesh(geo, mat); m.position.set(x * H, y * H, z * H); m.rotation.set(rx, ry, rz);
+    holder.add(m); m.updateMatrixWorld(true); b.attach(m);
+  };
+  switch (species) {
+    case 'bunny':
+      hideTails(['L', 'R']); ears(2.6, 0.8, 0.8);
+      part('Spine', new THREE.SphereGeometry(0.07 * H, 10, 8), 0, 0.42, -0.12);   // a scrap of a cottontail
+      break;
+    case 'wolf':
+      hideTails(['R']); ears(1.35, 1, 1);
+      part('Head', new THREE.ConeGeometry(0.08 * H, 0.26 * H, 8), 0, 0.8, 0.27, Math.PI / 2);   // the snout
+      break;
+    case 'bear':
+      hideTails(['L', 'R']); ears(0.55, 1.3, 1.3);
+      holder.scale.set(1.18, 1, 1.12);
+      part('Head', new THREE.SphereGeometry(0.06 * H, 10, 8), 0.12, 1.0, -0.02); part('Head', new THREE.SphereGeometry(0.06 * H, 10, 8), -0.12, 1.0, -0.02);
+      break;
+    case 'cat': {
+      hideTails(['R']); ears(1.2, 0.8, 1);
+      const t1 = bone('Tail1_L'); if (t1) t1.scale.set(1.2, 0.35, 0.35);
+      break;
+    }
+    case 'hawk':
+      hideTails(['L', 'R']); ears(0.001, 0.001, 0.001);
+      part('Head', new THREE.ConeGeometry(0.05 * H, 0.16 * H, 6), 0, 0.8, 0.15, Math.PI / 2, 0, 0, new THREE.MeshPhongMaterial({ color: 0x5a4a20, shininess: 20 }));
+      for (let i = 0; i < 3; i++) part('Head', new THREE.ConeGeometry(0.03 * H, 0.22 * H, 5), (i - 1) * 0.04, 1.02, -0.08, -0.6, 0, (i - 1) * 0.3);
+      break;
+    case 'echidna':
+      // dreadlocks hanging off the back of the head
+      for (let i = 0; i < 4; i++) part('Head', new THREE.ConeGeometry(0.05 * H, 0.32 * H, 6), (i - 1.5) * 0.06, 0.82, -0.16, Math.PI - 0.5, 0, (i - 1.5) * 0.15);
+      break;
+  }
   holder.userData.zombie = M;
   escLimbPose(M, 'zombie', { k: 1 });
   return holder;
@@ -507,8 +551,9 @@ class TornadoStage {
     this.items = this.items ? (this.items.forEach((i) => this.scene.remove(i.m)), []) : [];
     this.decals = []; this.tears = 0;
     if (this.striker) this.endStrike(true);
+    if (this.flight) this.endFlight();
     this.away = { sonic: false, tails: false }; this.striker = null; this.finisher = null; this.slowmo = 0; this.banner = null; this.cutin = null;
-    this.rings = 10; this.freezeT = 0; this.shieldT = 0; this.autoT = 0; this.superT = 0; this.comboN = 0; this.comboT = 0; this.slashes = [];
+    this.rings = 10; this.freezeT = 0; this.freezeFire = 0; this.shieldT = 0; this.autoT = 0; this.superT = 0; this.comboN = 0; this.comboT = 0; this.slashes = [];
     if (this.shieldMesh) this.shieldMesh.visible = false;
     this.ammo = 6; this.ammoT = 0; this.aimP = 0.06; this.hits = 0; this.locks = []; this.painting = false; this.laserT = 0; this.lock = null;
     this.px = 0; this.py = 1.5; this.pvx = 0; this.pvy = 0; this.roll = 0; this.rollCool = 0; this.gunT = 0; this.missileCool = 0;
@@ -562,8 +607,8 @@ class TornadoStage {
       this.updateSpecials(inp);
       if (this.phase === 'board') this.updateRoles(inp);
       // with roles swapped, Sonic keeps flying (badly) even while you control Tails
-      this.updatePlane(this.autoT > 0 ? 'autoAI' : this.active === 'pilot' ? inp : this.pilot === 'sonic' && this.phase === 'board' ? 'sonicAI' : null);
-      this.updateFighters(this.active === 'fighter' ? inp : null);
+      this.updatePlane(this.autoT > 0 || this.flight ? 'autoAI' : this.active === 'pilot' ? inp : this.pilot === 'sonic' && this.phase === 'board' ? 'sonicAI' : null);
+      this.updateFighters(this.active === 'fighter' && !this.flight ? inp : null);
       this.spawn();
       if (this.phase === 'board') this.drain();
       if (this.frame <= 0) this.fail('torn');
@@ -777,9 +822,9 @@ class TornadoStage {
   drain() {
     let claw = 0;
     for (const b of this.boarders) if (b.state === 'claw') claw += b.kind === 'zom' ? 0.024 : 0.0095;
-    if (this.freezeT > 0 || this.superT > 0) claw = 0;
+    if (this.superT > 0) claw = 0;
     this.frame -= claw;
-    if (this.active !== 'pilot' && this.pilot === 'tails' && this.autoT <= 0 && this.superT <= 0) { this.hull -= 0.008; this.dropY = Math.max(-4, this.dropY - 0.008); }
+    if (this.active !== 'pilot' && this.pilot === 'tails' && this.autoT <= 0 && this.superT <= 0 && !this.flight) { this.hull -= 0.008; this.dropY = Math.max(-4, this.dropY - 0.008); }
     else { this.dropY = Math.min(0, this.dropY + 0.03); if (this.pilot === 'sonic') this.hull -= 0.006; }
     this.frame = Math.max(0, this.frame); this.hull = Math.max(0, this.hull);
     const g = this.g;
@@ -846,10 +891,24 @@ class TornadoStage {
       if (F.y > 0 || F.vy > 0) { F.vy -= F.atk && F.atk.type === 'tailspin' ? 0.002 : 0.013; F.y = Math.max(0, F.y + F.vy); if (F.y === 0) F.vy = 0; }
       if (ctl && ctl.upPressed && F.y === 0 && !F.atk) { F.vy = 0.2; Sound.play('jump', { vol: 0.5 }); }
       if (ctl && (ctl.punchPressed || ctl.laserPressed) && this.tryParry(F)) continue;
+      // double-tap a direction: a boost dash that closes the gap and hits on the way
+      if (F.dashCool > 0) F.dashCool--;
+      if (ctl && !F.atk && (ctl.leftPressed || ctl.rightPressed)) {
+        const dir = ctl.leftPressed ? 1 : -1;   // screen left is world +x
+        if (F.lastTap === dir && this.t - F.lastTapT < 15 && !(F.dashCool > 0)) this.startDash(F, dir);
+        F.lastTap = dir; F.lastTapT = this.t;
+      }
       if (ctl && !F.atk) this.startAttack(F, ctl);
       if (F.atk) this.stepAttack(F);
       if (ctl && ctl.bitePressed) this.tryBite(F);
     }
+  }
+
+  startDash(F, dir) {
+    F.face = dir; F.vx = dir * 0.34; F.dashCool = 22; F.lastTap = 0;
+    F.atk = { type: 'dash', t: 0, dur: 16, move: true, hit: new Set() };
+    Sound.play('release', { rate: 1.4, vol: 0.7 }); Sound.play('boom', { rate: 2, vol: 0.25 });
+    this.shake = Math.max(this.shake, 5); this.fovKick = Math.max(this.fovKick || 0, 4);
   }
 
   // Metal Gear Rising parry: strike into an attack just before it lands
@@ -914,7 +973,7 @@ class TornadoStage {
       if (inp.down) { F.atk = { type: 'uppercut', t: 0, dur: 20, hit: new Set() }; Sound.play('jump', { vol: 0.35, rate: 1.4 }); return; }
       const n = F.combo % 3;
       F.combo++; F.comboT = 26;
-      F.atk = n < 2 ? { type: 'punch', t: 0, dur: 13, side: n, hit: new Set() } : { type: sonic ? 'kick' : 'tailswipe', t: 0, dur: 20, hit: new Set() };
+      F.atk = n < 2 ? { type: 'punch', t: 0, dur: 15, side: n, v: (Math.random() * 3) | 0, hit: new Set() } : { type: sonic ? 'kick' : 'tailswipe', t: 0, dur: 22, v: (Math.random() * 2) | 0, hit: new Set() };
     }
   }
 
@@ -925,11 +984,12 @@ class TornadoStage {
       if (t >= t0 && t <= t1) this.hitBoarders(F, range, dmg, kb, both, a.hit, power);
     };
     switch (a.type) {
-      case 'punch': hitWin(3, 6, 1.2, 1, 0.1, false, 1.0); if (t === 3) Sound.play('jump', { vol: 0.25, rate: 2.2 }); break;
-      case 'kick': hitWin(5, 10, 1.45, 2, 0.3, true, 1.5); if (t === 4) Sound.play('roll', { vol: 0.4, rate: 1.6 }); break;
-      case 'tailswipe': hitWin(5, 10, 1.5, 2, 0.3, true, 1.4); break;
+      case 'punch': hitWin(5, 8, 1.2, 1, 0.1, false, 1.0); if (t === 4) Sound.play('jump', { vol: 0.25, rate: 2.2 }); break;
+      case 'kick': hitWin(9, 13, 1.45, 2, 0.3, true, 1.5); if (t === 8) Sound.play('roll', { vol: 0.4, rate: 1.6 }); break;
+      case 'tailswipe': hitWin(12, 17, 1.5, 2, 0.3, true, 1.4); break;
       case 'flykick': hitWin(3, 16, 1.2, 3, 0.4, false, 1.7); if (t > 14) F.vx *= 0.8; break;
       case 'spin': hitWin(1, 30, 0.95, 2, 0.3, true, 1.3); F.vx *= 0.97; break;
+      case 'dash': hitWin(1, 14, 0.9, 1, 0.38, true, 1.3); if (t > 10) F.vx *= 0.7; if (t % 2 === 0) this.sparkAt(this[F.id].root, F.id === 'sonic' ? 0x7fe3ff : 0xffc060, 1); break;
       case 'uppercut': if (t >= 5 && t <= 9) this.hitBoarders(F, 1.2, 2, 0.04, false, a.hit, 1.5, 0.3); break;
       case 'boost': hitWin(1, 24, 1.2, 2, 0.5, true, 1.8); if (t > 18) F.vx *= 0.75; if (t % 3 === 0) this.sparkAt(this.sonic.root, 0x7fe3ff, 2); break;
       case 'smack':
@@ -980,7 +1040,7 @@ class TornadoStage {
       // the combo counter: keep the hits coming for bonus damage
       this.comboN = this.comboT > 0 ? this.comboN + 1 : 1; this.comboT = 80;
       const bonus = this.comboN >= 6 ? 1 : 0;
-      if (b.state === 'frozen') { this.damage(b, 99, (Math.sign(dx) || F.face) * 0.6, power + 0.5, 'SHATTER!'); continue; }
+      if (b.state === 'frozen') { this.thaw(b); this.shatter(b.m, 0xbfefff, 14); this.damage(b, 99, (Math.sign(dx) || F.face) * 0.6, power + 0.5, 'SHATTER!'); continue; }
       this.damage(b, dmg + bonus, (Math.sign(dx) || F.face) * kb, power);
       this.boost = Math.min(100, this.boost + 4);
       if (launch && b.state === 'hurt') { b.state = 'air'; b.vy = launch; b.t = 0; }
@@ -990,7 +1050,8 @@ class TornadoStage {
   }
 
   damage(b, dmg, kb, power = 1, word) {
-    b.hp -= dmg; b.vx = kb; b.vy = 0.07 + power * 0.03; b.t = 0;
+    b.hp -= dmg; b.vx = kb; b.vy = 0.07 + power * 0.03; b.t = 0; b.flashT = 6;
+    if (power > 1.2) this.fovKick = Math.max(this.fovKick || 0, power * 3);
     const kill = b.hp <= 0;
     this.impact(b, power * (kill ? 1.3 : 1), kill, word);
     if (kill) { b.state = 'dead'; b.vx = (Math.sign(kb) || 1) * (0.35 + power * 0.15); b.vy = 0.2 + power * 0.05; this.addScore(b, 1); this.boost = Math.min(100, this.boost + 10); this.rings += 1; }
@@ -1049,11 +1110,7 @@ class TornadoStage {
     const P = this.planePos(this.v3), auto = this.active !== 'pilot' && this.pilot === 'tails' && this.phase === 'board';
     const playing = this.phase === 'sky' || this.phase === 'board';
     for (const f of this.foes) {
-      if (this.freezeT > 0) {
-        if (!f.ice) { f.ice = new THREE.Sprite(this.iceMat); f.ice.scale.setScalar(f.kind === 'jet' ? 4 : 2); f.m.add(f.ice); }
-        continue;
-      }
-      if (f.ice) { f.m.remove(f.ice); f.ice = null; }
+      if (f.frozenT > 0) { if (--f.frozenT === 0) this.thaw(f); continue; }
       f.t++;
       if (f.kind === 'bird') {
         // infected birds swoop in to land on the wing (plane space)
@@ -1070,8 +1127,15 @@ class TornadoStage {
         }
         continue;
       }
+      if (f.kind === 'flyer') {
+        f.z -= 0.3; f.x += Math.sin(f.t * 0.04 + f.ph) * 0.06; f.y += Math.sin(f.t * 0.05 + f.ph) * 0.03;
+        f.m.position.set(f.x, f.y, f.z); f.m.rotation.y = Math.PI;
+        const wl = f.m.getObjectByName('wingL'), wr = f.m.getObjectByName('wingR'), fl = Math.sin(f.t * 0.5) * 0.9;
+        if (wl) wl.rotation.z = fl; if (wr) wr.rotation.z = -fl;
+        if (f.z < -25) f.dead = true;
+        continue;
+      }
       if (f.kind === 'jet') {
-        f.z += f.vz;
         f.x = f.bx + Math.sin(f.t * f.sway + f.ph) * 4; f.y = f.by + Math.sin(f.t * 0.03 + f.ph) * 1.2;
         f.m.position.set(f.x, f.y, f.z); f.m.rotation.z = Math.cos(f.t * f.sway + f.ph) * 0.5;
         if (playing && f.z > 20 && f.z < 160 && --f.fireT <= 0) { f.fireT = (auto ? 75 : 105) + Math.random() * 60; this.fireBolt(f, auto); }
@@ -1082,6 +1146,7 @@ class TornadoStage {
         const tx = P.x + f.ox + Math.sin(f.t * 0.02 + f.ph) * 3, ty = P.y + f.oy + Math.sin(f.t * 0.035 + f.ph) * 1.5 + (f.t > 560 ? (f.t - 560) * 0.1 : 0);
         f.x += (tx - f.x) * 0.03; f.y += (ty - f.y) * 0.03;
         f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(-0.6, Math.PI + Math.sin(f.t * 0.05) * 0.3, 0);
+        if (f.m.userData.zombie && f.t % 2 === 0) escMocap(f.m.userData.zombie, 'zombie', f.t / 60 + f.ph, { k: 0.5, armsOnly: true });
         if (playing && f.t > 60 && f.t < 560 && --f.fireT <= 0) { f.fireT = (auto ? 65 : 80) + Math.random() * 40; this.fireBolt(f, auto); }
         if (f.t > 760) f.dead = true;
       }
@@ -1245,7 +1310,7 @@ class TornadoStage {
           // dizzy and swaying; finish it, or it shakes it off
           if (b.t > 260) { b.state = 'claw'; b.t = 0; b.hp = 3; }
           break;
-        case 'frozen': if (this.freezeT <= 0) { b.state = 'claw'; b.t = 0; } break;
+        case 'frozen': if (!(b.frozenT > 0) || --b.frozenT <= 0) { this.thaw(b); b.state = 'claw'; b.t = 0; } break;
         case 'air':
           b.x += b.vx; b.vx *= 0.95; b.vy -= 0.012; b.y += b.vy; b.spin = (b.spin || 0) + 0.25;
           if (b.y <= 0 && b.vy < 0) {
@@ -1256,7 +1321,6 @@ class TornadoStage {
           if (Math.abs(b.x) > TW.wingX + 0.2) { b.state = 'fall'; b.t = 0; }
           break;
         case 'claw': case 'walk': {
-          if (this.freezeT > 0) { b.state = 'frozen'; b.t = 0; break; }
           // attack whoever is close, otherwise tear at the wing
           const F = fighters.find((f) => !this.away[f.id] && Math.abs(f.x - b.x) < (b.kind === 'zom' ? 1.1 : 0.95) && f.y < 0.8);
           if (F) { b.state = 'windup'; b.t = 0; b.face = Math.sign(F.x - b.x) || 1; b.target = F; break; }
@@ -1269,7 +1333,6 @@ class TornadoStage {
           break;
         }
         case 'windup': {
-          if (this.freezeT > 0) { b.state = 'frozen'; b.t = 0; break; }
           const dur = b.kind === 'zom' ? 34 : 26;
           if (b.t >= dur) {
             const F = b.target;
@@ -1302,19 +1365,29 @@ class TornadoStage {
       if (b.state !== 'held') b.x = b.state === 'fall' || b.state === 'dead' || b.state === 'thrown' ? b.x : Math.max(-TW.wingX, Math.min(TW.wingX, b.x));
       // pose it
       b.m.position.set(b.x, TW.wingY + b.y, TW.wingZ + (b.z || 0));
+      if (b.Z && b.Z.mats && (b.flashT > 0 || b.flashed)) {
+        // a white flash on the hit
+        const k = Math.max(0, (b.flashT || 0) / 6); b.flashT = Math.max(0, (b.flashT || 0) - 1); b.flashed = k > 0;
+        for (const m of b.Z.mats) m.emissive.setRGB(k, k, k);
+      }
       const ice = b.state === 'frozen';
-      if (ice && !b.ice) { b.ice = new THREE.Sprite(this.iceMat); b.ice.scale.setScalar(1.6); b.ice.position.y = 0.5; b.m.add(b.ice); }
-      if (!ice && b.ice) { b.m.remove(b.ice); b.ice = null; }
       if (b.Z) {
         // the Zombots lurch, hunch, raise both arms and rake down
         const Z = b.Z;
         b.m.rotation.set(0, b.face > 0 ? Math.PI / 2 : -Math.PI / 2, b.state === 'held' || b.spin ? (b.spin || b.t * 0.4) : 0);
         Z.body.rotation.set(0.32, 0, Math.sin(b.t * 0.09) * 0.12);
         if (!ice) {
+          b.ph = b.ph == null ? Math.random() * 3 : b.ph;
           if (b.state === 'windup') escLimbPose(Z, b.t > 26 ? 'rake' : 'claw', { t: b.t, k: 0.4 });
-          else if (b.state === 'stagger') { Z.body.rotation.set(-0.25 + Math.sin(b.t * 0.13) * 0.15, Math.sin(b.t * 0.07) * 0.4, Math.sin(b.t * 0.11) * 0.3); escLimbPose(Z, 'hurt', { t: b.t }); }
-          else escLimbPose(Z, 'zombie', { t: b.t });
-          if (b.state === 'walk') Z.body.position.y = Math.abs(Math.sin(b.t * 0.12)) * 0.06;
+          else if (b.state === 'stagger') { escMocap(Z, 'limp', b.t / 60 * 0.6 + b.ph, { k: 0.4 }); Z.body.rotation.set(-0.25 + Math.sin(b.t * 0.13) * 0.15, Math.sin(b.t * 0.07) * 0.4, Math.sin(b.t * 0.11) * 0.3); escLimbPose(Z, 'hurt', { t: b.t, k: 0.3 }); }
+          else if (b.state === 'stun' || b.state === 'hurt' || b.state === 'air' || b.state === 'dead' || b.state === 'thrown' || b.state === 'fall') { Z.body.rotation.x = -0.4; escLimbPose(Z, 'hurt', { t: b.t, k: 0.5 }); }
+          else if (b.state === 'walk') escMocap(Z, b.ph > 1.5 ? 'zombie' : 'zombie2', b.t / 60 * 0.8 + b.ph, { k: 0.5 });
+          else {
+            // tearing at the wing: hunched over, creeping, raking with both hands
+            escMocap(Z, 'creep', b.t / 60 * 0.7 + b.ph, { k: 0.4 });
+            escLimbPose(Z, Math.sin(b.t * 0.2 + b.ph) > 0 ? 'claw' : 'rake', { t: b.t, k: 0.35 });
+            Z.body.rotation.x = 0.55;
+          }
         }
       } else {
         const peck = b.state === 'claw' ? Math.max(0, Math.sin(b.t * 0.35)) * 0.5 : b.state === 'windup' ? -0.4 : 0;
@@ -1354,7 +1427,8 @@ class TornadoStage {
     for (const f of this.fx) {
       f.t++;
       const k = f.t / f.dur;
-      if (f.ring) f.m.scale.setScalar(f.size + f.grow * k);
+      if (f.beam) { f.m.material.opacity *= 0.85; }
+      else if (f.ring) f.m.scale.setScalar(f.size + f.grow * k);
       else f.m.scale.setScalar(f.size * (f.smoke ? 0.6 + k : f.shrink ? 1 - k : 0.5 + k * 0.8));
       if (f.v) f.m.position.add(f.v); else f.m.position.y += f.vy;
       if (f.smoke) f.m.material.opacity = Math.min(1, 2.5 * (1 - k));
@@ -1447,7 +1521,7 @@ class TornadoStage {
   // 1 Sonic Missile, 2 Freeze Ray, 3 Shield Ram, 4 Autopilot Combo, 5 Super Sonic
   useSpecial(n) {
     const g = this.g, cost = TOR_SPECIALS[n - 1].cost;
-    if (this.striker || this.freezeT > 0 || this.shieldT > 0 || this.autoT > 0 || this.superT > 0 || this.finisher) { Sound.play('select', { rate: 0.6, vol: 0.4 }); return; }
+    if (this.striker || this.flight || this.freezeT > 0 || this.shieldT > 0 || this.autoT > 0 || this.superT > 0 || this.finisher) { Sound.play('select', { rate: 0.6, vol: 0.4 }); return; }
     if (this.rings < cost) { Sound.play('select', { rate: 0.5, vol: 0.5 }); g.speech.say('tails', `We need ${cost} rings for that!`, { dur: 70, cool: 120 }); return; }
     this.rings -= cost;
     if ((n === 1 || n === 4 || n === 5) && this.pilot === 'sonic') this.swapRoles(false);
@@ -1455,16 +1529,27 @@ class TornadoStage {
     Sound.play('checkpoint', { rate: 1.2 });
     const F = this.fighters.sonic; F.atk = null; if (F.hold) this.dropHeld(F);
     switch (n) {
-      case 1: this.startStrike(['sonic'], { max: 6, air: true, speed: 2.6 }); g.speech.say('sonic', 'Fire me at them, Tails!', { dur: 80, prio: 6 }); break;
-      case 2: this.freezeT = 420; this.freezeBeam(); g.speech.say('tails', 'Freeze ray! Get them off the wing!', { dur: 90, prio: 6 }); break;
+      case 1: this.startFlight(); break;
+      case 2: this.freezeT = 480; this.freezeFire = 100; Sound.play('shield', { rate: 0.5 }); g.speech.say('tails', 'Freeze ray! Get them off the wing!', { dur: 90, prio: 6 }); break;
       case 3: this.shieldT = 480; this.shieldMesh.visible = true; Sound.play('shield'); g.speech.say('tails', 'Shield up! Hold on, we\'re ramming them!', { dur: 100, prio: 6 }); break;
       case 4: this.autoT = 480; this.startStrike(['sonic', 'tails'], { max: 99, speed: 1.9, both: true, limit: 450 }); g.speech.say('tails', 'Autopilot on! Together, Sonic!', { dur: 90, prio: 6 }); break;
       case 5: this.superT = 720; this.goSuper(true); this.startStrike(['sonic'], { max: 999, speed: 3.0, both: true, limit: 720, super: true }); g.speech.say('sonic', 'Time to stop playing around.', { dur: 100, prio: 6 }); break;
     }
   }
 
-  updateSpecials() {
+  updateSpecials(inp) {
+    if (this.flight) this.updateFlight(inp);
     if (this.freezeT > 0 && --this.freezeT === 0) Sound.play('select', { rate: 0.8 });
+    if (this.freezeFire > 0) {
+      // the ice cannon sweeps every target in turn, sky first, then the wing
+      this.freezeFire--;
+      if (this.freezeFire % 4 === 0) {
+        const f = this.foes.find((f) => !f.dead && f.hp > 0 && !(f.frozenT > 0) && f.z < 220);
+        const b = !f && this.boarders.find((b) => !b.dead && !(b.frozenT > 0) && (b.state === 'claw' || b.state === 'walk' || b.state === 'windup' || b.state === 'stagger' || b.state === 'stun' || b.state === 'hurt'));
+        const target = f || b;
+        if (target) this.freezeShot(target, !!b);
+      }
+    }
     if (this.shieldT > 0) {
       this.shieldT--;
       this.shieldMesh.visible = this.shieldT > 60 || this.shieldT % 8 < 4;
@@ -1490,13 +1575,29 @@ class TornadoStage {
     if (this.striker) this.updateStrike();
   }
 
-  freezeBeam() {
-    const P = this.planePos(new THREE.Vector3());
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.3, 260, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
-    beam.rotation.x = Math.PI / 2; beam.position.set(P.x, P.y + 0.5, 131); this.scene.add(beam);
-    this.fx.push({ m: beam, t: 0, dur: 30, size: 1, v: new THREE.Vector3(), own: true, ring: true, grow: 2 });
-    this.flash = 0.6; Sound.zap(0.7); Sound.play('shield', { rate: 0.5 });
+  freezeShot(target, boarder) {
+    const from = this.plane.root.localToWorld(new THREE.Vector3(0, 0.6, 2.2));
+    target.m.updateWorldMatrix(true, false);
+    const to = new THREE.Vector3().setFromMatrixPosition(target.m.matrixWorld).add(new THREE.Vector3(0, boarder ? 0.5 : 0, 0));
+    const len = from.distanceTo(to);
+    for (const [r, col, op] of [[0.35, 0x9fe8ff, 0.5], [0.12, 0xffffff, 0.95]]) {
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+      beam.position.copy(from).lerp(to, 0.5); beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+      this.scene.add(beam); this.fx.push({ m: beam, t: 0, dur: 12, size: 1, v: new THREE.Vector3(), own: true, beam: true });
+    }
+    for (let i = 0; i < 5; i++) { const sp = new THREE.Sprite(this.iceMat); sp.position.copy(to); this.scene.add(sp); const a = Math.random() * 6.3; this.fx.push({ m: sp, t: 0, dur: 16, size: 0.6, v: new THREE.Vector3(Math.cos(a) * 0.15, Math.sin(a) * 0.15, -0.1), shrink: true }); }
+    Sound.zap(0.3); Sound.play('pop', { rate: 0.6, vol: 0.5 });
+    target.frozenT = 420;
+    if (boarder) { target.state = 'frozen'; target.t = 0; }
+    // an ice block around it
+    const sz = target.kind === 'jet' ? [6, 2.2, 6] : boarder ? [0.9, 1.3, 0.9] : [1.2, 1.6, 1.2];
+    const block = new THREE.Mesh(this.iceGeo || (this.iceGeo = new THREE.BoxGeometry(1, 1, 1)), this.iceBlockMat || (this.iceBlockMat = new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.45, shininess: 120, specular: 0xffffff, depthWrite: false })));
+    const sc = target.m.scale.x || 1;
+    block.scale.set(sz[0] / sc, sz[1] / sc, sz[2] / sc); block.position.y = boarder ? 0.6 / sc : 0;
+    target.m.add(block); target.iceBlock = block;
   }
+
+  thaw(target) { if (target.iceBlock) { target.m.remove(target.iceBlock); target.iceBlock = null; } target.frozenT = 0; }
 
   goSuper(on) {
     const S = this.sonic;
@@ -1512,6 +1613,95 @@ class TornadoStage {
     S.aura.visible = on; S.aura.material.opacity = on ? 0.4 : 0;
     if (on) { Sound.playMusic('invincible'); this.flash = 1; this.shake = 20; }
     else { Sound.playMusic(this.phase === 'board' ? 'crisis' : 'skychase'); this.flash = 0.4; }
+  }
+
+  // ---- 1: SONIC MISSILE. Tails fires Sonic into the sky and YOU fly him:
+  // steer, and homing-attack (punch) through the birds, Zombots and jets.
+  startFlight() {
+    const S = this.scene, M = this.sonic, F = this.fighters.sonic;
+    F.atk = null; if (F.hold) this.dropHeld(F);
+    this.away.sonic = true; M.root.updateWorldMatrix(true, false); S.attach(M.root);
+    const pos = new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld);
+    this.flight = { t: 0, pos, v: new THREE.Vector3(0, 0.55, 0.5), homing: null, combo: 0, returning: false };
+    // a flock of infected birds to tear through
+    if (!this.birdTpl) this.spawnWave('none', 0);
+    const P = this.planePos(new THREE.Vector3());
+    for (let i = 0; i < 7; i++) {
+      const m = this.birdTpl.clone(); m.scale.setScalar(1.8); this.scene.add(m);
+      this.foes.push({ kind: 'flyer', m, x: P.x + (Math.random() - 0.5) * 18, y: P.y + 5 + Math.random() * 8, z: 40 + i * 9, bx: 0, t: 0, hp: 1, r: 1.6, ph: Math.random() * 6 });
+    }
+    Sound.play('boom', { rate: 1.2, vol: 0.7 }); Sound.boostBurst(); this.flash = 0.3; this.shake = 10;
+    this.g.speech.say('tails', 'Launching you, Sonic! Go get them!', { dur: 90, prio: 6 });
+    this.g.later(40, () => this.g.speech.say('sonic', `Homing attack with [${keyLabel('punch')}]!`, { dur: 90, prio: 5 }));
+  }
+
+  flightTarget() {
+    const fl = this.flight; let best = null, bd = 48;
+    for (const f of this.foes) {
+      if (f.dead || f.hp <= 0) continue;
+      const d = Math.hypot(f.x - fl.pos.x, f.y - fl.pos.y, f.z - fl.pos.z);
+      if (f.z < fl.pos.z - 3) continue;
+      const score = d + Math.abs(f.x - fl.pos.x) * 0.5;
+      if (score < bd) { bd = score; best = f; }
+    }
+    return best;
+  }
+
+  updateFlight(inp) {
+    const fl = this.flight, M = this.sonic, P = this.planePos(new THREE.Vector3());
+    fl.t++;
+    if (!fl.returning && (fl.t > 660 || fl.pos.y < P.y - 9)) { fl.returning = true; fl.homing = null; this.g.speech.say('sonic', 'Coming back down!', { dur: 60 }); }
+    if (fl.returning) {
+      const to = this.plane.root.localToWorld(new THREE.Vector3(this.fighters.sonic.x, TW.wingY + 0.3, TW.wingZ));
+      const d = to.clone().sub(fl.pos);
+      if (d.length() < 0.8) {
+        this.away.sonic = false; this.plane.root.attach(M.root); M.root.rotation.set(0, 0, 0);
+        M.ball.visible = false; M.body.visible = true; this.flight = null; this.placeChars();
+        Sound.play('skid', { vol: 0.5 }); return;
+      }
+      fl.pos.add(d.multiplyScalar(Math.min(1, 1.6 / d.length())));
+    } else if (fl.homing) {
+      const f = fl.homing;
+      if (f.dead || f.hp <= 0) fl.homing = null;
+      else {
+        const to = new THREE.Vector3(f.x, f.y, f.z), d = to.clone().sub(fl.pos), dist = d.length();
+        fl.pos.add(d.multiplyScalar(Math.min(1, 2.8 / dist)));
+        if (dist < 1.8) {
+          // bonk: it comes apart, Sonic bounces up for the next one
+          this.shatter(f.m, f.kind === 'jet' ? 0x59605a : f.kind === 'drone' ? 0x6f6a52 : 0x4a7a8c, 18);
+          this.killFoe(f);
+          fl.combo++; fl.homing = null; fl.v.set(0, 0.42, 0.12);
+          this.pops.push({ text: fl.combo > 1 ? `HOMING x${fl.combo}` : 'HOMING!', p: fl.pos.clone(), t: 0, big: true, rot: (Math.random() - 0.5) * 0.3 });
+          Sound.punch(1.6); Sound.play('spring', { rate: 1.3, vol: 0.6 }); this.shake = 9; this.g.hitStop = 4; this.fovKick = 6;
+          this.rings += 1;
+        }
+      }
+    } else {
+      const hx = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0, hy = inp ? (inp.up ? 1 : 0) - (inp.down ? 1 : 0) : 0;
+      fl.v.x = (fl.v.x - hx * 0.03) * 0.93;
+      fl.v.y = Math.max(-0.5, fl.v.y - 0.01 + hy * 0.008);
+      fl.v.z = Math.max(0.12, fl.v.z * 0.97);
+      fl.pos.add(fl.v);
+      fl.pos.z = Math.min(70, fl.pos.z);
+      if (inp && inp.punchPressed) {
+        const tg = this.flightTarget();
+        if (tg) { fl.homing = tg; Sound.play('release', { rate: 1.5, vol: 0.7 }); }
+        else { fl.v.z = 1.2; fl.v.y = Math.max(fl.v.y, 0.05); Sound.play('release', { vol: 0.5 }); }   // air dash
+      }
+    }
+    // pose: a ball while homing, falling otherwise
+    M.root.position.copy(fl.pos);
+    const ball = !!fl.homing || fl.returning;
+    M.ball.visible = ball; M.body.visible = !ball; if (ball) M.ball.rotation.x += 0.6;
+    M.root.rotation.set(0, 0, 0);
+    if (!ball) { this.playClip(M, fl.v.y > 0 ? 'spring' : 'fall'); if (M.mixer) M.mixer.update(1 / 60); escLimbPose(M, 'air', { t: this.t }); }
+    if (this.t % 2 === 0) { const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(0x4aa8ff); sp.position.copy(fl.pos); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 14, size: 1.0, v: new THREE.Vector3(0, 0, -0.4), own: true, shrink: true }); }
+  }
+
+  endFlight() {
+    const M = this.sonic;
+    this.away.sonic = false; this.plane.root.attach(M.root); M.root.rotation.set(0, 0, 0);
+    M.ball.visible = false; M.body.visible = true; this.flight = null;
   }
 
   // Sonic (and Tails) leave the plane and tear through targets one by one
@@ -1645,6 +1835,7 @@ class TornadoStage {
 
   startFinale() {
     const g = this.g;
+    if (this.flight) this.endFlight();
     if (this.striker) this.endStrike();
     if (this.superT > 0) { this.superT = 0; this.goSuper(false); }
     this.freezeT = 0; this.shieldT = 0; this.autoT = 0; this.finisher = null; this.shieldMesh.visible = false;
@@ -1738,6 +1929,7 @@ class TornadoStage {
 
   fail(kind) {
     const g = this.g;
+    if (this.flight) this.endFlight();
     if (this.striker) this.endStrike();
     if (this.superT > 0) { this.superT = 0; this.goSuper(false); }
     this.phase = kind; this.t = 0; this.shake = 25; this.flash = 0.6;
@@ -1820,6 +2012,7 @@ class TornadoStage {
       if (id === 'sonic') this.sonic.ball.visible = false;
       M.body.rotation.set(0, 0, 0); M.body.position.set(0, 0, 0);
       if (this.away[id]) {
+        if (id === 'sonic' && this.flight) continue;
         if (id === 'sonic') {
           const sup = this.superT > 0;
           this.sonic.ball.visible = !sup; this.sonic.body.visible = sup; this.sonic.ball.rotation.x += 0.6;
@@ -1854,7 +2047,7 @@ class TornadoStage {
         const S = this.sonic;
         S.ball.visible = !!ball; S.body.visible = !ball;
         if (ball) S.ball.rotation.x += 0.55;
-        const boosting = a && a.type === 'boost', fl = 0.8 + Math.random() * 0.4;
+        const boosting = a && (a.type === 'boost' || a.type === 'dash'), fl = 0.8 + Math.random() * 0.4;
         S.aura.material.opacity = boosting ? 0.5 * fl : 0; S.core.material.opacity = boosting ? 0.3 * fl : 0;
         S.aura.visible = S.core.visible = boosting;
         S.trailMat.opacity = boosting ? 0.6 : 0; S.trail.visible = boosting;
@@ -1863,34 +2056,38 @@ class TornadoStage {
         S.wave.material.opacity = bk; S.wave.visible = bk > 0; S.wave.scale.setScalar(1 + (1 - bk) * 6);
       }
       if (M.mixer) M.mixer.update(1 / 60);
-      // body language on top of the clip
+      // body language: real motion capture where we have it, hand poses on top
+      const mc = (clip, frac, k = 0.8, o = {}) => {
+        const C = typeof MOCAP !== 'undefined' && MOCAP[clip]; if (!C) return null;
+        return escMocap(M, clip, frac * C.length / 30, Object.assign({ loop: false, k }, o));
+      };
       if (F.stun) { M.body.rotation.x = -0.35; escLimbPose(M, 'hurt', { t }); continue; }
+      escFists(M, true);
       if (!a) {
-        escLimbPose(M, air ? 'air' : moving ? 'run' : sonic ? 'guard' : 'guard', { t: t * (moving ? 1.6 : 1) });
-        if (!air && !moving) M.body.position.y = Math.abs(Math.sin(t * 0.15)) * 0.03;   // bouncing on the balls of his feet
+        if (air) escLimbPose(M, 'air', { t });
+        else if (moving) escMocap(M, 'run', t / 60 * 1.4, { k: 0.55 });
+        else {
+          const r = escMocap(M, 'guard', t / 60 + (sonic ? 0 : 0.7), { k: 0.45 });
+          if (r) M.body.position.y = Math.max(-0.12, Math.min(0.06, (r.h - 0.95) * 0.9));
+        }
         continue;
       }
       const ph = a.t / a.dur, snap = Math.min(1, a.t / 4);
       switch (a.type) {
         case 'punch':
-          escLimbPose(M, a.side ? 'cross' : 'jab', { t, k: a.t < a.dur * 0.6 ? 0.8 : 0.3 });
-          M.body.rotation.y = (a.side ? -0.35 : 0.25) * snap * (1 - ph); M.body.rotation.x = 0.15 * snap;
+          mc((a.side ? 'cross' : 'jab') + (a.v || 0), ph, 0.85);
+          M.body.rotation.x = 0.1 * snap;
           break;
-        case 'kick':
-          M.body.rotation.y = -ph * Math.PI * 1.2; M.body.rotation.z = 0.25 * Math.sin(ph * Math.PI);
-          escLimbPose(M, 'kick', { t, k: 0.75 });
-          break;
-        case 'flykick':
-          M.body.rotation.x = 0.35; escLimbPose(M, 'flykick', { t, k: 0.8 });
-          break;
-        case 'boost':
-          M.body.rotation.x = 0.35; escLimbPose(M, 'sprint', { t, k: 0.8 });
+      case 'uppercut': mc('uppercut0', ph, 0.85); break;
+        case 'kick': mc(a.v ? 'kick1' : 'kick0', ph, 0.85); M.body.rotation.y = -0.4 * Math.sin(ph * Math.PI); break;
+        case 'flykick': mc('jumpkick', ph, 0.85); M.body.rotation.x = 0.2; break;
+        case 'dash': case 'boost':
+          M.body.rotation.x = 0.4; escMocap(M, 'run', t / 60 * 2.6, { k: 0.6 }); escLimbPose(M, 'sprint', { t, k: 0.8 });
           break;
         case 'tailswipe': case 'smack': {
+          mc('spinkick', ph, 0.8);
           const wind = a.type === 'smack' ? 9 : 5;
           M.body.rotation.y = a.t < wind ? -a.t * 0.06 : ((a.t - wind) / (a.dur - wind)) * Math.PI * 2 * (a.type === 'smack' ? 2 : 1);
-          M.body.rotation.x = 0.2;
-          escLimbPose(M, 'wide', { t, k: 0.6 });
           break;
         }
         case 'tailspin':
@@ -1899,11 +2096,11 @@ class TornadoStage {
         case 'swing': {
           M.body.rotation.y = -(a.t / a.dur) * Math.PI * 4 * F.face;
           const aim = F.hold ? new THREE.Vector3().setFromMatrixPosition(F.hold.m.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld).add(new THREE.Vector3(0, 0.55, 0))).normalize() : null;
-          if (aim) escLimbPose(M, 'grab', { aim }); else escLimbPose(M, 'jab', { t, side: 'R' });
+          if (aim) escLimbPose(M, 'grab', { aim }); else mc('cross0', 0.5);
           break;
         }
-        case 'whiff': escLimbPose(M, 'cross', { t, k: 0.6 }); break;
-        default: escLimbPose(M, 'guard', { t });
+        case 'whiff': mc('cross1', ph, 0.8); break;
+        default: escMocap(M, 'guard', t / 60, { k: 0.45 });
       }
     }
     this.sonic.root.visible = this.tails.root.visible = true;
@@ -1915,7 +2112,10 @@ class TornadoStage {
     let pos, look;
     this.camUp = null;
     const fightCam = this.active === 'fighter' && (this.phase === 'board');
-    if (this.finisher) {
+    if (this.flight) {
+      const fp = this.flight.pos;
+      pos = fp.clone().add(new THREE.Vector3(0, 2.4, -8)); look = fp.clone().add(new THREE.Vector3(0, 0.4, 14));
+    } else if (this.finisher) {
       // in close for the kill
       const X = this.finisher, R = this.plane.root, mid = (X.F.x + X.b.x) / 2;
       pos = R.localToWorld(new THREE.Vector3(mid + 0.6, TW.wingY + 1.3 + Math.sin(this.t * 0.02) * 0.2, -2.7));
@@ -1939,6 +2139,9 @@ class TornadoStage {
     const k = this.phase === 'crash' || this.phase === 'tbc' ? 0.05 : 0.12;
     this.camPos.lerp(pos, k); this.camLook.lerp(look, k);
     this.camera.position.copy(this.camPos);
+    this.fovKick = (this.fovKick || 0) * 0.85;
+    const fov = 62 - this.fovKick;
+    if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     if (this.shake > 0.3) this.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * this.shake * 0.03, (Math.random() - 0.5) * this.shake * 0.03, 0));
     this.upS = (this.upS || new THREE.Vector3(0, 1, 0)).lerp(this.camUp || new THREE.Vector3(0, 1, 0), k).normalize();
     this.camera.up.copy(this.upS);
@@ -1973,7 +2176,7 @@ class TornadoStage {
       ctx.fillStyle = '#ffffff'; ctx.fillText(pp.text, 0, 0);
       ctx.restore();
     }
-    if ((this.phase === 'sky' || this.phase === 'board') && this.active === 'pilot' && !this.finisher) this.drawTargeting(ctx);
+    if ((this.phase === 'sky' || this.phase === 'board') && this.active === 'pilot' && !this.finisher && !this.flight) this.drawTargeting(ctx);
     this.drawFight(ctx);
     if (this.lightning > 6 || this.lightning === 3) { ctx.fillStyle = 'rgba(220,210,255,.18)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     torDread(ctx, t, this.phase === 'crash' || this.phase === 'tbc' ? 0.5 : 1);
@@ -2071,6 +2274,14 @@ class TornadoStage {
       ctx.fillStyle = '#d4141e'; ctx.fillText(C.text, -296, 6); ctx.fillStyle = '#fff'; ctx.fillText(C.text, -300, 2);
       ctx.restore();
     }
+    if (this.flight) {
+      const fl = this.flight, tg = fl.homing || (!fl.returning && this.flightTarget());
+      if (tg) {
+        const p = scr(new THREE.Vector3(tg.x, tg.y, tg.z));
+        if (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(t * 0.1); ctx.strokeStyle = fl.homing ? '#ff3b3b' : '#ffd23f'; ctx.lineWidth = 4; ctx.strokeRect(-26, -26, 52, 52); ctx.restore(); }
+      }
+      g.text(ctx, `SKY ATTACK  [${keyLabel('punch')}] HOMING ATTACK  ARROWS STEER  ${Math.max(0, Math.ceil((660 - fl.t) / 60))}s`, VIEW_W / 2, VIEW_H - 60, 14, '#7fe3ff', 'center');
+    }
     if (this.freezeT > 0) { ctx.fillStyle = `rgba(120,200,255,${0.12 + 0.05 * Math.sin(t * 0.2)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.superT > 0) { ctx.fillStyle = `rgba(255,210,60,${0.08 + 0.04 * Math.sin(t * 0.3)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
   }
@@ -2118,7 +2329,7 @@ class TornadoStage {
       g.text(ctx, String(i + 1), x + 6, y + 18, 14, ok ? '#fff' : '#777', 'left', null);
       g.text(ctx, String(sp.cost), x + 50, y + 34, 10, ok ? '#ffd23f' : '#777', 'right', null);
     });
-    const act = this.striker ? (this.superT > 0 ? 'SUPER SONIC' : this.autoT > 0 ? 'AUTOPILOT COMBO' : 'SONIC MISSILE') : this.freezeT > 0 ? `FREEZE ${Math.ceil(this.freezeT / 60)}` : this.shieldT > 0 ? `SHIELD ${Math.ceil(this.shieldT / 60)}  ${keyLabel('up')}${keyLabel('down')} CLIMB` : null;
+    const act = this.flight ? 'SONIC MISSILE' : this.striker ? (this.superT > 0 ? 'SUPER SONIC' : 'AUTOPILOT COMBO') : this.freezeT > 0 ? `FREEZE ${Math.ceil(this.freezeT / 60)}` : this.shieldT > 0 ? `SHIELD ${Math.ceil(this.shieldT / 60)}  ${keyLabel('up')}${keyLabel('down')} CLIMB` : null;
     if (act) g.text(ctx, act, sx, sy + 72, 12, '#7fe3ff');
     const left = this.phase === 'sky' ? TW.SKY - t : TW.BOARD - t;
     if (this.phase === 'board') g.text(ctx, `COAST IN ${Math.max(0, Math.ceil(left / 60))}s`, VIEW_W / 2, 44, 16, '#fff', 'center');

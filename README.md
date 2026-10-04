@@ -75,12 +75,14 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Pilot: fly left / right; aim the guns up / down (the reticle follows the plane) | Arrows / WASD | D-pad / stick | D-pad |
 | Pilot: machine guns with auto-aim (hold) | Z or left mouse button | A | A |
 | Pilot: hold to lock on to up to 6 enemies, release to fire a missile salvo | hold X or right mouse button | hold X | hold B |
+| Sonic Missile (special 1): steer Sonic in the sky / homing attack | Arrows / Z or left click | | |
 | Special moves, paid in rings: 1 Sonic Missile (10), 2 Freeze Ray (20), 3 Shield Ram (30), 4 Autopilot Combo (40), 5 Super Sonic (50) | 1–5 | | 1–5 buttons |
 | Pilot: barrel roll (shrugs off energy bolts) | C | Y | X |
 | Fighter: move along the wing / jump | ← → / ↑ | D-pad | ◀ ▶ / ▲ |
 | Fighter: punch combo (3rd hit: Sonic kicks, Tails swipes with his tails); press it just as an enemy strikes to PARRY | Z or left mouse button | A | A |
 | Fighter: uppercut (launches them for a juggle; they SLAM when they land) | ↓ + Z | ↓ + A | ▼ + A |
 | Sonic: flying kick / spin attack / boost dash (costs half the boost gauge, refilled by landing hits) | X / ↓ + X / C | | |
+| Dash at an enemy (hits on the way, doesn't one-shot) | double-tap ← or → (A / D) | double-tap | double-tap |
 | Tails: TAIL SMACK (360° whip that clears the wing) / tail spin | X / C | X / Y | B / X |
 | Grab an enemy by the leg, swing it around and throw it off the plane; on a staggered Zombot: ZANDATSU (Sonic) or FATALITY (Tails) | V / Shift | B | Y |
 | Bite (don't) | B | LT | ☠ |
@@ -136,9 +138,11 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 
   The wing fight mixes in Metal Gear Rising and Mortal Kombat: time a punch into an enemy's attack to PARRY it (slow motion, the enemy reels); uppercut them into the air and juggle them; build a hit counter (6+ hits add damage); and when a Zombot is beaten down it staggers and the game calls FINISH HIM!. Grab it then and Sonic goes into blade mode and cuts it apart in slow motion (ZANDATSU, which also patches the wing and refills his boost), or Tails lifts it on his spinning tails and whips it to pieces (FATALITY). The boost dash costs half the gauge and no longer one-shots anything, so you have to actually fight.
 
-  The special moves (keys 1–5) cost rings, which you earn from kills and ring drops: 1 fires Sonic out like a missile to spin-slash up to six jets into shards; 2 is a freeze ray that ices every enemy in the sky and on the wing (frozen boarders shatter off the plane with one hit, and stop tearing at it); 3 wraps the Tornado in a shield that soaks up fire and lets you climb up and ram the jets out of the sky; 4 switches on a working autopilot while Sonic and Tails fly off together and wipe out everything on the wing and in the air; 5 turns Sonic into Super Sonic, an unstoppable golden force that tears through everything for twelve seconds while the plane takes no damage.
+  The special moves (keys 1–5) cost rings, which you earn from kills and ring drops: 1 has Tails fire Sonic into the sky, where you fly him and chain homing attacks through a flock of infected birds, jetpack Zombots and jets until he homes back down to the wing; 2 is an ice cannon that fires a beam at every enemy in turn and locks each one in a block of ice (frozen boarders shatter off the plane with one hit, and stop tearing at it); 3 wraps the Tornado in a shield that soaks up fire and lets you climb up and ram the jets out of the sky; 4 switches on a working autopilot while Sonic and Tails fly off together and wipe out everything on the wing and in the air; 5 turns Sonic into Super Sonic, an unstoppable golden force that tears through everything for twelve seconds while the plane takes no damage.
 
-  The Zombots are infected mobians in the style of Sonic Forces fan OCs: hedgehogs and foxes built on the Generations Sonic and Tails rigs, with dull metallic skin in a random muted colour (blue, green, red, purple...), black sclera and red eyes, spikes pushing out of their heads, shoulders and backs, and a hunched, arms-out zombie lurch. They raise both claws and rake down when they attack.
+  The Zombots are infected mobians in the style of Sonic Forces fan OCs: hedgehogs, foxes, bunnies, wolves, bears, cats, echidnas and hawks, built on the Generations Sonic and Tails rigs (reshaped ears, tails and bulk, plus snouts, beaks, crests and dreadlocks) in 18 dull metal colours and varied sizes, with dull metallic skin in a random muted colour (blue, green, red, purple...), black sclera and red eyes, spikes pushing out of their heads, shoulders and backs, and a hunched, arms-out zombie lurch. They raise both claws and rake down when they attack.
+
+  Everyone moves with real motion capture from the CMU Graphics Lab database, retargeted onto the Generations rigs: Sonic and Tails fight from a boxer's guard with captured jabs, crosses, uppercuts, front kicks, a jump kick and a spin kick, and run with a captured run; the Zombots march with the captured "zombie march", creep along the wing while they tear at it, and limp when staggered. Enemies flash white when hit and the camera punches in on heavy blows.
 
   On the wing, Sonic and Tails fight Sonic Battle-style with real poses: a fists-up boxer's stance, jab, cross, roundhouse (Sonic) or tail swipe (Tails), flying kick, spin attack, boost dash, leg grab and swing-throw, and Tails' tail smack. Every hit lands with a flash, a shockwave ring, flying feathers or metal plates, hit-stop, camera shake, layered impact sounds and a P5-style SMASH!/BAM! word.
 
@@ -172,6 +176,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/tornado.js` | Sky Chase: 2D pickup scene, 3D Tornado shooter, wing brawler, role switching, the three outcomes, horror post-effects |
 | `js/models_tornado.js` | Packed Tails (Generations) and Tornado (SADX) models (generated by `tools/convert_models/pack_tornado.py`) |
 | `js/tailsframes.js` | Frame rects for `assets/sonic/tornado_sprites.png` (generated by `tools/tornado_sprites`) |
+| `js/mocap.js` | Retargeted motion-capture clips (generated by `tools/mocap/extract.py`) |
 | `js/models3d.js` | Packed Sonic and Egg Pawn 3D models and animations (generated by `tools/convert_models`) |
 | `js/lib/three.min.js` | three.js r149 (MIT), used only by the escape |
 | `js/eggframes.js` | Eggman sprite frame rects |
@@ -187,6 +192,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **3D Sonic and Egg Pawn:** the Sonic Generations models ripped by Apoc Hedgie for The Models Resource, with Generations animation clips, both taken from the [JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity](https://github.com/JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity) fan project and converted with `tools/convert_models`.
 - **3D Tails and the Tornado:** Tails is the Sonic Generations model ripped by Random Talking Bush (The Models Resource) with Generations fly, idle and run clips. The Tornado is the Sonic Adventure DX model ripped by josh98. Both come from the same [JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity](https://github.com/JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity) project and were converted with `tools/convert_models` (`export_tornado.*`, `pack_tornado.py`).
 - **Tails, Tornado and Zombot sprites:** the author of our Sonic sprites never drew Tails, and there are no free IDW Zombot sprites or models, so the 2D sprites are rendered from the 3D models and reduced to 8-bit style (`tools/tornado_sprites`). The Zombots are Egg Pawns repainted by the Metal Virus (in code), and the infected birds and jets are built in code.
+- **Motion capture:** the [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu/) (free for any use), in Bruce Hahne's BVH conversion via the [una-dinosauria/cmu-mocap](https://github.com/una-dinosauria/cmu-mocap) mirror: boxing (subjects 13, 14), kicks (74, 88, 90), running (9), zombie march (20, 21), limping and creeping (77). `tools/mocap/extract.py` cuts the clips around the punches and kicks and retargets them by limb direction into `js/mocap.js`.
 - **3D engine:** [three.js](https://threejs.org) r149, MIT license (`js/lib/LICENSE-three.txt`).
 - **Rings, monitors, bosses, Egg Colossus, effects, chiptune music:** drawn and composed in code for this project.
 - **Final battle songs:** the game plays `assets/music/with_me.mp3` (robot fight), `assets/music/built_for_blame.mp3` (brawl) and `assets/music/rise_from_the_ashes.mp3` (escape) if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).
