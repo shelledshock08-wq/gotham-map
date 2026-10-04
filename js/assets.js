@@ -35,6 +35,7 @@ const IMAGE_LIST = (() => {
   list.super = 'assets/sonic/super.png';
   list.eggman = 'assets/sonic/eggman.png';
   list.metal = 'assets/sonic/metal.png';
+  list.tornado = 'assets/sonic/tornado_sprites.png';   // Tails, the Tornado and the infected (tools/tornado_sprites)
   for (let i = 1; i <= 4; i++) list['eggman_d' + i] = `assets/sonic/eggman_d${i}.png`;   // beaten-up sheets
   return list;
 })();

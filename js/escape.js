@@ -152,7 +152,8 @@ const ESC_TEX_CACHE = {};
 function escModelTex(name) {
   if (!ESC_TEX_CACHE[name]) {
     // same orientation as three's ColladaLoader (default flipY), which the UVs were authored for
-    const t = new THREE.TextureLoader().load(ESC_MODELS.tex[name]);
+    const src = (typeof ESC_MODELS !== 'undefined' && ESC_MODELS.tex[name]) || (typeof TOR_MODELS !== 'undefined' && TOR_MODELS.tex[name]);
+    const t = new THREE.TextureLoader().load(src);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;   // Generations UVs run outside 0..1
     ESC_TEX_CACHE[name] = t;
   }
@@ -1170,7 +1171,8 @@ class EscapeStage {
     }
     if (t === 220) g.speech.say('sonic', 'Run all you want, Eggman.', { dur: 140, prio: 5 });
     if (t === 340) g.speech.say('sonic', "...I'll be right behind you.", { dur: 120, prio: 5 });
-    if (t === 470) { this.phase = 'tbc'; this.t = 0; Sound.play('actclear', { rate: 0.8 }); }
+    // on to the Sky Chase: Tails swoops in with the Tornado
+    if (t === 470) { this.phase = 'tbc'; this.t = 0; this.handoff = true; g.later(1, () => g.startTornado('pickup')); }
   }
 
   updateFX() {
@@ -1392,7 +1394,7 @@ class EscapeStage {
       this.g.text(ctx, 'GET OUT BEFORE IT COLLAPSES ON YOU', VIEW_W / 2, 254, 16, '#fff', 'center', '#000');
       if (this.t > 80) this.g.text(ctx, 'GO!', VIEW_W / 2, 340, 56, '#fff', 'center', '#1d3fd1');
     }
-    if (this.phase === 'tbc') this.drawTBC(ctx, t);
+    if (this.phase === 'tbc' && !this.handoff) this.drawTBC(ctx, t);
   }
 
   drawHUD(ctx) {

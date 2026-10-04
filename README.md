@@ -66,7 +66,22 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 
 **Special Stage:** ← / → run up the walls of the half-pipe, Z / A jumps.
 
-**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 0–9) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl, the 3D base escape, the Emerald Ruins (9) or the Special Stage (0). Turn it off with `DEV_MENU = false` in `js/game.js`.
+**Sky Chase (the Tornado):**
+
+| Action | Keyboard | Gamepad | Touch |
+|---|---|---|---|
+| Switch between the pilot and the fighter on the wing | Q / Tab | LB | ⇄ |
+| Swap roles (Sonic flies, Tails fights), only for a few seconds | E | RB | ⟲ |
+| Pilot: steer | Arrows / WASD | D-pad / stick | D-pad |
+| Pilot: machine guns (hold) / homing missile / barrel roll (dodges bolts) | Z / X / C | A / X / Y | A / B / X |
+| Fighter: move along the wing / jump | ← → / ↑ | D-pad | ◀ ▶ / ▲ |
+| Fighter: punch combo (3rd hit: Sonic kicks, Tails swipes with his tails) | Z | A | A |
+| Sonic: spin attack / flying kick / boost dash | ↓ + Z / X / C | | |
+| Tails: TAIL SMACK (360° whip that clears the wing) / tail spin | X / C | X / Y | B / X |
+| Grab an enemy by the leg, swing it around and throw it off the plane | V / Shift | B | Y |
+| Bite (don't) | B | LT | ☠ |
+
+**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 0–9) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl, the 3D base escape, the Emerald Ruins (9), the Special Stage (0) or the Sky Chase (the minus key). Turn it off with `DEV_MENU = false` in `js/game.js`.
 
 ## Features
 
@@ -103,11 +118,18 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
   2. You burst out onto an elevated highway through a burning city at dusk, with banked turns, cars, Egg Pawns, a broken bridge you cross by chaining homing attacks, a loop and a corkscrew.
   3. You run straight down the glass face of a skyscraper (Speed Highway style) while windows burst around you.
   4. You cross a bay running on the water. You have to keep boosting or you sink.
-  5. You take the coast road through a final loop, launch off a ramp and watch the base blow up behind you. TO BE CONTINUED.
+  5. You take the coast road through a final loop, launch off a ramp and watch the base blow up behind you.
 
   Boosting hits with a sonic-boom shockwave, a blue jet trail, a camera FOV punch and a synthesized roar that becomes a held jet-engine sound. The blast wave chases you the whole way (the meter at the top). Rings refill the boost gauge. Dying restarts the escape.
+- **Sky Chase:** on the coast road, Tails swoops in with the Tornado and Sonic hops onto the wing (a 2D scene). Sonic starts telling him what happened ("Eggman's gone completely batshit insane, and—") when Zombots attack, firing energy bolts. The game then switches to a third-person 3D shooter: Tails flies the SADX Tornado through a blood-red dusk against infected jets and jetpack Zombots. After about 40 seconds, infected birds (and later Zombots) start landing on the wing and tearing at it, and you have to keep switching between Tails flying and firing, and Sonic fighting the boarders in a Sonic Battle-style brawl on the wing.
+  - Neglect the fight and the wing is **torn apart**; Sonic falls to his death.
+  - Neglect the flying and the Tornado is **shot down**.
+  - Balance both for 70 seconds and a giant Zombot gunship shoots you down anyway. The Tornado crash-lands on a beach, and both of them walk away. TO BE CONTINUED.
+
+  You can swap roles for a few seconds: Tails can fight (his tail smack is the strongest move in the game) until he gets tired, and Sonic can fly until he admits he has no idea how (the controls are reversed and the plane wanders). Biting a Zombot or an infected bird gets you infected by the Metal Virus: instant game over. The stage leans uneasy: a dark sky, glowing eyes opening in the clouds, lightning, film grain and the odd glitch, a low drone with whispers, and a minor-key theme.
+- **Persona 5-style dialogue:** every line is a slanted black panel with a white rim, a red offset shadow and a tilted name tag in the speaker's colour.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
-- Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone); dying in the brawl or the escape restarts that part. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle, brawl or escape if you had reached it.
+- Classic death/continue rules: dying in an act sends you to the last star post; dying in the super battle restarts the super battle (like Doomsday Zone); dying in the brawl or the escape restarts that part; dying in the Sky Chase restarts the shooter, or the boarding fight once you've reached it. On game over you get a 10-second **CONTINUE?** screen (2 continues per game): 3 fresh lives, score resets to 0, and you resume at the super battle, brawl or escape if you had reached it.
 - An original chiptune soundtrack synthesized live with Web Audio: meadow, dunes, fortress, boss and invincibility themes.
 - Works with keyboard, gamepad and touch (on-screen controls appear automatically on phones and tablets).
 
@@ -130,6 +152,9 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/ruins.js` | Emerald Ruins: the Diamond Rush style grid act (map, boulder physics, snakes, spikes, checkpoints) |
 | `js/special.js` | Sonic 2 style Special Stage (3D half-pipe, ring quotas, emeralds) |
 | `js/escape.js` | 3D Egg Base Escape: course (loops, corkscrew, building run, water), boost physics, hazards, camera |
+| `js/tornado.js` | Sky Chase: 2D pickup scene, 3D Tornado shooter, wing brawler, role switching, the three outcomes, horror post-effects |
+| `js/models_tornado.js` | Packed Tails (Generations) and Tornado (SADX) models (generated by `tools/convert_models/pack_tornado.py`) |
+| `js/tailsframes.js` | Frame rects for `assets/sonic/tornado_sprites.png` (generated by `tools/tornado_sprites`) |
 | `js/models3d.js` | Packed Sonic and Egg Pawn 3D models and animations (generated by `tools/convert_models`) |
 | `js/lib/three.min.js` | three.js r149 (MIT), used only by the escape |
 | `js/eggframes.js` | Eggman sprite frame rects |
@@ -143,6 +168,8 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 - **Sonic sprites:** fan-ripped 8-bit Sonic sprite sheet from [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML), downsampled to native resolution. Super Sonic is a gold recolor of the same frames.
 - **Eggman sprites:** fan-ripped frames from the same [Avalojandro/SONIC-HTML](https://github.com/Avalojandro/SONIC-HTML) project, downsampled to native pixels. Metal Sonic is a steel recolor of the Sonic sheet.
 - **3D Sonic and Egg Pawn:** the Sonic Generations models ripped by Apoc Hedgie for The Models Resource, with Generations animation clips, both taken from the [JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity](https://github.com/JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity) fan project and converted with `tools/convert_models`.
+- **3D Tails and the Tornado:** Tails is the Sonic Generations model ripped by Random Talking Bush (The Models Resource) with Generations fly, idle and run clips. The Tornado is the Sonic Adventure DX model ripped by josh98. Both come from the same [JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity](https://github.com/JonathanOdgis/Sonic-The-Hedgehog-Controller-Unity) project and were converted with `tools/convert_models` (`export_tornado.*`, `pack_tornado.py`).
+- **Tails, Tornado and Zombot sprites:** the author of our Sonic sprites never drew Tails, and there are no free IDW Zombot sprites or models, so the 2D sprites are rendered from the 3D models and reduced to 8-bit style (`tools/tornado_sprites`). The Zombots are Egg Pawns repainted by the Metal Virus (in code), and the infected birds and jets are built in code.
 - **3D engine:** [three.js](https://threejs.org) r149, MIT license (`js/lib/LICENSE-three.txt`).
 - **Rings, monitors, bosses, Egg Colossus, effects, chiptune music:** drawn and composed in code for this project.
 - **Final battle songs:** the game plays `assets/music/with_me.mp3` (robot fight), `assets/music/built_for_blame.mp3` (brawl) and `assets/music/rise_from_the_ashes.mp3` (escape) if present. That folder is git-ignored because the song is a commercial recording. Without it, the battle uses a synth theme. `python3 tools/build_standalone.py` bundles the song into `sonic-standalone-full.html` (also git-ignored).

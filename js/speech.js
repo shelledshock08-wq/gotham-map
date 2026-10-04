@@ -3,9 +3,9 @@
 'use strict';
 
 const KEY_LABELS = {
-  kb:    { punch: 'Z', jump: 'Z', laser: 'X', clones: 'C', grab: 'V', down: '↓' },
-  pad:   { punch: 'A', jump: 'A', laser: 'X', clones: 'Y', grab: 'B', down: '↓' },
-  touch: { punch: 'A', jump: 'A', laser: 'B', clones: 'X', grab: 'Y', down: '▼' },
+  kb:    { punch: 'Z', jump: 'Z', laser: 'X', clones: 'C', grab: 'V', down: '↓', up: '↑', swap: 'Q', roles: 'E', bite: 'B' },
+  pad:   { punch: 'A', jump: 'A', laser: 'X', clones: 'Y', grab: 'B', down: '↓', up: '↑', swap: 'LB', roles: 'RB', bite: 'LT' },
+  touch: { punch: 'A', jump: 'A', laser: 'B', clones: 'X', grab: 'Y', down: '▼', up: '▲', swap: '⇄', roles: '⟲', bite: '☠' },
 };
 function keyLabel(action) {
   const dev = (window.Input && Input.lastDevice) || 'kb';
@@ -45,7 +45,7 @@ function drawPrompt(ctx, x, y, action, text, t, s = 1) {
 class SpeechSystem {
   constructor(game) { this.g = game; this.list = []; this.once = new Set(); this.cool = {}; }
 
-  // who: 'sonic' | 'eggman'. opts: { dur, once: key, cool: frames, big, prio }
+  // who: 'sonic' | 'tails' | 'eggman'. opts: { dur, once: key, cool: frames, big, prio }
   say(who, text, opts = {}) {
     if (opts.once) { if (this.once.has(opts.once)) return false; this.once.add(opts.once); }
     if (opts.cool) {
@@ -58,7 +58,7 @@ class SpeechSystem {
     if (cur && (cur.prio || 0) > (opts.prio || 0) && cur.t < cur.dur * 0.6) return false;
     this.list = this.list.filter((b) => b.who !== who);
     const dur = opts.dur || 170;
-    if (who === 'sonic') Sound.play('select', { vol: 0.25, rate: 1.6 });
+    if (who === 'sonic' || who === 'tails') Sound.play('select', { vol: 0.25, rate: who === 'tails' ? 1.9 : 1.6 });
     this.list.push({ who, text, t: 0, dur, big: !!opts.big, prio: opts.prio || 0 });
     return true;
   }
@@ -73,6 +73,7 @@ class SpeechSystem {
 
   speakerPos(who) {
     const g = this.g, F = g.final;
+    if (g.tornado) return g.tornado.speakerPos(who);
     if (g.escape) return g.escape.speakerPos(who);
     if (g.ruins || g.special) return (g.ruins || g.special).speakerPos(who);
     if (who === 'eggman') {
@@ -97,7 +98,7 @@ class SpeechSystem {
       const pos = this.speakerPos(b.who);
       if (!pos) continue;
       const F = this.g.final;
-      const sp = this.g.escape || this.g.ruins || this.g.special ? pos : F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
+      const sp = this.g.tornado || this.g.escape || this.g.ruins || this.g.special ? pos : F && F.toScreen ? F.toScreen(pos.x, pos.y) : { x: pos.x - cam.x, y: pos.y - cam.y };
       this.drawBubble(ctx, b, sp.x, sp.y);
     }
   }
@@ -123,38 +124,65 @@ class SpeechSystem {
     return { lines, w: maxLine };
   }
 
+  // Persona 5-style dialogue: a slanted black panel with a white rim and a red
+  // offset shadow, a tilted name tag in the speaker's colour and a sharp tail.
   drawBubble(ctx, b, sx, sy) {
-    const size = b.big ? 30 : 14, lh = size + 12;
-    const { lines, w } = this.layout(ctx, b.text, size, b.big ? 600 : 380);
-    const pad = 12, bw = w + pad * 2, bh = lines.length * lh + pad * 2 - 6;
-    const pop = Math.min(1, b.t / 8), fade = Math.min(1, (b.dur - b.t) / 12);
-    let bx = sx - bw / 2, by = sy - bh - 26;
-    bx = Math.max(10, Math.min(VIEW_W - bw - 10, bx));
-    by = Math.max(10, by);
+    const size = b.big ? 28 : 14, lh = size + 12;
+    const { lines, w } = this.layout(ctx, b.text, size, b.big ? 600 : 400);
+    const pad = 18, bw = w + pad * 2 + 10, bh = lines.length * lh + pad * 2 - 2;
+    const pop = Math.min(1, b.t / 7), fade = Math.min(1, (b.dur - b.t) / 12);
+    let bx = sx - bw / 2, by = sy - bh - 40;
+    bx = Math.max(16, Math.min(VIEW_W - bw - 16, bx));
+    by = Math.max(30, by);
+    const P5 = { sonic: ['SONIC', '#1d4fe0'], tails: ['TAILS', '#ff9a1a'], eggman: ['EGGMAN', '#d4141e'] }[b.who] || [b.who.toUpperCase(), '#d4141e'];
+    // stable jitter per line of dialogue, so the panel doesn't wobble every frame
+    let seed = 0; for (let i = 0; i < b.text.length; i++) seed = (seed * 31 + b.text.charCodeAt(i)) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const j = () => (rnd() - 0.5) * 22;
+    const quad = [[bx + j(), by + j()], [bx + bw + j(), by + 6 + j()], [bx + bw - 8 + j(), by + bh + j()], [bx - 6 + j(), by + bh - 6 + j()]];
+    const tailX = Math.max(bx + 30, Math.min(bx + bw - 30, sx));
+    const path = (dx, dy) => {
+      ctx.beginPath();
+      ctx.moveTo(quad[0][0] + dx, quad[0][1] + dy);
+      ctx.lineTo(quad[1][0] + dx, quad[1][1] + dy);
+      ctx.lineTo(quad[2][0] + dx, quad[2][1] + dy);
+      ctx.lineTo(tailX + 18 + dx, by + bh - 3 + dy);
+      ctx.lineTo(sx + 6 + dx, sy - 8 + dy);              // the tail stabs toward the speaker
+      ctx.lineTo(tailX - 6 + dx, by + bh - 1 + dy);
+      ctx.lineTo(quad[3][0] + dx, quad[3][1] + dy);
+      ctx.closePath();
+    };
     ctx.save();
     ctx.globalAlpha = fade;
-    ctx.translate(sx, sy); ctx.scale(pop, pop); ctx.translate(-sx, -sy);
-    const egg = b.who === 'eggman';
-    ctx.fillStyle = egg ? '#ffe9e4' : '#ffffff';
-    ctx.strokeStyle = egg ? '#b3121a' : '#0b1440'; ctx.lineWidth = 3;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 10); else ctx.rect(bx, by, bw, bh);
-    ctx.fill(); ctx.stroke();
-    // tail
-    const tx = Math.max(bx + 16, Math.min(bx + bw - 16, sx));
-    ctx.beginPath(); ctx.moveTo(tx - 10, by + bh - 2); ctx.lineTo(sx, sy - 6); ctx.lineTo(tx + 10, by + bh - 2); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.fillRect(tx - 9, by + bh - 4, 18, 5);
+    const cx = bx + bw / 2, cy = by + bh / 2;
+    ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.rotate((1 - pop) * -0.25 + (rnd() - 0.5) * 0.03); ctx.translate(-cx, -cy);
+    path(11, 9); ctx.fillStyle = '#d4141e'; ctx.fill();
+    path(0, 0); ctx.fillStyle = '#0a0a0a'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.lineJoin = 'miter'; ctx.stroke();
+    // halftone flecks in the corner, like the game's UI
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    for (let y = by + 8; y < by + bh - 6; y += 7) for (let x = bx + bw - 60 + (y % 14 ? 3 : 0); x < bx + bw - 10; x += 7) ctx.fillRect(x, y, 2, 2);
+    // name tag
+    ctx.save();
+    ctx.translate(bx + 6, by - 4); ctx.rotate(-0.09);
+    ctx.font = `${b.big ? 14 : 12}px ${FONT}`;
+    const nw = ctx.measureText(P5[0]).width + 26;
+    ctx.fillStyle = P5[1]; ctx.beginPath(); ctx.moveTo(-4, -22); ctx.lineTo(nw + 10, -26); ctx.lineTo(nw + 2, 6); ctx.lineTo(-10, 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(nw, -21); ctx.lineTo(nw - 6, 1); ctx.lineTo(-5, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#0a0a0a'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(P5[0], 10, -4);
+    ctx.restore();
     // text
     ctx.font = `${size}px ${FONT}`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     lines.forEach((line, i) => {
-      let x = bx + pad; const y = by + pad + (i + 1) * lh - 10;
+      let x = bx + pad + 4; const y = by + pad + (i + 1) * lh - 8;
       for (const tk of line) {
         if (tk.key) { drawKeyCap(ctx, x, y + 2, tk.key, size); }
-        else { ctx.fillStyle = b.big ? '#d4141e' : egg ? '#7a0a10' : '#0b1440'; ctx.fillText(tk.s, x, y); }
+        else { ctx.fillStyle = b.big ? '#ff3b3b' : '#ffffff'; ctx.fillText(tk.s, x, y); }
         x += tk.w;
       }
     });
     ctx.restore();
   }
+
 }

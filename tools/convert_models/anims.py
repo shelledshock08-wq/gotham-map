@@ -22,7 +22,7 @@ def herm(keys, t, comp):
     return keys[-1]['value'][comp]
 
 out = {}
-for p in sorted(glob.glob(A + 'sonic_*.anim')):
+for p in sorted(glob.glob(A + os.environ.get('PREFIX', 'sonic_') + '*.anim')):
     c = load(p); name = c['m_Name']
     st = c.get('m_AnimationClipSettings', {}).get('m_StopTime')
     tracks = []
@@ -48,5 +48,5 @@ for p in sorted(glob.glob(A + 'sonic_*.anim')):
             tracks.append({'bone': cv['path'].split('/')[-1], 'path': cv['path'], 'kind': kind, 'order': cv['curve'].get('m_RotationOrder', 4), 'times': [round(t, 4) for t in times], 'values': vals})
     out[name] = {'duration': st, 'tracks': tracks}
     print(name, st, len(tracks), sorted(set(t['kind'] for t in tracks)), c.get('m_AnimationClipSettings', {}).get('m_LoopTime'))
-json.dump(out, open('anims.json', 'w'))
-print(os.path.getsize('anims.json'))
+json.dump(out, open(os.environ.get('OUT', 'anims.json'), 'w'))
+print(os.path.getsize(os.environ.get('OUT', 'anims.json')))

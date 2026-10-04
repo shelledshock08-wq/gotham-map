@@ -244,6 +244,26 @@ class Game {
     if (this.escape) this.escape.dispose();
     this.escape = null;
   }
+  // Sky Chase: Tails picks Sonic up in the Tornado (after the escape)
+  startTornado(from = 'pickup') {
+    this.endEscape(); this.endTornado();
+    this.final = null; this.tally = null;
+    this.speech.clear();
+    if (from === 'pickup') this.checkpointTornado = 'sky';
+    this.tornado = new TornadoStage(this, from);
+  }
+  endTornado() {
+    if (this.tornado) this.tornado.dispose();
+    this.tornado = null;
+  }
+  finishTornado() { if (!this.tally) this.startTally(); }
+  tornadoDeath(cp) {
+    this.lives--;
+    if (this.lives <= 0) { this.endTornado(); this.gameOver('tornado'); return; }
+    this.startTornado(cp);
+  }
+  // biting a Zombot: the Metal Virus takes you, no matter how many lives are left
+  tornadoInfected() { this.endTornado(); this.gameOver('tornado'); }
   // Emerald Ruins (Diamond Rush) and the Special Stage, between Act 2 and Act 3
   startRuins() {
     this.endSpecialModes(); this.endEscape(); this.final = null; this.tally = null;
@@ -286,6 +306,7 @@ class Game {
     this.state = 'play';
     Sound.play('oneup');
     if (this.resumeAt === 'escape') this.startEscape();
+    else if (this.resumeAt === 'tornado') this.startTornado(this.checkpointTornado || 'sky');
     else if (this.resumeAt === 'ruins') this.startRuins();
     else if (this.resumeAt === 'special') this.startSpecial();
     else if (this.resumeAt === 'final' || this.resumeAt === 'brawl') {
@@ -313,6 +334,7 @@ class Game {
     this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
     this.rings = 50;
     if (n === 8) { this.startEscape(); return; }
+    if (n === 10) { this.startTornado('pickup'); return; }
     if (n === 9) { this.emeraldCount = 4; this.startRuins(); return; }
     if (n === 0) { this.emeraldCount = 7; this.startSpecial(); return; }
     if (n === 5) this.final = new FinalBattle(this, { x: a.x + 700, y: a.groundY - 300 }, false);
@@ -377,7 +399,7 @@ class Game {
     }
 
     // ---- play ----
-    if (inp.startPressed && !this.tally && !(this.final && this.final.phase === 'tbc') && !(this.escape && this.escape.phase === 'tbc')) { this.state = 'paused'; return; }
+    if (inp.startPressed && !this.tally && !(this.final && this.final.phase === 'tbc') && !(this.escape && this.escape.phase === 'tbc') && !(this.tornado && (this.tornado.phase === 'tbc' || this.tornado.phase === 'pickup'))) { this.state = 'paused'; return; }
     this.speech.update();
     if (this.combo && --this.combo.t <= 0) this.combo = null;
     if (this.hitStop > 0) { this.hitStop--; return; }   // impact freeze frames
@@ -390,6 +412,11 @@ class Game {
       if (--this.timers[i].t <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     }
 
+    if (this.tornado) {
+      this.tornado.update(inp);
+      if (this.tally) this.updateTally(inp);
+      return;
+    }
     if (this.escape) {
       this.escape.update(inp);
       if (this.tally) this.updateTally(inp);
@@ -486,11 +513,11 @@ class Game {
       this.saveHi();
       if (this.levelIndex === 1) this.startRuins();      // the four emeralds open a portal
       else if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
-      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
+      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); this.endTornado(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
-  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); this.endSpecialModes(); Sound.stopMusic(); Sound.stopTrack(); }
+  toTitle() { this.saveHi(); this.state = 'title'; this.final = null; this.endEscape(); this.endTornado(); this.endSpecialModes(); Sound.stopMusic(); Sound.stopTrack(); }
 
   saveHi() {
     if (this.score > this.hiscore) {
@@ -557,6 +584,15 @@ class Game {
       mode.draw(ctx);
       this.speech.draw(ctx, { x: 0, y: 0 });
       mode.drawHUD(ctx);
+      if (this.state === 'paused') this.drawPause(ctx);
+      if (this.state === 'gameover') this.drawGameOver(ctx);
+      return;
+    }
+    if (this.tornado) {
+      this.tornado.draw(ctx);
+      this.speech.draw(ctx, { x: 0, y: 0 });
+      this.tornado.drawHUD(ctx);
+      if (this.tally) this.drawTally(ctx);
       if (this.state === 'paused') this.drawPause(ctx);
       if (this.state === 'gameover') this.drawGameOver(ctx);
       return;
@@ -829,6 +865,7 @@ class Game {
     window.addEventListener('keydown', (e) => {
       const m = /^Digit([0-9])$/.exec(e.code);
       if (m && game.state === 'title') game.devSkip(+m[1]);
+      if (e.code === 'Minus' && game.state === 'title') game.devSkip(10);
     });
   }
   Assets.load((p) => { game.loadProgress = p; }).then(() => {

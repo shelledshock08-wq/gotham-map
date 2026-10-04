@@ -1,0 +1,29 @@
+<!doctype html><html><body style="margin:0">
+<script>const VIEW_W=1280, VIEW_H=720;</script>
+<script src="js/lib/three.min.js"></script><script src="js/models3d.js"></script><script src="js/models_tornado.js"></script>
+<script src="js/escape.js"></script><script src="js/tornado.js"></script>
+<script>
+const R = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
+const S = new THREE.Scene();
+S.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 0.9)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(-1, 2, 0.6); S.add(sun);
+const tails = torTailsModel(); S.add(tails.root);
+const plane = torPlaneModel(); S.add(plane.root); plane.root.scale.setScalar(0.16 / TOR_SCALE);   // sheet was framed at 0.16
+const pilot = torTailsModel(); plane.root.add(pilot.root);
+const jet = torJetModel(); S.add(jet);
+const bird = torBirdModel(); S.add(bird);
+const zom = torZombotModel(); S.add(zom);
+const all = [tails.root, plane.root, jet, bird, zom];
+// what: which object; w,h world frame; px per world unit
+window.render = (what, clip, t, w, h, cy, ppu, yaw) => {
+  for (const o of all) o.visible = false;
+  let o = { tails: tails.root, plane: plane.root, jet, bird, zom }[what]; o.visible = true;
+  o.rotation.y = yaw || 0;
+  if (what === 'tails' && clip) { tails.mixer.stopAllAction(); tails.actions[clip].play(); tails.mixer.setTime(t); }
+  if (what === 'plane') { pilot.mixer.stopAllAction(); pilot.actions.idle.play(); pilot.mixer.setTime(0.1); pilot.root.position.set(0, 0.46, -0.32); if (plane.prop) plane.prop.rotation.z = t; }
+  R.setSize(Math.round(w * ppu), Math.round(h * ppu));
+  const cam = new THREE.OrthographicCamera(-w / 2, w / 2, h / 2, -h / 2, 0.1, 100);
+  cam.position.set(-30, cy, 0); cam.lookAt(0, cy, 0);
+  R.setClearColor(0x000000, 0); R.render(S, cam); return R.domElement.toDataURL();
+};
+window.ready = true;
+</script></body></html>

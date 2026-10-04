@@ -1277,6 +1277,7 @@ class FinalBattle {
     if (C.sel && (inp.punchPressed || inp.jumpPressed || inp.startPressed)) {
       this.g.eggmanFate = C.sel;
       Sound.play('checkpoint', { rate: C.sel === 'kill' ? 0.6 : 1 });
+      this.g.eggChoice = C.sel;   // remembered later (Sonic's account to Tails)
       if (C.sel === 'kill') this.startKill(); else { this.spared = true; this.startRescue(); }
     }
   }

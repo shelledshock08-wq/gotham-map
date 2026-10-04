@@ -135,6 +135,35 @@ const SONGS = {
       'D6 - - - B5 - - - G5 - - - D6 - - -',
     ],
   },
+  skychase: {
+    // minor and slow: the sky is wrong tonight
+    bpm: 132, drums: 'shuffle', bass: 'walk', duty: 0.125,
+    chords: ['Dm', 'Bb', 'Gm', 'A', 'Dm', 'Bb', 'Gm', 'A'],
+    lead: [
+      'D5 - - - F5 - - - A5 - - G#5 A5 - - -',
+      'Bb5 - - - A5 - F5 - D5 - - - - - - -',
+      'G5 - - - Bb5 - - - D6 - - C#6 D6 - - -',
+      'C#6 - - - A5 - E5 - C#5 - - - - - - -',
+      'D6 - - - C6 - - - A5 - - - F5 - - -',
+      'F5 - - - E5 - D5 - Bb4 - - - - - - -',
+      'G5 - - - F5 - - - E5 - - - D5 - - -',
+      'C#5 - - - - - - - A4 - - - - - - -',
+    ],
+  },
+  crisis: {
+    bpm: 184, drums: 'boss', bass: 'drive', duty: 0.125,
+    chords: ['Em', 'C', 'D', 'B', 'Em', 'C', 'Am', 'B'],
+    lead: [
+      'E5 E5 . G5 . B5 . E6 - D6 - B5 - G5 -',
+      'E5 - - - C6 - B5 - G5 - E5 - G5 - - -',
+      'F#5 F#5 . A5 . D6 . F#6 - E6 - D6 - A5 -',
+      'D#6 - - - B5 - F#5 - D#5 - F#5 - B5 - - -',
+      'E6 - - - B5 - G5 - E5 - G5 - B5 - E6 -',
+      'G6 - - - E6 - C6 - G5 - C6 - E6 - G6 -',
+      'A6 - - - E6 - C6 - A5 - C6 - E6 - A6 -',
+      'B6 - - - A6 - - - F#6 - - - D#6 - - -',
+    ],
+  },
   invincible: {
     bpm: 190, drums: 'boss', bass: 'drive', duty: 0.25, arpLead: true,
     chords: ['C', 'F', 'G', 'C', 'Am', 'F', 'G', 'G'],
@@ -420,6 +449,61 @@ const Sound = {
       const g3 = this.ctx.createGain(); g3.gain.setValueAtTime(0.35, t + 0.01); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
       c.connect(hp); hp.connect(g3); g3.connect(out); c.start(t + 0.01, Math.random()); c.stop(t + 0.12);
     }
+  },
+
+  // Tornado machine gun: a short filtered crack
+  gun() {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime, out = this.sfxGain;
+    const n = this.ctx.createBufferSource(); n.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800 + Math.random() * 600; f.Q.value = 1.2;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    n.connect(f); f.connect(g); g.connect(out); n.start(t, Math.random() * 0.5); n.stop(t + 0.08);
+    const o = this.ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.05);
+    const g2 = this.ctx.createGain(); g2.gain.setValueAtTime(0.08, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    o.connect(g2); g2.connect(out); o.start(t); o.stop(t + 0.08);
+  },
+  // Sky Chase dread: a low detuned drone that breathes, set by level 0..1
+  drone(level) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (!this.droneNodes) {
+      if (level <= 0) return;
+      const g = this.ctx.createGain(); g.gain.value = 0;
+      const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 320; f.Q.value = 6;
+      const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.13;
+      const lg = this.ctx.createGain(); lg.gain.value = 180; lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+      const oscs = [[55, 'sawtooth'], [55.6, 'sawtooth'], [82.2, 'sine'], [116.3, 'triangle']].map(([fr, ty]) => {
+        const o = this.ctx.createOscillator(); o.type = ty; o.frequency.value = fr; o.connect(f); o.start(); return o;
+      });
+      f.connect(g); g.connect(this.sfxGain);
+      this.droneNodes = { g, oscs, lfo };
+    }
+    this.droneNodes.g.gain.setTargetAtTime(this.muted ? 0 : level * 0.16, t, 0.6);
+  },
+  // a breathy, wordless whisper panned to one side
+  whisper() {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime, dur = 0.9 + Math.random() * 0.6;
+    const n = this.ctx.createBufferSource(); n.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1400 + Math.random() * 900; f.Q.value = 3;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    for (let i = 0; i < 6; i++) g.gain.linearRampToValueAtTime(0.05 + Math.random() * 0.09, t + dur * (i + 0.5) / 6);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    let out = g;
+    if (this.ctx.createStereoPanner) { const pn = this.ctx.createStereoPanner(); pn.pan.value = Math.random() < 0.5 ? -0.8 : 0.8; g.connect(pn); out = pn; }
+    n.connect(f); f.connect(g); out.connect(this.sfxGain); n.start(t, Math.random()); n.stop(t + dur + 0.05);
+  },
+
+  // Zombot energy bolt: a falling sci-fi zap
+  zap(vol = 0.25) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime, out = this.sfxGain;
+    const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1400 + Math.random() * 300, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.22);
+    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2600;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + 0.26);
   },
 
   kick(t) {

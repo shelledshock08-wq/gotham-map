@@ -46,6 +46,11 @@
   #t-laser  { right: 132px; bottom: 40px; }
   #t-clones { right: 110px; bottom: 130px; }
   #t-grab   { right: 24px;  bottom: 168px; }
+  .tbtn.sky { display: none; width: 60px; height: 60px; font-size: 22px; background: rgba(120,255,90,.25); }
+  #touch.sky .tbtn.sky { display: flex; }
+  #t-swap  { right: 200px; bottom: 150px; }
+  #t-roles { right: 200px; bottom: 232px; }
+  #t-bite  { left: 200px; bottom: 150px; background: rgba(255,60,60,.25) !important; }
 </style>
 </head>
 <body>
@@ -80,6 +85,7 @@
     <button data-skip="8">8 Base escape (3D)</button>
     <button data-skip="9">9 Emerald Ruins (Diamond Rush)</button>
     <button data-skip="0">0 Special Stage</button>
+    <button data-skip="10">- Sky Chase (Tornado)</button>
   </div>
 </div>
 <div id="touch">
@@ -91,6 +97,9 @@
   <div class="tbtn sup" id="t-laser" data-k="laser">B</div>
   <div class="tbtn sup" id="t-clones" data-k="clones">X</div>
   <div class="tbtn sup" id="t-grab" data-k="grab">Y</div>
+  <div class="tbtn sky" id="t-swap" data-k="swap">&#8644;</div>
+  <div class="tbtn sky" id="t-roles" data-k="roles">&#10226;</div>
+  <div class="tbtn sky" id="t-bite" data-k="bite">&#9760;</div>
   <div class="tbtn" id="t-pause" data-k="start">II</div>
 </div>
 <script src="js/lib/three.min.js"></script>
@@ -110,6 +119,9 @@
 <script src="js/escape.js"></script>
 <script src="js/ruins.js"></script>
 <script src="js/special.js"></script>
+<script src="js/models_tornado.js"></script>
+<script src="js/tailsframes.js"></script>
+<script src="js/tornado.js"></script>
 <script src="js/speech.js"></script>
 <script src="js/input.js"></script>
 <script src="js/game.js"></script>
