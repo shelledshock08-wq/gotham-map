@@ -410,13 +410,13 @@ class MetalSonic {
   draw(ctx, cam, t) {
     for (let i = this.trail.length - 1; i >= 1; i--) {
       const p = this.trail[i];
-      drawSonicFrame(ctx, animFrame('dive', 0), p.x - cam.x, p.y - cam.y + 34, { sheet: 'metal', alpha: 0.25 - i * 0.025, flip: this.state !== 'out' });
+      drawMetalFrame(ctx, 'boost', this.t / 4, p.x - cam.x, p.y - cam.y + 34, { alpha: 0.25 - i * 0.025, flip: this.state !== 'out' });
     }
     const x = Math.round(this.x - cam.x), y = Math.round(this.y - cam.y);
     // jet flame
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(80,170,255,.7)';
     ctx.beginPath(); ctx.arc(x + (this.state === 'out' ? -20 : 20), y + 6, 10 + Math.random() * 6, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    drawSonicFrame(ctx, animFrame(this.state === 'hover' ? 'hover' : 'dive', 0), x, y + 34, { sheet: 'metal', flip: this.state !== 'out' });
+    drawMetalFrame(ctx, this.state === 'hover' ? 'hover' : this.state === 'grab' ? 'dive' : 'boost', this.t / 6, x, y + 34, { flip: this.state !== 'out' });
     // glowing red eye
     if (this.state === 'hover' && this.t % 60 < 20) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';

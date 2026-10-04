@@ -471,4 +471,17 @@ function drawSonicFrame(ctx, idx, x, y, opts = {}) {
   ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(oy), Math.round(w), Math.round(h));
   ctx.restore();
 }
+// The real 2D Metal Sonic (Sonic CD style), cut from a fan skin sheet by
+// tools/metal_sprites/build.py. Frames face right and sit on their baseline.
+const METAL_FRAMES = {"idle":[[0,0,20,34]],"hover":[[21,0,21,34],[43,0,21,34]],"dive":[[65,0,29,29],[95,0,29,29]],"boost":[[125,0,29,28],[155,0,29,28]],"point":[[185,0,21,34]],"fall":[[207,0,17,37]]};
+function drawMetalFrame(ctx, anim, t, x, y, opts = {}) {
+  const img = Assets.img.metal, A = METAL_FRAMES[anim] || METAL_FRAMES.idle, f = A[Math.floor(t) % A.length];
+  if (!img || !f) return;
+  const s = opts.scale || SPRITE_SCALE, w = f[2] * s, h = f[3] * s;
+  ctx.save(); ctx.imageSmoothingEnabled = false; ctx.translate(x, y);
+  if (opts.flip) ctx.scale(-1, 1);
+  if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+  ctx.drawImage(img, f[0], f[1], f[2], f[3], Math.round(-w / 2), Math.round(opts.anchor === 'center' ? -h / 2 : -h), Math.round(w), Math.round(h));
+  ctx.restore();
+}
 function animFrame(name, t) { const a = SONIC_ANIM[name] || SONIC_ANIM.idle; return a[Math.floor(t) % a.length]; }
