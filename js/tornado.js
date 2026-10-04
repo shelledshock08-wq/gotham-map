@@ -604,11 +604,20 @@ class TornadoStage {
     this.slashes = this.slashes.filter((sl) => sl.t < 18);
     // a finisher stops the world; slow-motion runs it at a third of the speed
     if (this.finisher) { this.updateFinisher(); this.animate(); this.updateCamera(); return; }
-    if (this.slowmo > 0) { this.slowmo--; if (this.slowmo % 3) { this.animate(); this.updateCamera(); return; } }
+    if (this.slowmo > 0) {
+      this.slowmo--;
+      if (this.slowmo % 3) {
+        // presses made during the skipped slow-motion frames still count on the next real one
+        const B = this.inBuf || (this.inBuf = {});
+        for (const k in inp) if ((k.endsWith('Pressed') || k === 'special') && inp[k]) B[k] = inp[k];
+        this.animate(); this.updateCamera(); return;
+      }
+    }
+    if (this.inBuf) { inp = Object.assign({}, inp, this.inBuf); this.inBuf = null; }
     if (playing) {
       if (inp.special) this.useSpecial(inp.special);
       this.updateSpecials(inp);
-      if (this.phase === 'board') this.updateRoles(inp);
+      if (this.phase === 'board' && !this.flight) this.updateRoles(inp);
       // with roles swapped, Sonic keeps flying (badly) even while you control Tails
       this.updatePlane(this.autoT > 0 || this.flight ? 'autoAI' : this.active === 'pilot' ? inp : this.pilot === 'sonic' && this.phase === 'board' ? 'sonicAI' : null);
       this.updateFighters(this.active === 'fighter' && !this.flight ? inp : null);
@@ -686,7 +695,7 @@ class TornadoStage {
     const o = this.nose(new THREE.Vector3()), d = this.aimDir(new THREE.Vector3());
     let best = null, bd = 0.11;
     for (const f of this.foes) {
-      if (f.hp <= 0 || f.dead || f.z < o.z + 6 || f.kind === 'ship') continue;
+      if (f.hp <= 0 || f.dead || f.z < o.z + 6 || f.kind === 'ship' || f.kind === 'core') continue;
       const to = new THREE.Vector3(f.x - o.x, f.y - o.y, f.z - o.z), ang = to.angleTo(d);
       if (ang < bd) { bd = ang; best = f; }
     }
@@ -720,7 +729,7 @@ class TornadoStage {
     const far = this.screenAt(this.nose(new THREE.Vector3()).addScaledVector(this.aimDir(new THREE.Vector3()), 60));
     this.lockCircle = far;
     for (const f of this.foes) {
-      if (f.dead || f.hp <= 0 || this.locks.includes(f) || f.kind === 'ship') continue;
+      if (f.dead || f.hp <= 0 || this.locks.includes(f) || f.kind === 'ship' || f.kind === 'core') continue;
       const p = this.screenAt(new THREE.Vector3(f.x, f.y, f.z));
       const inside = far && p && Math.hypot(p.x - far.x, p.y - far.y) < TOR_LOCK_R && f.z > 8;
       f.lockT = inside ? (f.lockT || 0) + 1 : Math.max(0, (f.lockT || 0) - 2);
@@ -912,8 +921,16 @@ class TornadoStage {
       F.kb = (F.kb || 0) * 0.85;
       F.x = Math.max(-TW.wingX, Math.min(TW.wingX, F.x + F.vx));
       if (F.hang > 0) F.hang--;
-      if (F.y > 0 || F.vy > 0) { F.vy -= F.atk && F.atk.type === 'tailspin' ? 0.002 : F.hang > 0 && F.vy < 0.03 ? 0.003 : 0.013; F.y = Math.max(0, Math.min(3.2, F.y + F.vy)); if (F.y === 0) { F.vy = 0; F.airHits = 0; F.airAtks = 0; } }
+      if (F.y > 0 || F.vy > 0) { F.vy -= F.atk && F.atk.type === 'tailspin' ? 0.002 : F.hang > 0 && F.vy < 0.03 ? 0.003 : 0.013; F.y = Math.max(0, Math.min(3.2, F.y + F.vy)); if (F.y === 0) { F.vy = 0; F.airHits = 0; F.airAtks = 0; F.airDashed = false; } }
       if (ctl && ctl.upPressed && F.y === 0 && !F.atk) { F.vy = 0.2; Sound.play('jump', { vol: 0.5 }); }
+      if (id === 'sonic') {
+        // Sonic keeps it classic on the wing: homing attack, spin dash, boost,
+        // plus grabbing one to smack around (and the bite you shouldn't use)
+        if (ctl) this.sonicWing(F, ctl, hx);
+        if (F.atk) this.stepAttack(F);
+        if (ctl && ctl.bitePressed && !F.atk) this.tryBite(F);
+        continue;
+      }
       if (ctl && (ctl.punchPressed || ctl.laserPressed) && this.tryParry(F)) continue;
       // double-tap a direction: a boost dash that closes the gap and hits on the way
       if (F.dashCool > 0) F.dashCool--;
@@ -930,6 +947,62 @@ class TornadoStage {
       if (ctl && !F.atk) this.startAttack(F, ctl);
       if (F.atk) this.stepAttack(F);
       if (ctl && ctl.bitePressed) this.tryBite(F);
+    }
+  }
+
+  sonicWing(F, ctl, hx) {
+    const a = F.atk, g = this.g;
+    if (a && a.type === 'charge') {
+      // spin dash: rev it up (tap to rev harder), let go to blast off
+      if (hx) F.face = -hx;
+      if (ctl.laserPressed || ctl.punchPressed) { a.rev = Math.min(8, a.rev + 1); Sound.play('charge', { rate: 1 + a.rev * 0.1, vol: 0.5 }); }
+      a.rev = Math.min(8, a.rev + 0.03); a.t = 0;
+      if (!ctl.laser && !ctl.down) {
+        const sp = 0.2 + a.rev * 0.025;
+        F.atk = { type: 'roll', t: 0, dur: 24 + Math.round(a.rev * 4), move: true, hit: new Set(), sp };
+        F.vx = F.face * sp; Sound.play('release', { vol: 0.8 }); this.shake = Math.max(this.shake, 4 + a.rev); this.fovKick = Math.max(this.fovKick || 0, 3);
+      }
+      return;
+    }
+    if (a && a.type === 'hold') {
+      // walk around with it overhead; punch smacks it into the wing, grab throws it
+      F.vx = -hx * 0.06; if (hx) F.face = -hx;
+      if (ctl.punchPressed && !(a.smack > 0)) { a.smack = 12; a.side = -(a.side || 1); Sound.play('jump', { rate: 0.8, vol: 0.4 }); }
+      if (ctl.grabPressed || a.t > 360) { F.atk = { type: 'swing', t: 0, dur: 46, hit: new Set([F.hold]) }; Sound.play('charge', { rate: 1.4, vol: 0.5 }); }
+      return;
+    }
+    if (a) return;
+    if (ctl.grabPressed) {
+      const st = this.boarders.find((b) => b.state === 'stagger' && Math.abs(b.x - F.x) < 2.4);
+      if (st) { this.startFinisher(F, st); return; }
+      const b = this.nearest(F, 1.2, false);
+      if (b) {
+        F.hold = b; b.state = 'held'; b.t = 0; F.face = Math.sign(b.x - F.x) || F.face;
+        F.atk = { type: 'hold', t: 0, dur: 9999, move: true, hit: new Set([b]), smack: 0, side: 1, n: 0 };
+        Sound.play('charge', { rate: 1.6, vol: 0.4 });
+        g.speech.say('sonic', ['C\'mere, you!', 'Gotcha!', 'Up you go!'][Math.random() * 3 | 0], { dur: 50, cool: 300 });
+      } else F.atk = { type: 'whiff', t: 0, dur: 12 };
+      return;
+    }
+    if (ctl.clonesPressed) {
+      if (this.boost >= 50) {
+        this.boost -= 50; F.atk = { type: 'boost', t: 0, dur: 24, move: true, hit: new Set() }; F.vx = F.face * 0.3;
+        Sound.boostBurst(); Sound.play('boom', { vol: 0.5, rate: 1.3 }); this.shake = 12; this.flash = 0.15;
+        g.speech.say('sonic', 'Outta my way!', { dur: 50, cool: 400 });
+      } else g.speech.say('sonic', 'Need more boost. Gotta land some hits!', { dur: 60, cool: 200 });
+      return;
+    }
+    if (F.y === 0 && (ctl.laserPressed || (ctl.down && ctl.punchPressed))) {
+      F.atk = { type: 'charge', t: 0, dur: 9999, rev: 0, hit: new Set() };
+      Sound.play('charge', { vol: 0.5 });
+      return;
+    }
+    if (ctl.punchPressed) {
+      // homing attack: from the ground or the air, straight at the nearest one
+      const tg = (F.airHits || 0) < 3 ? this.nearest(F, 4.5, false) : null;
+      if (tg) { F.atk = { type: 'homing', t: 0, dur: 34, move: true, hit: new Set(), tg }; F.vy = 0; Sound.play('release', { rate: 1.6, vol: 0.6 }); }
+      else if (F.y === 0) { F.vy = 0.2; Sound.play('jump', { vol: 0.5 }); }
+      else if (!F.airDashed) { F.airDashed = true; F.atk = { type: 'airdash', t: 0, dur: 12, move: true, hit: new Set() }; F.vx = F.face * 0.22; F.vy = Math.max(F.vy, 0.02); Sound.play('release', { rate: 1.9, vol: 0.4 }); }
     }
   }
 
@@ -1046,13 +1119,45 @@ class TornadoStage {
         if (!b || b.state === 'dead' || b.state === 'fall') { a.t = a.dur; break; }
         const dx = b.x - F.x, dy = (b.y + 0.3) - F.y;
         F.face = Math.sign(dx) || F.face; F.vx = Math.sign(dx) * Math.min(0.3, Math.abs(dx)); F.y += Math.max(-0.2, Math.min(0.2, dy * 0.4)); F.vy = 0;
+        if (Math.abs(dx) < 0.6 && !a.hit.has(b) && b.state === 'guard') {
+          // it put its guard up: bounce off (spin dash or boost through it instead)
+          this.blocked(b); F.vx = -F.face * 0.15; F.vy = 0.15; a.t = a.dur; Sound.play('spring', { rate: 0.8, vol: 0.4 });
+          break;
+        }
         if (Math.abs(dx) < 0.6 && !a.hit.has(b)) {
           a.hit.add(b); this.styleHit('homing');
-          this.damage(b, 2, F.face * 0.05, 1.5, 'HOMING!');
+          this.damage(b, 1, F.face * 0.05, 1.5, 'HOMING!');
           if (b.state === 'hurt' || b.state === 'stagger') { b.state = b.state === 'stagger' ? 'stagger' : 'air'; b.vy = 0.16; }
           F.vy = 0.15; F.hang = 12; F.airAtks = 0; F.airHits = (F.airHits || 0) + 1; a.t = a.dur;
           Sound.play('spring', { rate: 1.4, vol: 0.5 });
         }
+        break;
+      }
+      case 'charge': if (a.t === 0 && this.t % 5 === 0) this.sparkAt(this.sonic.root, 0xd8d8d8, 1); break;
+      case 'roll':
+        hitWin(1, a.dur, 0.9, 2, 0.35, true, 1.6);
+        if (t > a.dur - 8) F.vx *= 0.8; else F.vx = F.face * a.sp;
+        if (t % 3 === 0) this.sparkAt(this.sonic.root, 0x7fe3ff, 1);
+        break;
+      case 'airdash': if (t > 8) F.vx *= 0.8; break;
+      case 'hold': {
+        const b = F.hold;
+        if (!b || b.state !== 'held') { F.hold = null; a.t = a.dur; break; }
+        b.z = 0;
+        if (a.smack > 0) {
+          // an arc from over his head down into the wing on one side
+          a.smack--;
+          const k = 1 - a.smack / 12, ang = k * Math.PI;
+          b.x = F.x + a.side * Math.sin(ang) * 1.0; b.y = F.y + 1.15 * Math.cos(ang) + 0.15;
+          if (a.smack === 0) {
+            b.y = 0; a.n++;
+            this.styleHit('smack');
+            this.damage(b, 1, 0, 1.4, ['SMACK!', 'WHAM!', 'THUD!', 'CRUNCH!'][a.n % 4]);
+            this.shake = Math.max(this.shake, 8); this.boost = Math.min(100, this.boost + 6);
+            if (b.state === 'dead') { F.hold = null; a.t = a.dur; break; }
+            b.state = 'held';
+          }
+        } else { b.x = F.x + F.face * 0.15; b.y = F.y + 1.3 + Math.sin(this.t * 0.3) * 0.05; }
         break;
       }
       case 'dash': hitWin(1, 14, 0.9, 1, 0.38, true, 1.3); if (t > 10) F.vx *= 0.7; if (t % 2 === 0) this.sparkAt(this[F.id].root, F.id === 'sonic' ? 0x7fe3ff : 0xffc060, 1); break;
@@ -1116,7 +1221,7 @@ class TornadoStage {
       this.comboN = this.comboT > 0 ? this.comboN + 1 : 1; this.comboT = 80;
       const bonus = this.comboN >= 6 ? 1 : 0;
       if (b.state === 'guard') {
-        const heavy = F.atk && ['kick', 'uppercut', 'dash', 'smack', 'spin', 'stomp', 'flykick', 'boost', 'tailswipe', 'homing'].includes(F.atk.type);
+        const heavy = F.atk && ['kick', 'uppercut', 'dash', 'smack', 'spin', 'stomp', 'flykick', 'boost', 'tailswipe', 'homing', 'roll'].includes(F.atk.type);
         if (!heavy) { this.blocked(b); continue; }
         b.state = 'stun'; b.t = 0; this.pops.push({ text: 'GUARD BREAK!', p: new THREE.Vector3().setFromMatrixPosition(b.m.matrixWorld).add(new THREE.Vector3(0, 1.6, 0)), t: 0, big: true, rot: 0.1 }); Sound.play('bosshit', { rate: 0.8 });
       }
@@ -1277,7 +1382,7 @@ class TornadoStage {
       s.m.position.add(s.v);
       if (s.t > (s.missile ? 170 : 70)) s.dead = true;
       for (const f of this.foes) {
-        if (f.hp <= 0 || f.dead || f.kind === 'ship') continue;
+        if (f.hp <= 0 || f.dead || f.kind === 'ship' || f.kind === 'core') continue;
         const dx = f.x - s.m.position.x, dy = f.y - s.m.position.y, dz = f.z - s.m.position.z;
         const r = f.r * (s.missile ? 1.4 : 1);
         if (dx * dx + dy * dy + dz * dz < r * r || (Math.abs(dz) < 2 && dx * dx + dy * dy < r * r)) {
@@ -1390,16 +1495,24 @@ class TornadoStage {
       b.t++; b.m.position.add(b.v);
       if (b.reflected) {
         const c = b.target;
-        if (c && !c.dead && b.m.position.distanceTo(new THREE.Vector3(c.x, c.y, c.z)) < 2.2) { this.skyHit(c, 3, 1.8, 'REFLECT!'); b.dead = true; }
+        if (c && !c.dead && b.m.position.distanceTo(new THREE.Vector3(c.x, c.y, c.z)) < 2.4) { if (this.flight) this.superHit(c, 3, 1.8, 'REFLECT!', true); else this.skyHit(c, 3, 1.8, 'REFLECT!'); b.dead = true; }
         if (b.t > 160) b.dead = true;
         continue;
       }
-      if (fl && fl.sup && !fl.returning && b.m.position.distanceTo(fl.pos) < 1.5) {
-        b.dead = true;
-        if (fl.dodge > 0) continue;
-        fl.stagger = 24; fl.step = 0; fl.v.add(b.v.clone().multiplyScalar(0.3));
-        this.burstAt(fl.pos, 0.8, 0x9dff6a); this.shake = 10; Sound.play('hurt', { vol: 0.6 });
-        this.pops.push({ text: 'OUCH!', p: fl.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), t: 0, big: false, rot: 0.2 });
+      if (fl && fl.sup && !fl.returning && !fl.slam && !fl.clash && b.m.position.distanceTo(fl.pos) < (fl.guard ? 2.4 : 1.5)) {
+        const r = this.superHurt(60, b.ship, 'OUCH!');
+        if (r === 'miss') continue;
+        if (r === 'parry') {
+          // parried bolts fly straight back at a core of the ship that fired them
+          const c = b.ship && b.ship.cores.find((k) => !k.dead);
+          if (c) { b.reflected = true; b.target = c; b.t = 0; b.v = new THREE.Vector3(c.x, c.y, c.z).sub(b.m.position).normalize().multiplyScalar(2.2); }
+          else b.dead = true;
+          this.pops.push({ text: fl.guardT < 12 ? 'PERFECT PARRY!' : 'PARRY!', p: fl.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), t: 0, big: true, rot: 0 });
+          if (fl.guardT < 12) fl.rush = Math.min(99, fl.rush + 15);
+          Sound.play('bosshit', { rate: 1.7, vol: 0.7 }); Sound.play('shield', { rate: 1.6, vol: 0.5 }); this.slowmo = 14; this.flash = 0.2;
+          continue;
+        }
+        b.dead = true; fl.v.add(b.v.clone().multiplyScalar(0.3));
         continue;
       }
       b.m.material.rotation = b.t * 0.3;
@@ -1773,11 +1886,13 @@ class TornadoStage {
   // gunships and take them apart with combos, Phantom Rush and Cross Slash.
   startFlight(sup = false) {
     const S = this.scene, M = this.sonic, F = this.fighters.sonic;
-    F.atk = null; if (F.hold) this.dropHeld(F);
+    F.atk = null; if (F.hold) this.dropHeld(F); M.ball.scale.set(1, 1, 1);
     this.away.sonic = true; M.root.updateWorldMatrix(true, false); S.attach(M.root);
     const pos = new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld);
     this.flight = { t: 0, pos, v: sup ? new THREE.Vector3(0, 0.3, 0.4) : new THREE.Vector3(0, 0.55, 0.85), homing: null, combo: 0, returning: false, sup,
-      dur: sup ? 900 : 480, step: 0, stepT: 0, strike: 0, charge: 0, rush: 0, rushT: 0, dodge: 0, stagger: 0, trick: 0, lock: null, lastTap: 0, lastTapT: 0, kills: 0 };
+      dur: sup ? 900 : 480, step: 0, stepT: 0, strike: 0, charge: 0, rush: 0, rushT: 0, dodge: 0, stagger: 0, trick: 0, lock: null, lastTap: 0, lastTapT: 0, kills: 0,
+      guard: false, guardT: 0, invuln: false, recover: 0, qcyCool: 0, boomCool: 0, wildCool: 0, shotCool: 0, shots: 0, shotT: 0, vHold: null, slamReady: null, slamReadyT: 0 };
+    this.sproj = this.sproj || [];
     if (!this.birdTpl) this.spawnWave('none', 0);
     Sound.play('boom', { rate: 1.2, vol: 0.7 }); Sound.boostBurst(); this.flash = 0.3; this.shake = 10;
     if (sup) {
@@ -1785,7 +1900,7 @@ class TornadoStage {
       this.spawnGunship(70, -10); this.spawnGunship(95, 12);
       for (let i = 0; i < 5; i++) this.spawnFlyer(30 + i * 10);
       this.g.speech.say('sonic', 'Time to stop playing around.', { dur: 100, prio: 6 });
-      this.g.later(80, () => this.g.speech.say('tails', 'Gunships! Hit the green cores, Sonic!', { dur: 120, prio: 5 }));
+      this.g.later(80, () => this.g.speech.say('tails', `Gunships! Their cores are shielded: hold [${keyLabel('grab')}] to Cyloop around one, then beat it in!`, { dur: 150, prio: 5 }));
     } else {
       this.g.speech.say('tails', 'Launching you, Sonic!', { dur: 70, prio: 6 });
       this.g.later(30, () => this.g.speech.say('sonic', `Homing attack with [${keyLabel('punch')}]!`, { dur: 80, prio: 5 }));
@@ -1809,13 +1924,15 @@ class TornadoStage {
       const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), plate); b.position.set(px, py, pz); m.add(b);
     }
     m.position.set(P.x + x, P.y + 9, z); this.scene.add(m);
-    const ship = { kind: 'ship', m, x: P.x + x, y: P.y + 9, z, bx: P.x + x, t: 0, hp: 999, r: 6, cores: [], fireT: 90, ph: Math.random() * 6 };
+    const ship = { kind: 'ship', m, x: P.x + x, y: P.y + 9, z, bx: P.x + x, t: 0, hp: 999, r: 6, cores: [], fireT: 90 + Math.random() * 60, ph: Math.random() * 6, shieldOn: true, shieldT: 0, stunT: 0 };
     const coreGeo = new THREE.SphereGeometry(0.9, 16, 12);
     for (const lp of [[6.5, 1.2, -1], [-6.5, 1.2, -1], [0, 2.3, 2.5]]) {
       const cm = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: 0x7dff4a }));
       const halo = new THREE.Sprite(this.boltMat); halo.scale.setScalar(4); cm.add(halo);
       cm.position.set(...lp); m.add(cm);
-      const core = { kind: 'core', m: cm, ship, x: 0, y: 0, z: 0, t: 0, hp: 6, r: 1.6, local: true };
+      const shield = new THREE.Mesh(this.shieldGeo || (this.shieldGeo = new THREE.SphereGeometry(2.1, 16, 12)), new THREE.MeshBasicMaterial({ color: 0x5fd8ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
+      cm.add(shield);
+      const core = { kind: 'core', m: cm, ship, x: 0, y: 0, z: 0, t: 0, hp: 6, r: 1.6, local: true, shieldM: shield };
       ship.cores.push(core); this.foes.push(core);
     }
     this.foes.push(ship);
@@ -1827,22 +1944,114 @@ class TornadoStage {
     f.t++;
     if (!fl || !fl.sup) {
       // without Super Sonic to fight, the gunships pull back out of range
+      this.endShipAttack(f);
       f.z += 0.6; f.m.position.z = f.z;
       if (f.z > 260) { f.dead = true; for (const c of f.cores) c.dead = true; }
       return;
     }
-    const tz = fl.pos.z + 55;
-    f.z += (tz - f.z) * 0.01; f.x = f.bx + Math.sin(f.t * 0.012 + f.ph) * 8; f.y = P.y + 9 + Math.sin(f.t * 0.02 + f.ph) * 3;
-    f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(0, Math.PI, Math.sin(f.t * 0.02) * 0.1);
+    // shields come back after a while unless the ship is down
+    if (!f.shieldOn && !(f.stunT > 0) && f.shieldT > 0 && --f.shieldT === 0) { f.shieldOn = true; Sound.play('shield', { rate: 0.7, vol: 0.4 }); }
+    const sh = f.shieldOn && !(f.stunT > 0);
+    for (const c of f.cores) if (c.shieldM) { c.shieldM.visible = sh; c.shieldM.material.opacity = 0.28 + Math.sin(this.t * 0.2) * 0.08; }
+    if (f.stunT > 0) {
+      // stunned: drifting and smoking, no attacks
+      f.stunT--; this.endShipAttack(f);
+      f.y -= 0.02; f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(Math.sin(f.t * 0.2) * 0.08, Math.PI, Math.sin(f.t * 0.15) * 0.25);
+      if (f.t % 6 === 0) this.burstAt(new THREE.Vector3(f.x + (Math.random() - 0.5) * 8, f.y + 1, f.z), 1, 0xffc060);
+    } else if (f.ram) this.updateRam(f, fl);
+    else {
+      const tz = fl.pos.z + 55;
+      f.z += (tz - f.z) * 0.01; f.x += (f.bx + Math.sin(f.t * 0.012 + f.ph) * 8 - f.x) * 0.05; f.y += (P.y + 9 + Math.sin(f.t * 0.02 + f.ph) * 3 - f.y) * 0.05;
+      f.m.position.set(f.x, f.y, f.z); f.m.rotation.set(0, Math.PI, Math.sin(f.t * 0.02) * 0.1);
+      if (f.beam) this.updateShipBeam(f, fl);
+      else if (--f.fireT <= 0 && !fl.returning) {
+        // pick an attack: a bolt volley, a ram you can parry, or a beam you can only dodge or out-muscle
+        f.fireT = 120 + Math.random() * 60;
+        const busy = this.foes.some((o) => o !== f && o.kind === 'ship' && !o.dead && (o.ram || o.beam));
+        const r = Math.random();
+        if (!busy && r < 0.3) this.startRam(f, fl);
+        else if (!busy && r < 0.55) { f.beam = { t: 0, glow: null, line: null }; this.g.speech.say('tails', `It's charging a beam! Dodge it, [${keyLabel('swap')}] or [${keyLabel('roles')}]!`, { dur: 90, cool: 500, coolKey: 'beamTip', prio: 4 }); }
+        else { const at = fl.pos.clone(); for (let i = 0; i < 3; i++) this.g.later(i * 8, () => { if (!f.dead && this.flight) this.shipBolt(f, at); }); }
+      }
+    }
     f.m.updateWorldMatrix(true, true);
     for (const c of f.cores) { if (c.dead) continue; const w = new THREE.Vector3().setFromMatrixPosition(c.m.matrixWorld); c.x = w.x; c.y = w.y; c.z = w.z; c.m.scale.setScalar(1 + Math.sin(this.t * 0.3) * 0.12); }
-    // volleys at Sonic (or the plane): a glow on the gun, then three bolts
-    if (--f.fireT <= 0) {
-      f.fireT = 110 + Math.random() * 60;
-      const at = fl && !fl.returning ? fl.pos.clone() : P.clone();
-      for (let i = 0; i < 3; i++) this.g.later(i * 8, () => { if (!f.dead) this.shipBolt(f, at); });
+    if (f.cores.every((c) => c.dead)) { this.endShipAttack(f); this.sinkShip(f); }
+  }
+
+  endShipAttack(f) {
+    if (f.ram) { if (f.ram.line) this.scene.remove(f.ram.line); f.ram = null; }
+    if (f.beam) { if (f.beam.glow) this.scene.remove(f.beam.glow); if (f.beam.line) this.scene.remove(f.beam.line); if (f.beam.shot) this.scene.remove(f.beam.shot); f.beam = null; }
+  }
+
+  // the ram: a red line shows its path, then it charges straight down it
+  startRam(f, fl) {
+    f.ram = { t: 0, phase: 'aim', to: fl.pos.clone(), from: new THREE.Vector3(f.x, f.y, f.z), line: this.newBeam(0xff2020, 0.18) };
+    Sound.play('charge', { rate: 0.5, vol: 0.6 });
+    this.g.speech.say('tails', `It's going to ram you! Hold [${keyLabel('swap')}]+[${keyLabel('roles')}] to parry!`, { dur: 100, cool: 500, coolKey: 'ramTip', prio: 4 });
+  }
+
+  updateRam(f, fl) {
+    const R = f.ram; R.t++;
+    const pos = new THREE.Vector3(f.x, f.y, f.z);
+    if (R.phase === 'aim') {
+      if (R.t < 50) R.to.lerp(fl.pos, 0.2);
+      const dir = R.to.clone().sub(pos).normalize();
+      this.beamMesh(R.line, pos, R.to.clone().addScaledVector(dir, 15)); R.line.visible = R.t % 6 < 4;
+      f.m.rotation.set(0, Math.PI, Math.sin(R.t * 0.8) * 0.06);
+      if (R.t >= 70) { R.phase = 'go'; R.dir = dir; R.t = 0; Sound.play('boom', { rate: 0.6, vol: 0.6 }); }
+    } else if (R.phase === 'go') {
+      R.line.visible = false;
+      f.x += R.dir.x * 2.2; f.y += R.dir.y * 2.2; f.z += R.dir.z * 2.2;
+      f.m.position.set(f.x, f.y, f.z);
+      const d = Math.hypot(fl.pos.x - f.x, fl.pos.y - f.y, fl.pos.z - (f.z - 4));
+      if (!R.hit && d < 5 && !fl.returning) {
+        R.hit = true;
+        const r = this.superHurt(150, f, 'RAMMED!');
+        if (r === 'parry') {
+          const perfect = fl.guardT < 12;
+          f.stunT = 300; f.shieldOn = false; f.shieldT = 480; this.endShipAttack(f);
+          fl.slamReady = f; fl.slamReadyT = 200;
+          if (perfect) fl.rush = Math.min(99, fl.rush + 30);
+          this.banner = { text: perfect ? 'PERFECT PARRY!' : 'PARRY!', t: 0, col: '#7fe3ff' };
+          this.slowmo = 40; this.flash = 0.5; this.shake = 20; Sound.play('bosshit', { rate: 1.4 }); Sound.play('shield', { rate: 1.6 });
+          return;
+        }
+        if (r === 'hit') fl.v.add(R.dir.clone().multiplyScalar(1.2));
+      }
+      if (R.t > 60) { this.endShipAttack(f); }
     }
-    if (f.cores.every((c) => c.dead)) this.sinkShip(f);
+  }
+
+  // the beam: a long charge, then a beam down the line it was aimed along
+  updateShipBeam(f, fl) {
+    const B = f.beam; B.t++;
+    const nose = new THREE.Vector3(f.x, f.y - 0.5, f.z - 6);
+    if (!B.glow) { B.glow = new THREE.Sprite(this.boltMat); this.scene.add(B.glow); B.line = this.newBeam(0xff2020, 0.08); B.aim = fl.pos.clone(); }
+    B.glow.position.copy(nose); B.glow.scale.setScalar(2 + B.t * 0.06);
+    if (B.t < 80) B.aim.lerp(fl.pos, 0.15);
+    const dir = B.aim.clone().sub(nose).normalize();
+    if (B.t < 100) { this.beamMesh(B.line, nose, nose.clone().addScaledVector(dir, 120)); B.line.visible = B.t % 4 < 3; if (B.t % 20 === 0) Sound.play('charge', { rate: 0.4 + B.t / 100, vol: 0.4 }); return; }
+    if (B.t === 100) {
+      this.scene.remove(B.line); B.line = null;
+      B.shot = this.newBeam(0x9dff6a, 1.1); this.beamMesh(B.shot, nose, nose.clone().addScaledVector(dir, 140));
+      Sound.play('boom', { rate: 0.5, vol: 0.8 }); Sound.zap(0.6); this.shake = 16;
+      // did it catch him? distance from Sonic to the beam's line
+      const to = fl.pos.clone().sub(nose), along = to.dot(dir), off = to.clone().sub(dir.clone().multiplyScalar(along)).length();
+      if (along > 0 && off < 3 && !fl.returning && !fl.slam && !fl.clash) {
+        if (fl.dodge > 0 || fl.invuln) this.pops.push({ text: 'DODGE', p: fl.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), t: 0, big: false, rot: 0 });
+        else {
+          // caught in it: push back! (or parry it straight into the struggle)
+          if (fl.cyl) this.endCyloop(false);
+          fl.clash = { ship: f, p: fl.guard ? 0.65 : 0.5, t: 0, mine: this.newBeam(0xffe060, 0.9), theirs: this.newBeam(0x9dff6a, 1.1) };
+          fl.homing = null; fl.engage = null;
+          this.banner = { text: 'BEAM STRUGGLE!', t: 0, col: '#9dff6a', sub: true };
+          this.endShipAttack(f);
+          return;
+        }
+      }
+    }
+    if (B.t > 120) this.endShipAttack(f);
   }
 
   shipBolt(f, at) {
@@ -1916,8 +2125,10 @@ class TornadoStage {
   updateFlight(inp) {
     const fl = this.flight, P = this.planePos(new THREE.Vector3());
     fl.t++;
-    if (!fl.returning && (fl.t > fl.dur || (!fl.sup && fl.pos.y < P.y - 9))) {
+    if (fl.sup) this.updateProjectiles();
+    if (!fl.returning && (fl.sup ? this.superT <= 1 : fl.t > fl.dur || fl.pos.y < P.y - 9)) {
       fl.returning = true; fl.homing = null;
+      if (fl.sup) { this.endClash(); this.endCyloop(); fl.slam = null; fl.wild = null; fl.guard = false; for (const f of this.foes) if (f.kind === 'ship') this.endShipAttack(f); }
       this.g.speech.say('sonic', fl.sup ? "That's enough." : 'Coming back down!', { dur: 60 });
       if (fl.sup) { this.superT = 0; this.goSuper(false); }
     }
@@ -1963,120 +2174,408 @@ class TornadoStage {
   }
 
   // ---- Super Sonic: free flight, boost in, fight up close
+  // Super Sonic, the way Sonic Frontiers plays it against the Titans:
+  //  - free flight; hold boost to close distance fast
+  //  - attack homes in on the soft lock, then mash it for the auto-combo
+  //  - skills: Spin Slash (mid-combo), Loop Kick, Cross Slash and Homing Shot
+  //    (boost + a button), Sonic Boom, Wild Rush (both shoulders + attack)
+  //  - dodge with either shoulder (hold it to stay untouchable), parry by
+  //    holding both: a parried charge stuns the ship for a GRAND SLAM
+  //  - shields only break to a Cyloop (hold) or a Quick Cyloop (tap)
+  //  - beam struggles you win by mashing; Recovery Smash right after a hit
+  //  - landing hits without being hit fills the gauge for Phantom Rush
+  //  - rings are your time: they drain every second and a hit knocks some out
   updateSuper(inp) {
     const fl = this.flight, P = this.planePos(new THREE.Vector3());
-    // keep the sky busy: birds, and a new gunship once the first ones fall
     const live = this.foes.filter((f) => !f.dead && f.kind === 'flyer').length;
     if (live < 4 && fl.t % 30 === 0) this.spawnFlyer(30 + Math.random() * 40);
-    if (fl.t % 300 === 150 && this.foes.filter((f) => f.kind === 'ship' && !f.dead).length < 2) this.spawnGunship(100, (Math.random() - 0.5) * 24);
-    if (fl.rushT > 0 && --fl.rushT === 0) this.g.speech.say('sonic', 'Phew.', { dur: 40 });
-    if (fl.stepT > 0 && --fl.stepT === 0) fl.step = 0;
-    if (fl.strike > 0) fl.strike--;
-    if (fl.stagger > 0) fl.stagger--;
-    // soft lock: whatever is nearest the middle of the screen
-    // (gunship cores are the real prize, so they win ties against the small fry)
-    const score = (o) => o.c + o.d * 4 - (o.f.kind === 'core' ? 220 : 0);
-    const cands = this.flightTargets(115).sort((a, b) => score(a) - score(b));
-    fl.lock = cands.length ? cands[0].f : null;
-    const L = fl.lock, Ld = L ? Math.hypot(L.x - fl.pos.x, L.y - fl.pos.y, L.z - fl.pos.z) : 99;
-    const hx = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0, hy = inp ? (inp.up ? 1 : 0) - (inp.down ? 1 : 0) : 0;
-    // dodge: double-tap a direction
-    if (inp && (inp.leftPressed || inp.rightPressed || inp.upPressed || inp.downPressed)) {
-      const dir = inp.leftPressed ? 'l' : inp.rightPressed ? 'r' : inp.upPressed ? 'u' : 'd';
-      if (fl.lastTap === dir && this.t - fl.lastTapT < 14) {
-        fl.dodge = 12; fl.dodgeV = new THREE.Vector3(dir === 'l' ? 1.3 : dir === 'r' ? -1.3 : 0, dir === 'u' ? 1.1 : dir === 'd' ? -1.1 : 0, 0);
-        Sound.play('release', { rate: 1.8, vol: 0.5 }); fl.lastTap = null;
-      } else { fl.lastTap = dir; fl.lastTapT = this.t; }
+    if (fl.t % 300 === 150 && this.foes.filter((f) => f.kind === 'ship' && !f.dead).length < 2) this.spawnGunship(fl.pos.z + 80, (Math.random() - 0.5) * 24);
+    for (const k of ['stepT', 'strike', 'stagger', 'recover', 'qcyCool', 'boomCool', 'wildCool', 'shotCool', 'slamReadyT', 'perfectT']) if (fl[k] > 0) fl[k]--;
+    if (!fl.stepT) fl.step = 0;
+    if (fl.rushT > 0) { fl.rushT--; fl.rush = fl.rushT / 3; if (!fl.rushT) { fl.rush = 0; this.g.speech.say('sonic', 'Phew.', { dur: 40 }); } }
+    if (fl.slamReadyT === 0) fl.slamReady = null;
+    // the soft lock: whatever is nearest the middle of the screen, cores first
+    if (!fl.cyl && !fl.slam && !fl.clash && !fl.wild) {
+      const score = (o) => o.c + o.d * 4 - (o.f.kind === 'core' ? 220 : 0);
+      const cands = this.flightTargets(115).sort((a, b) => score(a) - score(b));
+      fl.lock = cands.length ? cands[0].f : null;
     }
-    if (fl.dodge > 0) { fl.dodge--; fl.pos.add(fl.dodgeV); this.afterimage(); }
+    const L = fl.lock && !fl.lock.dead && fl.lock.hp > 0 ? fl.lock : null;
+    const Ld = L ? Math.hypot(L.x - fl.pos.x, L.y - fl.pos.y, L.z - fl.pos.z) : 99;
+    // the big set pieces take over the controls
+    if (fl.clash) return this.updateClash(inp);
+    if (fl.slam) return this.updateSlam(inp);
+    if (fl.wild) return this.updateWild();
+    if (fl.cyl) { const r = this.updateCyloop(inp); if (r) return r; }
+    const hx = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0, hy = inp ? (inp.up ? 1 : 0) - (inp.down ? 1 : 0) : 0;
+    const lb = !!(inp && inp.swap), rb = !!(inp && inp.roles), both = lb && rb;
+    // parry stance (both shoulders held) and dodge (one shoulder)
+    const wasGuard = fl.guard;
+    fl.guard = both && !fl.stagger;
+    if (fl.guard && !wasGuard) { fl.guardT = 0; Sound.play('shield', { rate: 1.8, vol: 0.3 }); }
+    if (fl.guard) fl.guardT++;
+    if (inp && !both && (inp.swapPressed || inp.rolesPressed) && !fl.stagger) {
+      const dir = inp.swapPressed ? 1 : -1;   // screen left is world +x
+      fl.dodge = 12; fl.dodgeV = new THREE.Vector3(dir * 1.2 + -hx * 0.6, hy * 0.8, 0);
+      Sound.play('release', { rate: 1.8, vol: 0.5 });
+    }
+    fl.invuln = (lb || rb) && !both && !fl.dodge;   // holding dodge: untouchable, but you can't attack
+    if (fl.dodge > 0) { fl.dodge--; fl.pos.add(fl.dodgeV); fl.dodgeV.multiplyScalar(0.88); this.afterimage(); }
     else if (fl.homing) {
-      // boosting in at a target that was too far for a punch
-      const to = new THREE.Vector3(fl.homing.x, fl.homing.y, fl.homing.z), d = to.clone().sub(fl.pos), dist = d.length();
-      if (fl.homing.dead || dist < 3.5) fl.homing = null;
-      else { fl.pos.add(d.multiplyScalar(3.4 / dist)); this.afterimage(); }
-    } else if (fl.engage && fl.engageT > 0 && !fl.engage.dead && fl.engage.hp > 0 && !hx && !hy && !(inp && inp.clones)) {
-      // in a fight: stay in its face (Frontiers-style) until you steer away
+      // homing attack: boost straight in at the lock
+      const H = fl.homing, to = new THREE.Vector3(H.x, H.y + 0.3, H.z - 2.4), d = to.clone().sub(fl.pos), dist = d.length();
+      if (H.dead || H.hp <= 0) fl.homing = null;
+      else if (dist < 1.5) { fl.homing = null; this.superStrike(H); }
+      else { fl.pos.add(d.multiplyScalar(Math.min(1, 3.4 / dist))); this.afterimage(); }
+    } else if (fl.engage && fl.engageT > 0 && !fl.engage.dead && fl.engage.hp > 0 && !hx && !hy && !(inp && inp.clones) && !fl.guard) {
+      // locked in a fight: stay in its face until you steer away
       fl.engageT--;
-      const E = fl.engage, to = new THREE.Vector3(E.x, E.y + 0.3, E.z - 2.4);
-      fl.pos.lerp(to, 0.3); fl.v.set(0, 0, 0); fl.boosting = false;
+      const E = fl.engage;
+      fl.pos.lerp(new THREE.Vector3(E.x, E.y + 0.3, E.z - 2.4), 0.3); fl.v.set(0, 0, 0); fl.boosting = false;
     } else {
       fl.engage = null;
-      const boost = inp && inp.clones;
-      fl.v.x = (fl.v.x - hx * 0.08) * 0.86; fl.v.y = (fl.v.y + hy * 0.07) * 0.86;
+      const boost = inp && inp.clones && !fl.guard;
+      const sp = fl.guard ? 0.2 : 1;
+      fl.v.x = (fl.v.x - hx * 0.08 * sp) * 0.86; fl.v.y = (fl.v.y + hy * 0.07 * sp) * 0.86;
       if (boost) { fl.v.z = Math.min(1.9, fl.v.z + 0.12); if (fl.t % 3 === 0) this.afterimage(); if (fl.t % 20 === 0) Sound.play('release', { rate: 0.8, vol: 0.3 }); }
-      else fl.v.z *= 0.9;   // hover where you are; the fight is wherever you take it
+      else fl.v.z *= 0.9;
       fl.pos.add(fl.v);
-      fl.pos.y = Math.max(P.y - 4, Math.min(P.y + 28, fl.pos.y));
-      fl.pos.z = Math.max(P.z + 3, Math.min(P.z + 150, fl.pos.z));
       fl.boosting = boost;
     }
-    if (!inp || fl.stagger) return fl.strike > 0 ? fl.pose : 'superman';
-    // punch: hits only up close; out of reach it boosts you in first
-    if (inp.punchPressed && L) {
-      if (Ld > 6) { fl.homing = L; Sound.play('release', { rate: 1.4, vol: 0.6 }); Sound.boostBurst(); }
+    fl.pos.y = Math.max(P.y - 4, Math.min(P.y + 30, fl.pos.y));
+    fl.pos.z = Math.max(P.z + 3, Math.min(P.z + 240, fl.pos.z));
+    if (!inp || fl.stagger) return fl.stagger ? 'hurt' : 'hover';
+    const atkOk = !fl.invuln && !fl.dodge;
+    // GRAND SLAM: after a parry stuns a ship, press X+V (either one counts, so slow-mo can't eat it)
+    if (fl.slamReady && (inp.laserPressed || inp.grabPressed)) { this.startSlam(fl.slamReady); return 'kick'; }
+    // Recovery Smash: hit back right after you get hit
+    if (fl.recover > 0 && inp.punchPressed && fl.recoverFrom && !fl.recoverFrom.dead) { this.recoverySmash(); return fl.pose; }
+    if (both && inp.punchPressed && !fl.wildCool) { this.startWild(); return 'superman'; }
+    if (fl.guard) return 'guard';
+    if (!atkOk) return fl.dodge ? 'dodge' : 'guard';
+    const boostHeld = inp.clones;
+    if (boostHeld && inp.punchPressed && L) { fl.shots = 6; fl.shotT = 0; fl.shotCool = 50; Sound.play('charge', { rate: 1.8, vol: 0.4 }); }
+    else if (boostHeld && inp.laserPressed && L && Ld < 14) this.loopKick(L);
+    else if (boostHeld && inp.grabPressed) this.crossSlash();
+    else if (inp.punchPressed && L) {
+      if (Ld > 6) { fl.homing = L; fl.engage = null; Sound.play('release', { rate: 1.4, vol: 0.6 }); Sound.boostBurst(); }
       else this.superStrike(L);
+    } else if (inp.laserPressed && L && Ld < 9 && !fl.slamReady) this.spinSlash(L);
+    if (inp.bitePressed && !fl.boomCool) this.sonicBoom(L);
+    // V: tap for a Quick Cyloop, hold to draw a full Cyloop around the lock
+    if (!boostHeld && !fl.slamReady) {
+      if (inp.grabPressed) fl.vHold = 0;
+      if (inp.grab && fl.vHold != null) { fl.vHold++; if (fl.vHold === 12 && L) { this.startCyloop(L); fl.vHold = null; } }
+      else if (fl.vHold != null) { if (fl.vHold < 12) this.quickCyloop(); fl.vHold = null; }
     }
-    // Cross Slash: hold to charge, release to cut everything in front of you
-    if (inp.laser) { fl.charge = Math.min(50, fl.charge + 1); if (fl.charge % 10 === 1) Sound.play('charge', { rate: 0.8 + fl.charge / 50, vol: 0.5 }); if (this.t % 3 === 0) this.sparkAt(this.sonic.root, 0xffe060, 1); }
-    else if (fl.charge > 0) this.crossSlash();
-    // parry: catch an incoming bolt and send it back to its ship
-    if (inp.grabPressed) this.superParry();
-    return fl.strike > 0 ? fl.pose : fl.charge > 0 ? 'charge' : fl.boosting ? 'superman' : 'hover';
+    // Homing Shot volley
+    if (fl.shots > 0 && ++fl.shotT % 5 === 0) { fl.shots--; this.homingShot(L); }
+    return fl.strike > 0 ? fl.pose : fl.boosting ? 'superman' : 'hover';
   }
 
+  // every Super hit goes through here: shields, Phantom Rush, the combo gauge
+  superHit(f, dmg, power, word, pierce) {
+    const fl = this.flight;
+    if (f.kind === 'core' && f.ship.shieldOn && !pierce) {
+      this.pops.push({ text: 'SHIELDED!', p: new THREE.Vector3(f.x, f.y + 1.4, f.z), t: 0, big: false, rot: 0.1 });
+      Sound.play('shield', { rate: 2.2, vol: 0.4 }); this.burstAt(new THREE.Vector3(f.x, f.y, f.z), 0.8, 0x5fd8ff);
+      this.g.speech.say('tails', `It's shielded! Draw a Cyloop around it, hold [${keyLabel('grab')}]!`, { dur: 110, cool: 400, coolKey: 'shieldTip', prio: 4 });
+      return false;
+    }
+    const mult = fl && fl.rushT > 0 ? 2 : 1;
+    this.skyHit(f, dmg * mult, power, word);
+    if (fl && !fl.rushT) {
+      fl.rush = Math.min(100, fl.rush + 6);
+      if (fl.rush >= 100) { fl.rushT = 300; this.banner = { text: 'PHANTOM RUSH!', t: 0, col: '#ffd23f' }; Sound.play('shield', { rate: 0.7 }); this.flash = 0.5; this.slowmo = 18; }
+    }
+    return true;
+  }
+
+  // the auto-combo: four quick blows and a heavy finisher
   superStrike(L) {
     const fl = this.flight, rush = fl.rushT > 0;
     const d = new THREE.Vector3(L.x, L.y, L.z).sub(fl.pos).normalize();
-    fl.pos.set(L.x, L.y, L.z).addScaledVector(d, -2.2);   // in its face
+    fl.pos.set(L.x, L.y, L.z).addScaledVector(d, -2.2);
     const finisher = fl.step === 4;
-    const dmg = (finisher ? 5 : 2) * (rush ? 2 : 1);
     fl.pose = ['jab', 'cross', 'jab', 'cross', 'kick'][fl.step];
     fl.strike = rush ? 8 : 12;
-    this.skyHit(L, dmg, finisher ? 2 : 1.3, finisher ? 'FINISHER!' : rush ? 'RUSH!' : ['POW!', 'BAM!', 'WHAM!', 'CRACK!'][fl.step]);
+    this.superHit(L, finisher ? 5 : 2, finisher ? 2 : 1.3, finisher ? 'FINISHER!' : rush ? 'RUSH!' : ['POW!', 'BAM!', 'WHAM!', 'CRACK!'][fl.step]);
     if (rush) this.afterimage(true);
     fl.step = (fl.step + 1) % 5; fl.stepT = 45;
     fl.engage = L; fl.engageT = 50;
-    if (!rush) {
-      fl.rush = Math.min(100, fl.rush + 9);
-      if (fl.rush >= 100) { fl.rush = 0; fl.rushT = 300; this.banner = { text: 'PHANTOM RUSH!', t: 0, col: '#ffd23f' }; Sound.play('shield', { rate: 0.7 }); this.flash = 0.5; this.slowmo = 18; }
-    }
   }
 
+  // mid-combo: a spinning slash that also clips whatever is next to the target
+  spinSlash(L) {
+    const fl = this.flight;
+    fl.pose = 'spin'; fl.strike = 16; fl.stepT = 45; fl.engage = L; fl.engageT = 50;
+    this.superHit(L, 3, 1.7, 'SPIN SLASH!');
+    for (const f of this.foes) if (f !== L && !f.dead && f.hp > 0 && f.kind !== 'ship' && Math.hypot(f.x - L.x, f.y - L.y, f.z - L.z) < 6) this.superHit(f, 2, 1.2, null);
+    this.slashFx(new THREE.Vector3(L.x, L.y, L.z), 0, 10, 0xbfe8ff);
+    Sound.play('release', { rate: 1.2, vol: 0.6 });
+  }
+
+  // boost + kick: a somersault kick that launches the target
+  loopKick(L) {
+    const fl = this.flight;
+    fl.pos.set(L.x, L.y - 1.2, L.z - 2); fl.pose = 'loop'; fl.strike = 18; fl.engage = L; fl.engageT = 40;
+    this.superHit(L, 4, 2, 'LOOP KICK!');
+    if (L.kind !== 'core' && !L.dead) { L.y += 4; }
+    this.slashFx(new THREE.Vector3(L.x, L.y, L.z), Math.PI / 2, 6, 0xffe080);
+    Sound.play('spring', { rate: 1.2, vol: 0.6 }); this.fovKick = 6;
+  }
+
+  // boost + cyloop button: two crossing blades of light cut everything ahead
   crossSlash() {
-    const fl = this.flight, k = fl.charge / 50;
-    fl.charge = 0; fl.strike = 16; fl.pose = 'kick';
-    // two crossing blades of light
-    for (const r of [0.6, -0.6]) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(22, 0.5 + k), new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-      m.position.copy(fl.pos).add(new THREE.Vector3(0, 0.4, 6)); m.quaternion.copy(this.camera.quaternion); m.rotateZ(r);
-      this.scene.add(m); this.fx.push({ m, t: 0, dur: 16, size: 1, v: new THREE.Vector3(0, 0, 0.6), own: true, beam: true });
-    }
+    const fl = this.flight;
+    fl.strike = 16; fl.pose = 'kick';
+    this.slashFx(fl.pos.clone().add(new THREE.Vector3(0, 0.4, 6)), 0.6, 22, 0xffe080);
+    this.slashFx(fl.pos.clone().add(new THREE.Vector3(0, 0.4, 6)), -0.6, 22, 0xffe080);
     let n = 0;
     for (const f of this.foes) {
       if (f.dead || f.hp <= 0 || f.kind === 'ship') continue;
       const v = new THREE.Vector3(f.x - fl.pos.x, f.y - fl.pos.y, f.z - fl.pos.z);
-      if (v.z > -2 && v.length() < 10 + k * 6) { this.skyHit(f, 3 + Math.round(k * 4), 2, n++ ? null : 'CROSS SLASH!'); }
+      if (v.z > -2 && v.length() < 16) this.superHit(f, 4, 2, n++ ? null : 'CROSS SLASH!');
     }
-    this.flash = 0.3 + k * 0.3; this.shake = 14; this.fovKick = 8;
+    this.flash = 0.4; this.shake = 14; this.fovKick = 8;
     Sound.play('release', { rate: 0.6, vol: 0.9 }); Sound.play('boom', { rate: 1.1, vol: 0.6 });
   }
 
-  superParry() {
+  slashFx(p, rot, len, col) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.copy(p); m.quaternion.copy(this.camera.quaternion); m.rotateZ(rot);
+    this.scene.add(m); this.fx.push({ m, t: 0, dur: 14, size: 1, v: new THREE.Vector3(0, 0, 0.3), own: true, beam: true });
+  }
+
+  // Sonic Boom: quick kicks that throw crescent shockwaves
+  sonicBoom(L) {
     const fl = this.flight;
-    let got = false;
-    for (const b of this.bolts) {
-      if (b.dead || b.reflected) continue;
-      if (b.m.position.distanceTo(fl.pos) < 6) {
-        got = true; b.reflected = true;
-        const src = b.ship && !b.ship.dead ? b.ship : null;
-        const core = src && src.cores.find((c) => !c.dead);
-        const to = core ? new THREE.Vector3(core.x, core.y, core.z) : b.m.position.clone().add(new THREE.Vector3(0, 0, 60));
-        b.v = to.sub(b.m.position).normalize().multiplyScalar(2.2); b.target = core; b.m.material = this.glowMat.clone(); b.m.material.color.setHex(0xffe060);
+    fl.boomCool = 24; fl.pose = 'kick'; fl.strike = 10;
+    for (let i = 0; i < 3; i++) this.g.later(i * 5, () => {
+      if (!this.flight) return;
+      const m = new THREE.Sprite(this.glowMat.clone()); m.material.color.setHex(0x9fe8ff); m.scale.set(3, 1, 1);
+      m.position.copy(this.flight.pos); this.scene.add(m);
+      const tg = L && !L.dead ? L : null;
+      const dir = tg ? new THREE.Vector3(tg.x, tg.y, tg.z).sub(this.flight.pos).normalize() : new THREE.Vector3(0, 0, 1);
+      this.sproj.push({ m, v: dir.multiplyScalar(1.8), t: 0, tg, dmg: 1, word: 'SONIC BOOM!', kind: 'boom' });
+      Sound.play('release', { rate: 2, vol: 0.4 });
+    });
+  }
+
+  // Homing Shot: a stream of homing light
+  homingShot(L) {
+    if (!this.flight) return;
+    const m = new THREE.Sprite(this.glowMat.clone()); m.material.color.setHex(0xffe060); m.scale.setScalar(1.2);
+    m.position.copy(this.flight.pos).add(new THREE.Vector3((Math.random() - 0.5) * 2, 1, 0)); this.scene.add(m);
+    this.sproj.push({ m, v: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.6, 0.6), t: 0, tg: L, dmg: 1, word: null, kind: 'shot' });
+    Sound.zap(0.15);
+  }
+
+  updateProjectiles() {
+    for (const s of this.sproj) {
+      s.t++;
+      const tg = s.tg && !s.tg.dead && s.tg.hp > 0 ? s.tg : null;
+      if (tg) { const want = new THREE.Vector3(tg.x, tg.y, tg.z).sub(s.m.position).normalize().multiplyScalar(s.kind === 'shot' ? 1.5 : 1.8); s.v.lerp(want, s.kind === 'shot' ? 0.2 : 0.1); }
+      s.m.position.add(s.v);
+      for (const f of tg ? [tg] : this.foes) {
+        if (f.dead || f.hp <= 0 || f.kind === 'ship') continue;
+        if (s.m.position.distanceTo(new THREE.Vector3(f.x, f.y, f.z)) < (f.r || 1.5) + 0.6) { this.superHit(f, s.dmg, 1.1, s.word); s.dead = true; break; }
       }
+      if (s.t > 70) s.dead = true;
+      if (s.dead) this.scene.remove(s.m);
     }
-    fl.strike = 10; fl.pose = 'cross';
-    if (got) { this.pops.push({ text: 'PARRY!', p: fl.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), t: 0, big: true, rot: 0 }); Sound.play('bosshit', { rate: 1.7, vol: 0.7 }); Sound.play('shield', { rate: 1.6, vol: 0.5 }); this.slowmo = 20; this.flash = 0.2; }
-    else Sound.play('select', { rate: 0.7, vol: 0.3 });
+    this.sproj = this.sproj.filter((s) => !s.dead);
+  }
+
+  // Wild Rush: zig-zag through everything on screen
+  startWild() {
+    const fl = this.flight;
+    const tg = this.flightTargets(70).sort((a, b) => a.d - b.d).slice(0, 6).map((o) => o.f);
+    if (!tg.length) { Sound.play('select', { rate: 0.6, vol: 0.4 }); return; }
+    fl.wild = { tg, i: 0, t: 0 }; fl.wildCool = 200; fl.guard = false;
+    Sound.boostBurst(); this.banner = { text: 'WILD RUSH!', t: 0, col: '#7fe3ff', sub: true };
+  }
+
+  updateWild() {
+    const fl = this.flight, W = fl.wild;
+    if (W.t++ % 6) { this.afterimage(); return 'superman'; }
+    const f = W.tg[W.i++];
+    if (!f) { fl.wild = null; return 'hover'; }
+    if (!f.dead && f.hp > 0) {
+      const from = fl.pos.clone();
+      fl.pos.set(f.x + (W.i % 2 ? 2 : -2), f.y + 0.4, f.z - 2);
+      this.trailFx(from, fl.pos, 0x7fe3ff);
+      this.superHit(f, 2, 1.6, W.i === W.tg.length ? 'WILD RUSH!' : null);
+    }
+    return W.i % 2 ? 'jab' : 'kick';
+  }
+
+  trailFx(a, b, col) {
+    const len = a.distanceTo(b); if (len < 0.1) return;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, len, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.position.copy(a).lerp(b, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    this.scene.add(m); this.fx.push({ m, t: 0, dur: 14, size: 1, v: new THREE.Vector3(), own: true, beam: true });
+  }
+
+  // Cyloop: fly a full loop of light around the target. It breaks shields,
+  // stuns a gunship and throws whatever is inside into the air.
+  startCyloop(L) {
+    const fl = this.flight, ship = L.kind === 'core' ? L.ship : null;
+    const c = ship || L, R = ship ? 8 : 3.2;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 64), 3)); geo.setDrawRange(0, 0);
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, linewidth: 3 }));
+    line.frustumCulled = false; this.scene.add(line);
+    fl.cyl = { tg: L, c, ship, R, t: 0, line, n: 0 }; fl.engage = null; fl.homing = null;
+    Sound.play('charge', { rate: 1.2, vol: 0.5 });
+  }
+
+  updateCyloop(inp) {
+    const fl = this.flight, C = fl.cyl;
+    const dead = C.ship ? C.ship.dead : C.c.dead || C.c.hp <= 0;
+    if (dead || fl.stagger || (inp && !inp.grab && C.t < 48)) { this.endCyloop(false); return null; }
+    C.t++;
+    const a = (C.t / 48) * Math.PI * 2, ctr = new THREE.Vector3(C.c.x, C.c.y, C.c.z - (C.ship ? 6 : 1));
+    fl.pos.set(ctr.x + Math.cos(a) * C.R, ctr.y + Math.sin(a) * C.R, ctr.z);
+    const arr = C.line.geometry.attributes.position;
+    if (C.n < 64) { arr.setXYZ(C.n, fl.pos.x, fl.pos.y, fl.pos.z); C.n++; arr.needsUpdate = true; C.line.geometry.setDrawRange(0, C.n); }
+    if (C.t % 4 === 0) this.afterimage();
+    if (C.t >= 48) {
+      // the loop closes
+      if (C.ship) {
+        C.ship.shieldOn = false; C.ship.shieldT = 480; C.ship.stunT = Math.max(C.ship.stunT || 0, 120);
+        for (const k of C.ship.cores) if (!k.dead) this.superHit(k, 2, 1.8, null, true);
+      } else this.superHit(C.c, 4, 1.8, null, true);
+      this.pops.push({ text: 'CYLOOP!', p: ctr.clone().add(new THREE.Vector3(0, 2, 0)), t: 0, big: true, rot: 0 });
+      const ring = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 28)), new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      ring.position.copy(ctr); ring.quaternion.copy(this.camera.quaternion); this.scene.add(ring);
+      this.fx.push({ m: ring, t: 0, dur: 20, size: C.R, grow: C.R, v: new THREE.Vector3(), own: true, ring: true });
+      this.flash = 0.35; this.shake = 14; Sound.play('shield', { rate: 1.3 }); Sound.play('boom', { rate: 1.4, vol: 0.5 });
+      this.endCyloop(true);
+      return 'kick';
+    }
+    return 'superman';
+  }
+
+  endCyloop() {
+    const C = this.flight.cyl; if (!C) return;
+    this.fx.push({ m: C.line, t: 0, dur: 20, size: 1, v: new THREE.Vector3(), own: true, beam: true });
+    C.line.material.opacity = 0.9; this.flight.cyl = null;
+  }
+
+  // Quick Cyloop: a burst of light around Sonic that breaks nearby shields
+  // and shakes a few rings loose
+  quickCyloop() {
+    const fl = this.flight;
+    if (fl.qcyCool > 0) { Sound.play('select', { rate: 0.6, vol: 0.3 }); return; }
+    fl.qcyCool = 240; fl.pose = 'kick'; fl.strike = 12;
+    const ring = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 28)), new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.position.copy(fl.pos); ring.quaternion.copy(this.camera.quaternion); this.scene.add(ring);
+    this.fx.push({ m: ring, t: 0, dur: 18, size: 1, grow: 12, v: new THREE.Vector3(), own: true, ring: true });
+    for (const f of this.foes) {
+      if (f.dead) continue;
+      const d = Math.hypot(f.x - fl.pos.x, f.y - fl.pos.y, f.z - fl.pos.z);
+      if (f.kind === 'ship' && d < 18 && f.shieldOn) { f.shieldOn = false; f.shieldT = 300; this.pops.push({ text: 'SHIELD BREAK!', p: new THREE.Vector3(f.x, f.y + 3, f.z), t: 0, big: true, rot: 0 }); }
+      else if (f.kind !== 'ship' && f.kind !== 'core' && d < 10 && f.hp > 0) this.superHit(f, 2, 1.2, null, true);
+    }
+    this.rings += 2; this.superT = Math.min(900, this.superT + 30);
+    this.pops.push({ text: 'QUICK CYLOOP', p: fl.pos.clone().add(new THREE.Vector3(0, 1.6, 0)), t: 0, big: false, rot: 0 });
+    Sound.ring(); Sound.play('shield', { rate: 1.5, vol: 0.4 });
+  }
+
+  // getting hit as Super Sonic: rings fly, the gauge resets, a chance to counter
+  superHurt(frames, from, word) {
+    const fl = this.flight;
+    if (fl.guard) return 'parry';
+    if (fl.dodge > 0 || fl.invuln) { this.pops.push({ text: 'DODGE', p: fl.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), t: 0, big: false, rot: 0 }); return 'miss'; }
+    this.superT = Math.max(1, this.superT - frames);
+    fl.stagger = 24; fl.step = 0; fl.engage = null; fl.homing = null; if (!fl.rushT) fl.rush = 0;
+    fl.recover = 30; fl.recoverFrom = from;
+    if (fl.cyl) this.endCyloop(false);
+    for (let i = 0; i < 8; i++) {
+      const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(0xffd23f); sp.position.copy(fl.pos); this.scene.add(sp);
+      const a = Math.random() * 6.3; this.fx.push({ m: sp, t: 0, dur: 30, size: 0.4, v: new THREE.Vector3(Math.cos(a) * 0.3, Math.sin(a) * 0.3 + 0.1, -0.2), own: true, shrink: true });
+    }
+    this.burstAt(fl.pos, 0.8, 0x9dff6a); this.shake = 12; Sound.play('hurt', { vol: 0.6 }); Sound.play('ringloss', { vol: 0.5 });
+    this.pops.push({ text: word || 'OUCH!', p: fl.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), t: 0, big: false, rot: 0.2 });
+    return 'hit';
+  }
+
+  recoverySmash() {
+    const fl = this.flight, f = fl.recoverFrom.kind === 'ship' ? fl.recoverFrom.cores.find((c) => !c.dead) : fl.recoverFrom;
+    fl.recover = 0; fl.stagger = 0;
+    if (!f) return;
+    const from = fl.pos.clone();
+    fl.pos.set(f.x, f.y + 0.3, f.z - 2.4); this.trailFx(from, fl.pos, 0xffe060);
+    fl.pose = 'kick'; fl.strike = 14; fl.engage = f; fl.engageT = 50;
+    this.superHit(f, 3, 2, 'RECOVERY SMASH!', true);
+  }
+
+  // a parried ram leaves the ship open: press both buttons for a GRAND SLAM,
+  // then mash for a flurry that ends in one huge blow
+  startSlam(ship) {
+    const fl = this.flight;
+    fl.slam = { ship, t: 0, n: 0 }; fl.slamReady = null; fl.guard = false;
+    this.banner = { text: 'GRAND SLAM!', t: 0, col: '#ffd23f' }; this.slowmo = 12; Sound.play('charge', { rate: 0.9 });
+  }
+
+  updateSlam(inp) {
+    const fl = this.flight, S = fl.slam, ship = S.ship;
+    S.t++;
+    const cores = ship.cores.filter((c) => !c.dead);
+    if (ship.dead || !cores.length) { fl.slam = null; return 'hover'; }
+    const c = cores[S.n % cores.length];
+    fl.pos.lerp(new THREE.Vector3(ship.x + Math.sin(S.t * 0.7) * 3, ship.y + Math.cos(S.t * 0.5) * 2, ship.z - 6), 0.4);
+    if (inp && inp.punchPressed && S.t < 100) {
+      S.n++; this.afterimage(true);
+      this.superHit(c, 1, 1.3, null, true);
+      fl.pose = S.n % 2 ? 'jab' : 'cross'; fl.strike = 6;
+    }
+    if (S.t === 110) {
+      for (const k of cores) this.superHit(k, 3 + Math.floor(S.n / 4), 2.4, null, true);
+      this.pops.push({ text: `GRAND SLAM x${S.n}`, p: new THREE.Vector3(ship.x, ship.y + 4, ship.z), t: 0, big: true, rot: 0 });
+      this.flash = 0.7; this.shake = 30; this.slowmo = 20; Sound.play('boom', { rate: 0.8 });
+      ship.stunT = 60; fl.slam = null; fl.pose = 'kick'; fl.strike = 16;
+      return 'kick';
+    }
+    return fl.strike > 0 ? fl.pose : 'charge';
+  }
+
+  // beam struggle: mash to push the gunship's beam back into it
+  updateClash(inp) {
+    const fl = this.flight, C = fl.clash, ship = C.ship;
+    C.t++;
+    if (ship.dead) { this.endClash(); return 'hover'; }
+    if (inp && inp.punchPressed) { C.p += 0.06; Sound.play('pop', { rate: 1.6 + C.p, vol: 0.3 }); this.shake = Math.max(this.shake, 4); }
+    C.p -= 0.011;
+    const nose = new THREE.Vector3(ship.x, ship.y - 0.5, ship.z - 6), meet = fl.pos.clone().lerp(nose, C.p);
+    this.beamMesh(C.mine, fl.pos, meet); this.beamMesh(C.theirs, nose, meet);
+    if (C.t % 3 === 0) this.burstAt(meet, 1.2, C.t % 6 ? 0xffe060 : 0x9dff6a);
+    if (C.p >= 1) {
+      this.endClash();
+      ship.stunT = 300; ship.shieldOn = false; ship.shieldT = 480;
+      for (const k of ship.cores) if (!k.dead) this.superHit(k, 3, 2.2, null, true);
+      this.banner = { text: 'BEAM REVERSED!', t: 0, col: '#ffd23f' }; this.flash = 0.6; this.shake = 24;
+      fl.slamReady = ship; fl.slamReadyT = 180;
+    } else if (C.p <= 0) {
+      this.endClash();
+      fl.guard = false; this.superHurt(180, ship, 'OVERPOWERED!');
+    }
+    return 'charge';
+  }
+
+  beamMesh(m, a, b) {
+    const len = Math.max(0.1, a.distanceTo(b));
+    m.position.copy(a).lerp(b, 0.5); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  }
+
+  endClash() {
+    const C = this.flight.clash; if (!C) return;
+    this.scene.remove(C.mine); this.scene.remove(C.theirs); this.flight.clash = null;
+  }
+
+  newBeam(col, r) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.scene.add(m); return m;
   }
 
   afterimage(gold) {
@@ -2104,15 +2603,30 @@ class TornadoStage {
       case 'jab': mc('jab0'); break;
       case 'cross': mc('cross0'); break;
       case 'kick': mc('spinkick'); break;
+      case 'spin': mc('spinkick'); M.body.rotation.y = (1 - fl.strike / 16) * Math.PI * 4; break;
+      case 'loop': mc('jumpkick'); M.body.rotation.x = -(1 - fl.strike / 18) * Math.PI * 2; break;
+      case 'guard': escLimbPose(M, 'guard', { t: this.t, k: 0.8 }); M.body.rotation.x = -0.1; break;
+      case 'dodge': M.body.rotation.z = (fl.dodgeV && fl.dodgeV.x > 0 ? -1 : 1) * 1.2; escLimbPose(M, 'superman', { t: this.t, k: 0.4 }); break;
+      case 'hurt': escLimbPose(M, 'hurt', { t: this.t, k: 0.7 }); M.body.rotation.x = -0.5; break;
       case 'trick': escLimbPose(M, 'wide', { t: this.t, k: 0.5 }); M.body.rotation.x = -0.3; break;
       case 'charge': escLimbPose(M, 'guard', { t: this.t, k: 0.6 }); M.body.rotation.x = -0.2; break;
       case 'hover': escMocap(M, 'guard', this.t / 60, { k: 0.4 }); break;
       default: M.body.rotation.x = 1.15; escLimbPose(M, 'superman', { t: this.t, k: 0.4 });
     }
     if (this.t % 2 === 0) this.afterimage();
+    if (fl.sup) {
+      if (!this.guardBubble) { this.guardBubble = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })); this.scene.add(this.guardBubble); }
+      this.guardBubble.visible = !!fl.guard; this.guardBubble.position.copy(fl.pos).add(new THREE.Vector3(0, 0.5, 0));
+      this.guardBubble.material.opacity = fl.guardT < 12 ? 0.55 : 0.25 + Math.sin(this.t * 0.4) * 0.05;
+    }
   }
 
   endFlight() {
+    if (this.guardBubble) this.guardBubble.visible = false;
+    if (this.flight && this.flight.sup) { this.endClash(); this.endCyloop(); }
+    for (const f of this.foes) if (f.kind === 'ship') this.endShipAttack(f);
+    for (const sp of this.sproj || []) this.scene.remove(sp.m);
+    this.sproj = [];
     const M = this.sonic;
     if (this.flight && this.flight.sup && this.superT > 0) { this.superT = 0; this.goSuper(false); }
     this.away.sonic = false; this.plane.root.attach(M.root); M.root.rotation.set(0, 0, 0);
@@ -2134,7 +2648,7 @@ class TornadoStage {
       if (b) return { b };
     }
     let best = null, bd = Infinity;
-    for (const f of this.foes) { if (f.dead || f.hp <= 0 || f.kind === 'ship') continue; const d = Math.hypot(f.x - st.pos.x, f.y - st.pos.y, f.z - st.pos.z); if (d < bd && f.z < 200) { bd = d; best = f; } }
+    for (const f of this.foes) { if (f.dead || f.hp <= 0 || f.kind === 'ship' || f.kind === 'core') continue; const d = Math.hypot(f.x - st.pos.x, f.y - st.pos.y, f.z - st.pos.z); if (d < bd && f.z < 200) { bd = d; best = f; } }
     return best ? { f: best } : null;
   }
 
@@ -2457,11 +2971,14 @@ class TornadoStage {
         if (a.type === 'tailspin') clip = 'fly';
       }
       this.playClip(M, clip, 0.1, clip === 'run' ? 1.4 : 1);
-      const ball = sonic && a && a.type === 'spin';
+      const ball = sonic && !F.stun && ((a && ['spin', 'roll', 'charge', 'homing', 'airdash'].includes(a.type)) || (!a && air));
       if (sonic) {
         const S = this.sonic;
         S.ball.visible = !!ball; S.body.visible = !ball;
-        if (ball) S.ball.rotation.x += 0.55;
+        if (ball) {
+          S.ball.rotation.x += a && a.type === 'charge' ? 0.4 + a.rev * 0.12 : a && a.type === 'roll' ? 0.8 : 0.55;
+          S.ball.scale.set(1, a && a.type === 'charge' ? 0.8 : 1, 1);
+        } else S.ball.scale.set(1, 1, 1);
         const boosting = a && (a.type === 'boost' || a.type === 'dash'), fl = 0.8 + Math.random() * 0.4;
         S.aura.material.opacity = boosting ? 0.5 * fl : 0; S.core.material.opacity = boosting ? 0.3 * fl : 0;
         S.aura.visible = S.core.visible = boosting;
@@ -2515,6 +3032,12 @@ class TornadoStage {
           break;
         }
         case 'whiff': mc('cross1', ph, 0.8); break;
+        case 'hold': {
+          const aim = F.hold ? new THREE.Vector3().setFromMatrixPosition(F.hold.m.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld).add(new THREE.Vector3(0, 0.55, 0))).normalize() : null;
+          if (aim) escLimbPose(M, 'grab', { aim }); else escLimbPose(M, 'guard', { t });
+          if (a.smack > 0) M.body.rotation.z = -a.side * Math.sin((1 - a.smack / 12) * Math.PI) * 0.4;
+          break;
+        }
         default: escMocap(M, 'guard', t / 60, { k: 0.45 });
       }
     }
@@ -2673,7 +3196,7 @@ class TornadoStage {
       if (b.state === 'guard') { g.text(ctx, 'GUARD', p.x, p.y, 12, '#9fc8ff', 'center', '#000'); continue; }
       const dur = b.kind === 'zom' ? 34 : 26, win = b.state === 'windup' && b.t >= dur - 16;
       g.text(ctx, '!', p.x, p.y + Math.sin(t * 0.5) * 3, win ? 34 : 24, win ? '#ff3b3b' : '#ffd23f', 'center', '#000');
-      if (win) g.text(ctx, 'PARRY', p.x, p.y + 20, 10, '#ff3b3b', 'center', '#000');
+      if (win && this.wingChar !== 'sonic') g.text(ctx, 'PARRY', p.x, p.y + 20, 10, '#ff3b3b', 'center', '#000');
     }
     // the style rank
     if (this.phase === 'board' && this.style && this.style.rank > 0) {
@@ -2730,21 +3253,56 @@ class TornadoStage {
           const d = Math.hypot(tg.x - fl.pos.x, tg.y - fl.pos.y, tg.z - fl.pos.z), close = !fl.sup || d < 6;
           ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(t * 0.08);
           ctx.strokeStyle = close ? '#ff3b3b' : '#ffd23f'; ctx.lineWidth = 4; ctx.strokeRect(-24, -24, 48, 48); ctx.restore();
-          if (fl.sup) g.text(ctx, close ? 'IN RANGE' : `${Math.round(d)}m  [${keyLabel('punch')}] BOOST IN`, p.x, p.y + 44, 11, close ? '#ff3b3b' : '#ffd23f', 'center');
+          const shd = tg.kind === 'core' && tg.ship.shieldOn && !(tg.ship.stunT > 0);
+          if (fl.sup) g.text(ctx, shd ? `SHIELDED  HOLD [${keyLabel('grab')}] CYLOOP` : close ? 'IN RANGE' : `${Math.round(d)}m  [${keyLabel('punch')}] HOMING`, p.x, p.y + 44, 11, shd ? '#7fe3ff' : close ? '#ff3b3b' : '#ffd23f', 'center');
         }
       }
-      if (fl.sup) {
-        g.text(ctx, `SUPER SONIC ${left}s`, VIEW_W / 2, VIEW_H - 204, 16, '#ffd23f', 'center');
-        g.text(ctx, `ARROWS FLY   HOLD [${keyLabel('clones')}] BOOST   [${keyLabel('punch')}] COMBO (BOOSTS IN FROM AFAR)   HOLD [${keyLabel('laser')}] CROSS SLASH   [${keyLabel('grab')}] PARRY   DOUBLE-TAP DODGE`, VIEW_W / 2, VIEW_H - 24, 11, '#ffd23f', 'center');
-        // Phantom Rush gauge and the slash charge
-        ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(VIEW_W / 2 - 160, VIEW_H - 180, 320, 12);
-        ctx.fillStyle = fl.rushT > 0 ? (Math.floor(t / 4) % 2 ? '#fff' : '#ffd23f') : '#ff9a1a'; ctx.fillRect(VIEW_W / 2 - 160, VIEW_H - 180, 320 * (fl.rushT > 0 ? fl.rushT / 300 : fl.rush / 100), 12);
-        g.text(ctx, fl.rushT > 0 ? 'PHANTOM RUSH' : 'RUSH', VIEW_W / 2 - 160, VIEW_H - 186, 10, '#ffd23f');
-        if (fl.charge > 0) { ctx.fillStyle = '#fff'; ctx.fillRect(VIEW_W / 2 - 160, VIEW_H - 164, 320 * fl.charge / 50, 6); }
-      } else g.text(ctx, `SONIC MISSILE ${left}s   [${keyLabel('punch')}] HOMING ATTACK (ON-SCREEN TARGETS)   LEFT/RIGHT DRIFT`, VIEW_W / 2, VIEW_H - 140, 13, '#7fe3ff', 'center');
+      if (fl.sup) this.drawSuperHUD(ctx, scr);
+      else g.text(ctx, `SONIC MISSILE ${left}s   [${keyLabel('punch')}] HOMING ATTACK (ON-SCREEN TARGETS)   LEFT/RIGHT DRIFT`, VIEW_W / 2, VIEW_H - 140, 13, '#7fe3ff', 'center');
     }
     if (this.freezeT > 0) { ctx.fillStyle = `rgba(120,200,255,${0.12 + 0.05 * Math.sin(t * 0.2)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (this.superT > 0) { ctx.fillStyle = `rgba(255,210,60,${0.08 + 0.04 * Math.sin(t * 0.3)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+  }
+
+  drawSuperHUD(ctx, scr) {
+    const g = this.g, fl = this.flight, t = this.t, cx = VIEW_W / 2, kl = keyLabel;
+    // rings are time: they tick away, and a hit knocks some out
+    const secs = Math.ceil(this.superT / 60);
+    g.text(ctx, 'SUPER SONIC', cx, 66, 16, '#ffd23f', 'center');
+    g.text(ctx, `RINGS ${secs}`, cx, 88, 14, secs <= 4 && t % 20 < 10 ? '#ff3b3b' : '#fff', 'center');
+    // combo gauge -> Phantom Rush
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(cx - 160, 106, 320, 12);
+    ctx.fillStyle = fl.rushT > 0 ? (Math.floor(t / 4) % 2 ? '#fff' : '#ffd23f') : '#ff9a1a'; ctx.fillRect(cx - 160, 106, 320 * Math.min(1, fl.rush / 100), 12);
+    g.text(ctx, fl.rushT > 0 ? 'PHANTOM RUSH' : 'COMBO', cx - 160, 102, 10, '#ffd23f');
+    const cd = (label, v, max, x) => {
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(x, 128, 70, 6);
+      ctx.fillStyle = v > 0 ? '#555' : '#7fe3ff'; ctx.fillRect(x, 128, 70 * (1 - v / max), 6);
+      g.text(ctx, label, x, 144, 9, v > 0 ? '#888' : '#7fe3ff');
+    };
+    cd('QUICK CYLOOP', fl.qcyCool, 240, cx - 160); cd('WILD RUSH', fl.wildCool, 200, cx - 35); cd('SONIC BOOM', fl.boomCool, 24, cx + 90);
+    // the set pieces
+    const big = (txt, col, y = 340) => g.text(ctx, txt, cx, y, 22, Math.floor(t / 8) % 2 ? col : '#fff', 'center', '#000');
+    if (fl.slamReady) big(`[${kl('laser')}]+[${kl('grab')}] GRAND SLAM!`, '#ffd23f');
+    if (fl.slam) big(`MASH [${kl('punch')}]!  x${fl.slam.n}`, '#ffd23f');
+    if (fl.recover > 0) big(`[${kl('punch')}] RECOVERY SMASH`, '#7fe3ff', 380);
+    if (fl.clash) {
+      big(`BEAM STRUGGLE: MASH [${kl('punch')}]!`, '#9dff6a');
+      ctx.fillStyle = '#9dff6a'; ctx.fillRect(cx - 200, 356, 400, 16);
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(cx - 200, 356, 400 * Math.max(0, Math.min(1, fl.clash.p)), 16);
+    }
+    if (fl.cyl) g.text(ctx, `KEEP HOLDING [${kl('grab')}]`, cx, 380, 16, '#7fe3ff', 'center', '#000');
+    // incoming attacks get called out over the ship
+    for (const f of this.foes) {
+      if (f.kind !== 'ship' || f.dead || !(f.ram || f.beam)) continue;
+      const p = scr(new THREE.Vector3(f.x, f.y + 5, f.z)); if (!p) continue;
+      if (f.ram && f.ram.phase === 'aim') g.text(ctx, `RAM!  HOLD [${kl('swap')}]+[${kl('roles')}] TO PARRY`, p.x, p.y, 13, t % 10 < 5 ? '#ff3b3b' : '#fff', 'center', '#000');
+      if (f.beam && f.beam.t < 100) g.text(ctx, `BEAM!  [${kl('swap')}] / [${kl('roles')}] DODGE`, p.x, p.y, 13, t % 10 < 5 ? '#9dff6a' : '#fff', 'center', '#000');
+    }
+    const lines = [
+      `ARROWS FLY   HOLD [${kl('clones')}] BOOST   [${kl('punch')}] HOMING ATTACK / COMBO   [${kl('laser')}] SPIN SLASH   [${kl('bite')}] SONIC BOOM`,
+      `[${kl('grab')}] TAP: QUICK CYLOOP   HOLD: CYLOOP   BOOST+[${kl('punch')}] HOMING SHOT   BOOST+[${kl('laser')}] LOOP KICK   BOOST+[${kl('grab')}] CROSS SLASH`,
+      `[${kl('swap')}] / [${kl('roles')}] DODGE (HOLD: UNTOUCHABLE)   HOLD BOTH: PARRY   BOTH+[${kl('punch')}] WILD RUSH`];
+    lines.forEach((ln, i) => g.text(ctx, ln, cx + 50, VIEW_H - 60 + i * 18, 10, '#ffd23f', 'center'));
   }
 
   drawTBC(ctx) {
@@ -2817,9 +3375,9 @@ class TornadoStage {
     const hint = this.active === 'pilot'
       ? `${keyLabel('up')}${keyLabel('down')} AIM  [${keyLabel('punch')}] GUNS  HOLD [${keyLabel('laser')}] LOCK-ON  [${keyLabel('clones')}] ROLL`
       : this.wingChar === 'sonic'
-        ? `[${keyLabel('punch')}] PUNCH (ON THE "!" = PARRY)  ${keyLabel('down')}+[${keyLabel('punch')}] UPPERCUT  [${keyLabel('laser')}] KICK (BREAKS GUARD)  ${keyLabel('down')}+[${keyLabel('laser')}] SPIN|${keyLabel('up')} JUMP, THEN [${keyLabel('punch')}] HOMING ATTACK OR [${keyLabel('laser')}] STOMP   DOUBLE-TAP ${keyLabel('left')}/${keyLabel('right')} DASH   [${keyLabel('clones')}] BOOST   [${keyLabel('grab')}] FINISH`
+        ? `[${keyLabel('punch')}] HOMING ATTACK   HOLD [${keyLabel('laser')}] SPIN DASH (TAP TO REV)   [${keyLabel('clones')}] BOOST   ${keyLabel('up')} JUMP|[${keyLabel('grab')}] GRAB, THEN [${keyLabel('punch')}] SMACK IT AROUND / [${keyLabel('grab')}] THROW   GUARDS BLOCK HOMING: SPIN DASH THROUGH`
         : `[${keyLabel('punch')}] PUNCH (TIME IT TO PARRY)  ${keyLabel('down')}+[${keyLabel('punch')}] UPPERCUT  [${keyLabel('laser')}] TAIL SMACK  [${keyLabel('clones')}] TAIL SPIN  [${keyLabel('grab')}] GRAB/FINISH`;
-    if (!this.flight) hint.split('|').forEach((ln, i, all) => g.text(ctx, ln, VIEW_W / 2 + 50, VIEW_H - 24 - (all.length - 1 - i) * 18, 11, '#c9d4ff', 'center'));
+    if (!this.flight) hint.split('|').forEach((ln, i, all) => g.text(ctx, ln, VIEW_W / 2 + 70, VIEW_H - 24 - (all.length - 1 - i) * 18, 11, '#c9d4ff', 'center'));
     if (t < 420 && !this.banner && !this.finisher) g.text(ctx, `PRESS [${keyLabel('swap')}] TO SWITCH BETWEEN FLYING AND FIGHTING`, VIEW_W / 2, 200, 16, Math.floor(t / 20) % 2 ? '#ffd23f' : '#fff', 'center');
     if (t > 900 && t < 1200 && !this.banner && !this.finisher) g.text(ctx, `[${keyLabel('roles')}] SWAPS ROLES: SONIC FLIES, TAILS FIGHTS (NOT FOR LONG)`, VIEW_W / 2, 200, 14, '#ffd23f', 'center');
   }
