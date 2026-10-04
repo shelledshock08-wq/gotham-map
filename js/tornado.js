@@ -152,20 +152,6 @@ function torJetModel() {
   return g;
 }
 
-// Point a bone (whose +x runs along the limb, as in both Generations rigs)
-// toward a world direction, blended by k. Used for punches, kicks and grabs.
-const _tq = new THREE.Quaternion(), _tq2 = new THREE.Quaternion(), _tv = new THREE.Vector3();
-function torAimBone(bone, dir, k) {
-  if (!bone || k <= 0) return;
-  bone.updateWorldMatrix(true, false);
-  bone.getWorldQuaternion(_tq);
-  _tv.set(1, 0, 0).applyQuaternion(_tq);
-  _tq2.setFromUnitVectors(_tv, dir).multiply(_tq);         // desired world rotation
-  _tq.slerp(_tq2, k);
-  bone.parent.getWorldQuaternion(_tq2).invert();
-  bone.quaternion.copy(_tq2.multiply(_tq));
-}
-
 // Film grain, a vignette and the odd glitch, laid over the whole frame (k = strength)
 let TOR_GRAIN = null;
 function torDread(ctx, t, k) {
@@ -375,7 +361,7 @@ class TornadoStage {
     scene.background = new THREE.Color(0x2a1018);
     scene.fog = new THREE.Fog(0x2a1018, 60, 330);
     this.camera = new THREE.PerspectiveCamera(62, VIEW_W / VIEW_H, 0.1, 3000);
-    this.hemi = new THREE.HemisphereLight(0xd0a8b0, 0x180c1c, 0.8); scene.add(this.hemi);
+    this.hemi = new THREE.HemisphereLight(0xd8b0b8, 0x201020, 1.0); scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xff7a58, 0.7); sun.position.set(-0.5, 0.8, 1); scene.add(sun);
     // sky dome with a dusk gradient
     const c = document.createElement('canvas'); c.width = 4; c.height = 256;
@@ -412,19 +398,19 @@ class TornadoStage {
     this.smokeMat = new THREE.SpriteMaterial({ map: T.smoke, depthWrite: false, transparent: true });
     this.bulletGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.6, 5); this.bulletGeo.rotateX(Math.PI / 2);
     this.bulletMat = new THREE.MeshBasicMaterial({ color: 0xfff2a0 });
-    this.missileGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.9, 6); this.missileGeo.rotateX(Math.PI / 2);
-    this.missileMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+    this.missileGeo = new THREE.CylinderGeometry(0.13, 0.13, 1.0, 8); this.missileGeo.rotateX(Math.PI / 2);
+    this.missileMat = new THREE.MeshPhongMaterial({ color: 0xe8e8e8, shininess: 80 });
+    this.missileTipGeo = new THREE.ConeGeometry(0.13, 0.35, 8); this.missileTipGeo.rotateX(Math.PI / 2);
+    this.missileTipMat = new THREE.MeshPhongMaterial({ color: 0xd4141e, shininess: 80 });
+    this.flameMat = new THREE.SpriteMaterial({ map: T.glow, color: 0xffb040, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false });
+    this.laserMat = new THREE.MeshBasicMaterial({ color: 0x7fd0ff });
+    this.scorchMat = new THREE.MeshBasicMaterial({ map: T.smoke, color: 0x000000, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide });
+    this.tearMat = new THREE.MeshBasicMaterial({ map: T.smoke, color: 0x2a0806, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide });
     // the Tornado, Sonic and Tails
     this.plane = torPlaneModel(); scene.add(this.plane.root);
     this.sonic = escSonicModel(); this.sonic.root.scale.setScalar(0.52);
     this.tails = torTailsModel();
     this.plane.root.add(this.sonic.root); this.plane.root.add(this.tails.root);
-    this.bones = {};
-    for (const [id, M] of [['sonic', this.sonic], ['tails', this.tails]]) {
-      const b = {}, root = M.model ? M.model.root : null;
-      if (root) for (const n of ['UpperArm_R', 'ForeArm_R', 'UpperArm_L', 'ForeArm_L', 'Thigh_R', 'Calf_R', 'Head', 'Spine1']) b[n] = root.getObjectByName(n);
-      this.bones[id] = b;
-    }
     this.wingMeshes = this.plane.body.children.filter((m) => m.name === 's_t1_winga');
     // pairs of infected eyes that open in the far clouds, watching
     this.eyes = [];
@@ -434,7 +420,7 @@ class TornadoStage {
       pair.visible = false; scene.add(pair); this.eyes.push({ m: pair, t: -Math.random() * 600 });
     }
     this.lightning = 0;
-    this.fx = []; this.debris = [];
+    this.fx = []; this.debris = []; this.pops = [];
     this.v3 = new THREE.Vector3(); this.v3b = new THREE.Vector3();
     this.resetWorld();
   }
@@ -450,7 +436,11 @@ class TornadoStage {
   resetWorld() {
     const S = this.scene;
     for (const list of [this.foes, this.shots, this.bolts, this.boarders, this.fx, this.debris]) if (list) for (const o of list) if (o.m) S.remove(o.m);
-    this.foes = []; this.shots = []; this.bolts = []; this.boarders = []; this.fx = []; this.debris = [];
+    this.foes = []; this.shots = []; this.bolts = []; this.boarders = []; this.fx = []; this.debris = []; this.pops = [];
+    for (const d of this.decals || []) d.parent && d.parent.remove(d);
+    this.items = this.items ? (this.items.forEach((i) => this.scene.remove(i.m)), []) : [];
+    this.decals = []; this.tears = 0;
+    this.ammo = 6; this.ammoT = 0; this.aimP = 0.06; this.hits = 0; this.locks = []; this.painting = false; this.laserT = 0; this.lock = null;
     this.px = 0; this.py = 1.5; this.pvx = 0; this.pvy = 0; this.roll = 0; this.rollCool = 0; this.gunT = 0; this.missileCool = 0;
     this.bank = 0; this.pitch = 0; this.dropY = 0; this.planeSpin = 0; this.rollA = 0;
     for (const m of this.wingMeshes) m.visible = true;
@@ -503,17 +493,19 @@ class TornadoStage {
     else if (this.phase === 'torn' || this.phase === 'shot') this.updateFail();
     else if (this.phase === 'infected') this.updateInfected();
     if (this.phase !== 'tbc') {
-      this.updateFoes(); this.updateShots(); this.updateBolts(); this.updateBoarders(); this.updateFX();
+      this.updateFoes(); this.updateShots(); this.updateBolts(); this.updateBoarders(); this.updateFX(); this.updateItems(); this.updateDamage();
       this.animate();
       this.updateCamera();
     }
   }
 
   // -------------------------------------------------- the Tornado itself
+  // Classic rail-shooter handling: left/right flies the plane, up/down aims the
+  // guns (the enemies come from above), and the reticle rides out in front.
   updatePlane(inp) {
     const g = this.g, t = this.t;
     const ai = inp === 'sonicAI';
-    if (ai) inp = { right: this.px < -2, left: this.px > 2, up: this.py > 2.5, down: this.py < 0.5 };
+    if (ai) inp = { right: this.px < -2, left: this.px > 2, up: this.aimP < 0.04, down: this.aimP > 0.1 };
     const pilot = inp ? this.pilot : 'auto';
     let hx = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0;
     let hy = inp ? (inp.up ? 1 : 0) - (inp.down ? 1 : 0) : 0;
@@ -521,21 +513,23 @@ class TornadoStage {
       // Sonic has no idea: the stick is backwards and the plane wanders
       hy = -hy;
       hx += Math.sin(t * 0.11) * 0.6 + (Math.random() - 0.5) * 0.8;
-      hy += Math.cos(t * 0.07) * 0.5;
     }
-    if (pilot === 'auto') { hx = Math.max(-0.3, Math.min(0.3, -this.px * 0.04)); hy = this.py > 0 ? -0.25 : 0; }
-    this.pvx = (this.pvx - hx * 0.045) * 0.9;
-    this.pvy = (this.pvy + hy * 0.04) * 0.9;
+    if (pilot === 'auto') { hx = Math.max(-0.3, Math.min(0.3, -this.px * 0.04)); hy = 0; }
+    this.pvx = (this.pvx - hx * 0.05) * 0.9;
     this.px = Math.max(-TW.boxX, Math.min(TW.boxX, this.px + this.pvx));
-    this.py = Math.max(TW.boxY0, Math.min(TW.boxY1, this.py + this.pvy));
+    this.pvy = 0; this.py = 1.5 + Math.sin(t * 0.03) * 0.25;
+    this.aimP = Math.max(-0.04, Math.min(0.26, (this.aimP == null ? 0.06 : this.aimP) + hy * 0.006));
     if (this.rollCool > 0) this.rollCool--;
-    if (this.missileCool > 0) this.missileCool--;
     if (this.roll > 0) this.roll--;
-    if (!inp || ai) return;
-    // guns, missiles and the barrel roll
-    if (inp.punch && --this.gunT <= 0) { this.gunT = 5; this.fireGuns(pilot === 'sonic'); }
+    if (this.laserT > 0) this.laserT--;
+    if (this.ammo < 6 && ++this.ammoT >= 80) { this.ammo++; this.ammoT = 0; }
+    this.updateAim(!!inp && !ai);
+    if (!inp || ai) { this.painting = false; return; }
+    // guns, the lock-on missile salvo and the barrel roll
+    if (inp.punch && --this.gunT <= 0) { this.gunT = this.laserT > 0 ? 4 : 5; this.fireGuns(pilot === 'sonic'); }
     if (!inp.punch) this.gunT = 0;
-    if (inp.laserPressed && this.missileCool <= 0) { this.missileCool = 60; this.fireMissile(); }
+    if (inp.laser) this.paint();
+    else if (this.painting) this.fireSalvo();
     if (inp.clonesPressed && this.rollCool <= 0) {
       if (pilot === 'sonic') { g.speech.say('sonic', 'Which one is the barrel roll?!', { dur: 80, cool: 200 }); this.pvx += (Math.random() - 0.5) * 0.8; }
       else { this.roll = 36; this.rollCool = 80; Sound.play('spring', { rate: 1.3, vol: 0.5 }); }
@@ -543,42 +537,79 @@ class TornadoStage {
   }
 
   planePos(v = new THREE.Vector3()) { return v.set(this.px, this.py + this.dropY, 0); }
+  nose(v = new THREE.Vector3()) { return this.planePos(v).add(new THREE.Vector3(0, 0.5, 2)); }
+  aimDir(v = new THREE.Vector3()) { return v.set(-this.pvx * 1.6, this.aimP, 1).normalize(); }
 
-  fireGuns(wild) {
-    const P = this.planePos(this.v3);
-    Sound.gun();
-    for (const s of [-1, 1]) {
-      const m = new THREE.Mesh(this.bulletGeo, this.bulletMat);
-      const o = new THREE.Vector3(P.x + s * 0.9, P.y + 0.45, 1.6);
-      const dir = new THREE.Vector3(0, 0, 1);
-      const tg = this.aimTarget(o);
-      if (tg) dir.copy(tg).sub(o).normalize();
-      if (wild) dir.add(new THREE.Vector3((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, 0)).normalize();
-      m.position.copy(o); m.lookAt(o.clone().add(dir)); this.scene.add(m);
-      this.shots.push({ m, v: dir.multiplyScalar(3.4), t: 0, dmg: 1 });
-    }
-  }
-
-  // light aim assist: bullets bend toward whatever is close to dead ahead
-  aimTarget(o) {
+  // the auto-aim: anything close to the reticle's line gets the guns' lock
+  updateAim(live) {
+    const o = this.nose(new THREE.Vector3()), d = this.aimDir(new THREE.Vector3());
     let best = null, bd = 0.11;
     for (const f of this.foes) {
-      const dz = f.z - o.z;
-      if (dz < 6 || f.hp <= 0) continue;
-      const d = Math.hypot(f.x - o.x, f.y - o.y) / dz;
-      if (d < bd) { bd = d; best = new THREE.Vector3(f.x, f.y, f.z + (f.vz || 0) * dz / 3.4); }
+      if (f.hp <= 0 || f.dead || f.z < o.z + 6) continue;
+      const to = new THREE.Vector3(f.x - o.x, f.y - o.y, f.z - o.z), ang = to.angleTo(d);
+      if (ang < bd) { bd = ang; best = f; }
     }
-    return best;
+    if (best !== this.lock && best && live) Sound.play('select', { vol: 0.25, rate: 2.4 });
+    this.lock = best;
   }
 
-  fireMissile() {
-    const P = this.planePos(this.v3);
-    let best = null, bd = Infinity;
-    for (const f of this.foes) { if (f.hp <= 0 || f.z < P.z + 8) continue; const d = Math.hypot(f.x - P.x, f.y - P.y) + f.z * 0.2; if (d < bd) { bd = d; best = f; } }
-    const m = new THREE.Mesh(this.missileGeo, this.missileMat);
-    m.position.set(P.x, P.y - 0.3, 1.2); this.scene.add(m);
-    this.shots.push({ m, v: new THREE.Vector3(0, 0.05, 1.2), t: 0, dmg: 4, missile: true, target: best });
-    Sound.play('release', { vol: 0.6 });
+  fireGuns(wild) {
+    const P = this.planePos(this.v3), hyper = this.laserT > 0;
+    Sound.gun();
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(this.bulletGeo, hyper ? this.laserMat : this.bulletMat);
+      if (hyper) m.scale.set(2.2, 2.2, 1.6);
+      const o = new THREE.Vector3(P.x + s * 0.9, P.y + 0.45, 1.6);
+      const dir = this.aimDir(new THREE.Vector3());
+      const L = this.lock;
+      if (L) dir.set(L.x, L.y, L.z + (L.vz || 0) * 4).sub(o).normalize();
+      if (wild) dir.add(new THREE.Vector3((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, 0)).normalize();
+      m.position.copy(o); m.lookAt(o.clone().add(dir)); this.scene.add(m);
+      this.shots.push({ m, v: dir.multiplyScalar(3.6), t: 0, dmg: hyper ? 2 : 1 });
+    }
+  }
+
+  // hold the missile button and sweep the reticle across them: up to six locks
+  paint() {
+    if (!this.painting) { this.painting = true; this.locks = []; this.paintT = 0; Sound.play('charge', { rate: 1.6, vol: 0.3 }); }
+    this.paintT++;
+    if (this.paintT % 5 || this.locks.length >= Math.min(6, this.ammo)) return;
+    const o = this.nose(new THREE.Vector3()), d = this.aimDir(new THREE.Vector3());
+    let best = null, bd = 0.3;
+    for (const f of this.foes) {
+      if (f.hp <= 0 || f.dead || f.z < o.z + 8 || this.locks.includes(f)) continue;
+      const ang = new THREE.Vector3(f.x - o.x, f.y - o.y, f.z - o.z).angleTo(d);
+      if (ang < bd) { bd = ang; best = f; }
+    }
+    if (best) { this.locks.push(best); Sound.tone && this.lockBeep(this.locks.length); }
+  }
+
+  lockBeep(n) {
+    if (!Sound.ctx || Sound.muted) return;
+    Sound.tone('square', 660 + n * 110, Sound.ctx.currentTime, 0.07, 0.12, Sound.sfxGain);
+  }
+
+  fireSalvo() {
+    this.painting = false;
+    const locks = this.locks.filter((f) => !f.dead && f.hp > 0);
+    const n = Math.max(1, Math.min(this.ammo, locks.length || 1));
+    if (this.ammo <= 0) { Sound.play('select', { rate: 0.6, vol: 0.4 }); return; }
+    this.ammo -= n;
+    for (let i = 0; i < n; i++) this.g.later(i * 4, () => this.launchMissile(locks[i] || null, i));
+    this.locks = [];
+  }
+
+  launchMissile(target, i) {
+    if (!this.scene) return;
+    const P = this.planePos(this.v3), side = i % 2 ? 1 : -1;
+    const m = new THREE.Group(); m.scale.setScalar(1.6);
+    const body = new THREE.Mesh(this.missileGeo, this.missileMat); m.add(body);
+    const tip = new THREE.Mesh(this.missileTipGeo, this.missileTipMat); tip.position.z = 0.5; m.add(tip);
+    const fl = new THREE.Sprite(this.flameMat); fl.scale.set(0.6, 0.6, 1); fl.position.z = -0.6; m.add(fl);
+    m.position.set(P.x + side * (1.6 + (i >> 1) * 0.5), P.y - 0.1, 0.6); this.scene.add(m);
+    // drop off the pylon, then the motor lights and it curls toward its lock
+    this.shots.push({ m, flame: fl, v: new THREE.Vector3(side * 0.12, -0.06, 0.5), t: 0, dmg: 5, missile: true, target, spin: Math.random() * 6, side });
+    Sound.play('release', { vol: 0.7, rate: 0.8 + i * 0.05 });
   }
 
   // ------------------------------------------------------- spawning
@@ -607,23 +638,28 @@ class TornadoStage {
   }
 
   spawnWave(kind, n) {
-    if (!this.jetTpl) { this.jetTpl = torJetModel(); this.droneTpl = torZombotModel(); this.birdTpl = torBirdModel(); }
-    const P = this.planePos(this.v3), z0 = 240;
+    if (!this.jetTpl) {
+      this.jetTpl = torJetModel(); this.droneTpl = torZombotModel(); this.birdTpl = torBirdModel();
+      // a sickly green halo so they read against the dark sky
+      const halo = new THREE.Sprite(this.boltMat); halo.scale.setScalar(5); this.jetTpl.add(halo);
+      const h2 = new THREE.Sprite(this.boltMat); h2.scale.setScalar(2.4); h2.position.y = 0.6; this.droneTpl.add(h2);
+    }
+    const P = this.planePos(this.v3), z0 = 190;
     if (kind === 'drones') {
       for (let i = 0; i < n; i++) {
         const m = this.droneTpl.clone(); m.scale.setScalar(1.6); this.scene.add(m);
         const flame = new THREE.Sprite(this.boltMat); flame.scale.set(0.7, 1.4, 1); flame.position.set(0, 0.3, -0.45); m.add(flame);
-        this.foes.push({ kind: 'drone', m, ox: (i - (n - 1) / 2) * 6, oy: 1 + (i % 2) * 2.5, x: P.x, y: P.y + 6, z: 120, vz: -1.2, t: 0, hp: 4, r: 1.5, fireT: 90 + i * 25, ph: Math.random() * 6 });
+        this.foes.push({ kind: 'drone', m, ox: (i - (n - 1) / 2) * 6, oy: 3.5 + (i % 2) * 3, x: P.x, y: P.y + 6, z: 120, vz: -1.2, t: 0, hp: 4, r: 1.5, fireT: 90 + i * 25, ph: Math.random() * 6 });
       }
       return;
     }
     for (let i = 0; i < n; i++) {
-      let x = P.x, y = P.y + 1, z = z0;
+      let x = P.x, y = P.y + 4 + Math.random() * 3, z = z0;
       if (kind === 'line') { x += (i - (n - 1) / 2) * 7; z += i * 10; }
       if (kind === 'vee') { const k = i - (n - 1) / 2; x += k * 5; z += Math.abs(k) * 16; y += Math.abs(k) * 0.8; }
-      if (kind === 'sides') { x += (i % 2 ? 1 : -1) * (10 + i * 2); z += i * 22; y += (i % 3) * 2 - 1; }
-      const m = this.jetTpl.clone(); m.rotation.y = Math.PI; m.position.set(x, y, z); this.scene.add(m);
-      this.foes.push({ kind: 'jet', m, x, y, z, bx: x, by: y, vz: -1.15 - Math.random() * 0.3, t: 0, hp: 3, r: 2.2, fireT: 30 + Math.random() * 60, ph: Math.random() * 6, sway: kind === 'sides' ? 0.06 : 0.025 });
+      if (kind === 'sides') { x += (i % 2 ? 1 : -1) * (10 + i * 2); z += i * 22; y += (i % 3) * 2.5; }
+      const m = this.jetTpl.clone(); m.rotation.y = Math.PI; m.scale.setScalar(1.5); m.position.set(x, y, z); this.scene.add(m);
+      this.foes.push({ kind: 'jet', m, x, y, z, bx: x, by: y, vz: -0.85 - Math.random() * 0.25, t: 0, hp: 3, r: 2.8, fireT: 30 + Math.random() * 60, ph: Math.random() * 6, sway: kind === 'sides' ? 0.06 : 0.025 });
     }
   }
 
@@ -648,7 +684,7 @@ class TornadoStage {
   // ------------------------------------------------------- the meters
   drain() {
     let claw = 0;
-    for (const b of this.boarders) if (b.state === 'claw') claw += b.kind === 'zom' ? 0.03 : 0.0125;
+    for (const b of this.boarders) if (b.state === 'claw') claw += b.kind === 'zom' ? 0.024 : 0.0095;
     this.frame -= claw;
     if (this.active !== 'pilot' && this.pilot === 'tails') { this.hull -= 0.012; this.dropY = Math.max(-4, this.dropY - 0.008); }
     else { this.dropY = Math.min(0, this.dropY + 0.03); if (this.pilot === 'sonic') this.hull -= 0.006; }
@@ -737,7 +773,11 @@ class TornadoStage {
     }
     if (inp.clonesPressed) {
       if (sonic) {
-        if (this.boost >= 25) { this.boost -= 25; F.atk = { type: 'boost', t: 0, dur: 26, move: true, hit: new Set() }; F.vx = F.face * 0.33; Sound.boostBurst(); this.shake = 6; }
+        if (this.boost >= 25) {
+          this.boost -= 25; F.atk = { type: 'boost', t: 0, dur: 26, move: true, hit: new Set() }; F.vx = F.face * 0.36;
+          Sound.boostBurst(); Sound.play('boom', { vol: 0.5, rate: 1.3 }); this.shake = 12; this.flash = 0.15;
+          this.g.speech.say('sonic', 'Outta my way!', { dur: 50, cool: 400 });
+        }
         else g.speech.say('sonic', 'Boost is empty!', { dur: 50, cool: 120 });
       } else { F.atk = { type: 'tailspin', t: 0, dur: 54, move: true, hit: new Set() }; F.vy = Math.max(F.vy, 0.06); Sound.play('roll', { rate: 1.5, vol: 0.5 }); }
       return;
@@ -762,12 +802,12 @@ class TornadoStage {
       if (t >= t0 && t <= t1) this.hitBoarders(F, range, dmg, kb, both, a.hit, power);
     };
     switch (a.type) {
-      case 'punch': hitWin(4, 6, 1.0, 1, 0.07, false, 0.8); break;
-      case 'kick': hitWin(6, 9, 1.2, 2, 0.2, false, 1.2); break;
-      case 'tailswipe': hitWin(6, 10, 1.35, 2, 0.22, true, 1.2); break;
-      case 'flykick': hitWin(4, 16, 1.0, 2, 0.32, false, 1.4); if (t > 14) F.vx *= 0.8; break;
-      case 'spin': hitWin(1, 30, 0.8, 2, 0.24, true, 1.1); F.vx *= 0.97; break;
-      case 'boost': hitWin(1, 26, 1.0, 99, 0.5, true, 1.8); if (t > 18) F.vx *= 0.75; break;
+      case 'punch': hitWin(3, 6, 1.2, 1, 0.1, false, 1.0); if (t === 3) Sound.play('jump', { vol: 0.25, rate: 2.2 }); break;
+      case 'kick': hitWin(5, 10, 1.45, 2, 0.3, true, 1.5); if (t === 4) Sound.play('roll', { vol: 0.4, rate: 1.6 }); break;
+      case 'tailswipe': hitWin(5, 10, 1.5, 2, 0.3, true, 1.4); break;
+      case 'flykick': hitWin(3, 16, 1.2, 3, 0.4, false, 1.7); if (t > 14) F.vx *= 0.8; break;
+      case 'spin': hitWin(1, 30, 0.95, 2, 0.3, true, 1.3); F.vx *= 0.97; break;
+      case 'boost': hitWin(1, 26, 1.2, 99, 0.6, true, 2.2); if (t > 18) F.vx *= 0.75; if (t % 3 === 0) this.sparkAt(this.sonic.root, 0x7fe3ff, 2); break;
       case 'smack':
         // Tails' tails: slow wind-up, then a 360° whip that clears the wing
         hitWin(10, 14, 1.9, 3, 0.4, true, 1.9);
@@ -811,18 +851,51 @@ class TornadoStage {
       if (hitSet.has(b) || b.state === 'dead' || b.state === 'fall' || b.state === 'thrown' || b.state === 'held' || b.state === 'drop') continue;
       const dx = b.x - F.x;
       if (!both && Math.sign(dx) !== F.face && Math.abs(dx) > 0.2) continue;
-      if (Math.abs(dx) > range || Math.abs(b.y - F.y) > 0.9) continue;
+      if (Math.abs(dx) > range || Math.abs(b.y - F.y) > 1.1) continue;
       hitSet.add(b);
       this.damage(b, dmg, (Math.sign(dx) || F.face) * kb, power);
     }
   }
 
   damage(b, dmg, kb, power = 1) {
-    b.hp -= dmg; b.vx = kb; b.vy = 0.07; b.t = 0;
-    Sound.punch(power); this.g.hitStop = Math.max(this.g.hitStop || 0, power > 1.5 ? 4 : 2);
-    this.sparkAt(b.m, 0xffe08a, 3);
-    if (b.hp <= 0) { b.state = 'dead'; b.vx = kb * 1.8 || 0.3; b.vy = 0.16; this.addScore(b, 1); this.boost = Math.min(100, this.boost + 12); }
+    b.hp -= dmg; b.vx = kb; b.vy = 0.07 + power * 0.03; b.t = 0;
+    const kill = b.hp <= 0;
+    this.impact(b, power * (kill ? 1.3 : 1), kill);
+    if (kill) { b.state = 'dead'; b.vx = (Math.sign(kb) || 1) * (0.35 + power * 0.15); b.vy = 0.2 + power * 0.05; this.addScore(b, 1); this.boost = Math.min(100, this.boost + 14); this.g.addCombo && 0; }
     else b.state = 'hurt';
+  }
+
+  // Every hit should land: a white flash, a ring, sparks, bits of the enemy,
+  // hit-stop, a camera kick, a layered thud, and a P5-style word on screen.
+  impact(b, power, kill) {
+    const S = this.scene, g = this.g;
+    b.m.updateWorldMatrix(true, false);
+    const p = new THREE.Vector3().setFromMatrixPosition(b.m.matrixWorld); p.y += 0.45;
+    const flash = new THREE.Sprite(this.glowMat.clone()); flash.material.color.setHex(0xffffff); flash.position.copy(p); S.add(flash);
+    this.fx.push({ m: flash, t: 0, dur: 8, size: 1.4 * power, v: new THREE.Vector3(), own: true });
+    const ring = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 28)), new THREE.MeshBasicMaterial({ color: power > 1.4 ? 0xffd23f : 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.position.copy(p); ring.quaternion.copy(this.camera.quaternion); S.add(ring);
+    this.fx.push({ m: ring, t: 0, dur: 14, size: 0.6 * power, grow: 2.2 * power, v: new THREE.Vector3(), own: true, ring: true });
+    for (let i = 0; i < 4 + power * 4; i++) {
+      const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex(i % 3 ? 0xffe08a : 0xff8a3a); sp.position.copy(p); S.add(sp);
+      const a = Math.random() * Math.PI * 2, v = 0.08 + Math.random() * 0.12 * power;
+      this.fx.push({ m: sp, t: 0, dur: 12 + Math.random() * 8, size: 0.25, v: new THREE.Vector3(Math.cos(a) * v, Math.sin(a) * v, (Math.random() - 0.5) * v), own: true, shrink: true });
+    }
+    // feathers off a bird, metal plates off a Zombot
+    const bits = b.kind === 'zom' ? 0x6f8a68 : 0x4a7a8c;
+    for (let i = 0; i < (kill ? 7 : 3); i++) {
+      const c = new THREE.Mesh(this.bitGeo || (this.bitGeo = new THREE.BoxGeometry(0.12, 0.03, 0.2)), new THREE.MeshLambertMaterial({ color: Math.random() < 0.3 ? 0x7dff4a : bits }));
+      c.position.copy(p); S.add(c);
+      this.debris.push({ m: c, t: 140, v: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.05 + Math.random() * 0.15, -0.05 - Math.random() * 0.2), spin: { x: Math.random() * 0.4, z: Math.random() * 0.4 } });
+    }
+    this.shake = Math.max(this.shake, 4 + power * 5);
+    g.hitStop = Math.max(g.hitStop || 0, kill ? 7 : power > 1.4 ? 5 : 3);
+    if (power > 1.4 || kill) this.flash = Math.max(this.flash, 0.12);
+    Sound.punch(power * 1.15);
+    if (power > 1.3) Sound.play('bosshit', { vol: 0.55, rate: 0.85 + Math.random() * 0.2 });
+    if (kill) Sound.play('boom', { vol: 0.35, rate: 1.6 });
+    const words = kill ? ['SMASH!', 'KO!', 'GONE!', 'TAKE THAT!'] : power > 1.4 ? ['BAM!', 'WHAM!', 'CRACK!'] : ['POW!', 'HIT!', 'BAP!'];
+    this.pops.push({ text: words[Math.random() * words.length | 0], p: p.clone(), t: 0, big: kill || power > 1.4, rot: (Math.random() - 0.5) * 0.4 });
   }
 
   addScore(b, mult) { this.g.addScore(Math.round((b.kind === 'zom' ? 300 : 100) * mult)); }
@@ -864,7 +937,7 @@ class TornadoStage {
         f.z += f.vz;
         f.x = f.bx + Math.sin(f.t * f.sway + f.ph) * 4; f.y = f.by + Math.sin(f.t * 0.03 + f.ph) * 1.2;
         f.m.position.set(f.x, f.y, f.z); f.m.rotation.z = Math.cos(f.t * f.sway + f.ph) * 0.5;
-        if (playing && f.z > 20 && f.z < 160 && --f.fireT <= 0) { f.fireT = (auto ? 60 : 85) + Math.random() * 50; this.fireBolt(f, auto); }
+        if (playing && f.z > 20 && f.z < 160 && --f.fireT <= 0) { f.fireT = (auto ? 75 : 105) + Math.random() * 60; this.fireBolt(f, auto); }
         if (f.z < -30) f.dead = true;
       } else if (f.kind === 'drone') {
         const tz = f.t < 560 ? 26 : 140;
@@ -902,21 +975,33 @@ class TornadoStage {
     for (const s of this.shots) {
       s.t++;
       if (s.missile) {
-        const tg = s.target && !s.target.dead && s.target.hp > 0 ? s.target : null;
-        if (tg) { const want = new THREE.Vector3(tg.x, tg.y, tg.z).sub(s.m.position).normalize().multiplyScalar(1.7); s.v.lerp(want, 0.12); }
-        else s.v.z += 0.05;
+        if (s.t === 8) { Sound.play('roll', { rate: 1.8, vol: 0.35 }); Sound.zap(0.08); }
+        if (s.t > 8) {
+          const tg = s.target && !s.target.dead && s.target.hp > 0 ? s.target : null;
+          const want = tg ? new THREE.Vector3(tg.x, tg.y, tg.z).sub(s.m.position).normalize().multiplyScalar(2.1) : new THREE.Vector3(0, 0.02, 2.1);
+          // a corkscrew wobble before it straightens out on the target
+          const wob = Math.max(0, 1 - (s.t - 8) / 30) * 0.35;
+          want.x += Math.cos(s.t * 0.5 + s.spin) * wob; want.y += Math.sin(s.t * 0.5 + s.spin) * wob;
+          s.v.lerp(want, s.t < 20 ? 0.08 : 0.2);
+          s.flame.scale.setScalar(1.6 + Math.random() * 0.9);
+          const sm = new THREE.Sprite(this.smokeMat.clone()); sm.material.color.setHex(0xe8dcd8); sm.position.copy(s.m.position); this.scene.add(sm);
+          this.fx.push({ m: sm, t: 0, dur: 55, size: 1.3, vy: 0, smoke: true, v: new THREE.Vector3(0, 0.01, -1.1) });
+          if (s.t % 2) { const sp = new THREE.Sprite(this.flameMat); sp.position.copy(s.m.position); this.scene.add(sp); this.fx.push({ m: sp, t: 0, dur: 8, size: 0.9, v: new THREE.Vector3(0, 0, -1.1), shrink: true }); }
+        } else s.v.y -= 0.01;
         s.m.lookAt(s.m.position.clone().add(s.v));
-        if (s.t % 2 === 0) { const sm = new THREE.Sprite(this.smokeMat.clone()); sm.position.copy(s.m.position); this.scene.add(sm); this.fx.push({ m: sm, t: 0, dur: 30, size: 0.9, vy: 0, smoke: true }); }
       }
       s.m.position.add(s.v);
-      if (s.t > (s.missile ? 160 : 70)) s.dead = true;
+      if (s.t > (s.missile ? 170 : 70)) s.dead = true;
       for (const f of this.foes) {
         if (f.hp <= 0 || f.dead) continue;
         const dx = f.x - s.m.position.x, dy = f.y - s.m.position.y, dz = f.z - s.m.position.z;
-        if (dx * dx + dy * dy + dz * dz < f.r * f.r || (Math.abs(dz) < 2 && dx * dx + dy * dy < f.r * f.r)) {
+        const r = f.r * (s.missile ? 1.4 : 1);
+        if (dx * dx + dy * dy + dz * dz < r * r || (Math.abs(dz) < 2 && dx * dx + dy * dy < r * r)) {
           s.dead = true; f.hp -= s.dmg;
-          this.burstAt(s.m.position, 0.4, 0xfff0a0);
+          if (s.missile) this.missileBlast(s.m.position.clone());
+          else this.burstAt(s.m.position, 0.4, this.laserT > 0 ? 0x7fd0ff : 0xfff0a0);
           if (f.hp <= 0) this.killFoe(f);
+          else f.flash = 6;
           break;
         }
       }
@@ -924,13 +1009,65 @@ class TornadoStage {
     this.cull(this.shots);
   }
 
+  missileBlast(pos) {
+    const S = this.scene;
+    for (let i = 0; i < 6; i++) {
+      const sp = new THREE.Sprite(this.glowMat.clone()); sp.material.color.setHex([0xffffff, 0xffd060, 0xff7a20, 0xff4010][i % 4]);
+      sp.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2)); S.add(sp);
+      this.fx.push({ m: sp, t: 0, dur: 24 + i * 4, size: 6 + i * 1.2, v: new THREE.Vector3(0, 0.03, -0.6), own: true });
+    }
+    const ring = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.TorusGeometry(1, 0.06, 6, 28)), new THREE.MeshBasicMaterial({ color: 0xffc060, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.position.copy(pos); ring.quaternion.copy(this.camera.quaternion); S.add(ring);
+    this.fx.push({ m: ring, t: 0, dur: 20, size: 2, grow: 16, v: new THREE.Vector3(0, 0, -0.6), own: true, ring: true });
+    for (let i = 0; i < 4; i++) { const sm = new THREE.Sprite(this.smokeMat.clone()); sm.position.copy(pos); S.add(sm); this.fx.push({ m: sm, t: 0, dur: 60, size: 4, vy: 0.02, smoke: true, v: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.04, -0.6) }); }
+    this.shake = Math.max(this.shake, 9); this.flash = Math.max(this.flash, 0.08);
+    Sound.play('boom', { vol: 0.9, rate: 0.7 + Math.random() * 0.2 });
+  }
+
   killFoe(f) {
     f.dead = true; f.hp = 0;
     const pos = new THREE.Vector3(f.x, f.y, f.z);
     this.burstAt(pos, f.kind === 'jet' ? 2.4 : 1.4);
+    for (let i = 0; i < 6; i++) {
+      const c = new THREE.Mesh(this.bitGeo || (this.bitGeo = new THREE.BoxGeometry(0.12, 0.03, 0.2)), new THREE.MeshLambertMaterial({ color: i % 3 ? 0x59605a : 0x7dff4a }));
+      c.scale.setScalar(4); c.position.copy(pos); this.scene.add(c);
+      this.debris.push({ m: c, t: 100, v: new THREE.Vector3((Math.random() - 0.5) * 0.6, Math.random() * 0.4, -0.6 - Math.random() * 0.5), spin: { x: Math.random() * 0.3, z: Math.random() * 0.3 } });
+    }
     Sound.play('boom', { vol: 0.6, rate: 0.9 + Math.random() * 0.3 });
     this.g.addScore(f.kind === 'jet' ? 200 : f.kind === 'drone' ? 300 : 100);
-    if (f.kind !== 'bird') this.hull = Math.min(100, this.hull + 1.5);   // salvage: spare parts keep her flying
+    this.hits = (this.hits || 0) + 1;
+    if (f.kind !== 'bird') this.hull = Math.min(100, this.hull + 1);
+    // power-ups: rings patch the plane up, the capsule gives hyper lasers
+    if (f.kind !== 'bird') { const r = Math.random(); if (r < 0.22) this.dropItem(pos, 'ring'); else if (r < 0.3) this.dropItem(pos, 'laser'); }
+  }
+
+  dropItem(pos, kind) {
+    let m;
+    if (kind === 'ring') m = new THREE.Mesh(this.itemRingGeo || (this.itemRingGeo = new THREE.TorusGeometry(0.7, 0.16, 8, 20)), this.itemRingMat || (this.itemRingMat = new THREE.MeshPhongMaterial({ color: 0xffd23f, emissive: 0x6a4a00, shininess: 90 })));
+    else {
+      m = new THREE.Group();
+      m.add(new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(0.45, 0.8, 6, 12) : new THREE.SphereGeometry(0.6, 12, 10), new THREE.MeshPhongMaterial({ color: 0x3a8aff, emissive: 0x0a2a6a, shininess: 90 })));
+      const glow = new THREE.Sprite(this.glowMat.clone()); glow.material.color.setHex(0x7fd0ff); glow.scale.setScalar(3); m.add(glow);
+    }
+    m.position.copy(pos); this.scene.add(m);
+    this.items.push({ m, kind, t: 0 });
+  }
+
+  updateItems() {
+    const P = this.planePos(this.v3b);
+    for (const it of this.items) {
+      it.t++;
+      const p = it.m.position;
+      p.z -= 0.45; p.y += (P.y + 0.6 - p.y) * 0.02; p.x += (P.x - p.x) * 0.004;
+      it.m.rotation.y += 0.08;
+      if (Math.abs(p.x - P.x) < 3 && Math.abs(p.y - P.y - 0.5) < 2.2 && Math.abs(p.z) < 2) {
+        it.dead = true;
+        if (it.kind === 'ring') { this.hull = Math.min(100, this.hull + 10); Sound.ring(); this.pops.push({ text: 'REPAIR!', p: p.clone(), t: 0, big: false, rot: -0.1 }); }
+        else { this.laserT = 1200; Sound.play('shield'); this.pops.push({ text: 'HYPER LASER!', p: p.clone(), t: 0, big: true, rot: 0.08 }); this.g.speech.say('tails', 'Hyper lasers online!', { dur: 80 }); }
+      }
+      if (p.z < -20) it.dead = true;
+    }
+    this.cull(this.items);
   }
 
   updateBolts() {
@@ -944,7 +1081,7 @@ class TornadoStage {
         if (Math.abs(lz) < 1.3 && Math.abs(lx) < 3.9 && ly > -0.6 && ly < 1.9) {
           b.dead = true;
           if (this.roll > 0) continue;   // the barrel roll shrugs it off
-          this.hull -= 5; this.shake = Math.max(this.shake, 7);
+          this.hull -= 4; this.shake = Math.max(this.shake, 7); this.addScorch(false);
           this.burstAt(d, 0.8, 0x9dff6a);
           Sound.play('bosshit', { vol: 0.6 });
         }
@@ -1046,17 +1183,20 @@ class TornadoStage {
     for (const f of this.fx) {
       f.t++;
       const k = f.t / f.dur;
-      f.m.scale.setScalar(f.size * (f.smoke ? 0.6 + k : 0.5 + k * 0.8));
+      if (f.ring) f.m.scale.setScalar(f.size + f.grow * k);
+      else f.m.scale.setScalar(f.size * (f.smoke ? 0.6 + k : f.shrink ? 1 - k : 0.5 + k * 0.8));
       if (f.v) f.m.position.add(f.v); else f.m.position.y += f.vy;
       if (f.smoke) f.m.material.opacity = Math.min(1, 2.5 * (1 - k));
       else if (f.own) f.m.material.opacity = 1 - k;
       if (f.t >= f.dur) { this.scene.remove(f.m); if (f.smoke || f.own) f.m.material.dispose(); f.dead = true; }
     }
+    for (const p of this.pops) p.t++;
+    this.pops = this.pops.filter((p) => p.t < 40);
     this.fx = this.fx.filter((f) => !f.dead);
     for (const d of this.debris) {
       d.t++; d.v.y -= 0.012; d.m.position.add(d.v);
       d.m.rotation.x += d.spin.x; d.m.rotation.z += d.spin.z;
-      if (d.t > 200) { this.scene.remove(d.m); d.dead = true; }
+      if (d.t > 200) { this.scene.remove(d.m); if (d.m.material && d.m.geometry === this.bitGeo) d.m.material.dispose(); d.dead = true; }
     }
     this.debris = this.debris.filter((d) => !d.dead);
     // world scroll: clouds and the sea rush past
@@ -1065,6 +1205,48 @@ class TornadoStage {
     this.seaTex.offset.y += spd * 0.0004;
     this.updateDread();
     if (this.beach) this.beach.position.z -= spd;
+  }
+
+  // ------------------------------------------------- the plane falling apart
+  addScorch(tear) {
+    if (this.decals.length > 40) return;
+    const r = Math.random(), m = new THREE.Mesh(this.decalGeo || (this.decalGeo = new THREE.PlaneGeometry(1, 1)), tear ? this.tearMat : this.scorchMat);
+    const sz = tear ? 0.5 + Math.random() * 0.5 : 0.35 + Math.random() * 0.45;
+    m.scale.set(sz, sz * (0.6 + Math.random() * 0.6), 1); m.rotation.z = Math.random() * 6;
+    if (tear || r < 0.45) { m.position.set((Math.random() * 2 - 1) * 4, TW.wingY + 0.02, TW.wingZ + (Math.random() - 0.5) * 0.9); m.rotation.x = -Math.PI / 2; }
+    else if (r < 0.75) { const sd = Math.random() < 0.5 ? -1 : 1; m.position.set(sd * (0.9 + Math.random() * 2.6), 0.16, -0.15 + (Math.random() - 0.5) * 0.9); m.rotation.x = -Math.PI / 2; }
+    else { const sd = Math.random() < 0.5 ? -1 : 1; m.position.set(sd * 0.66, 0.6 + Math.random() * 0.6, -1.6 + Math.random() * 2.4); m.rotation.y = sd * Math.PI / 2; }
+    this.plane.root.add(m); this.decals.push(m);
+  }
+
+  updateDamage() {
+    const t = this.t, d = 1 - this.hull / 100, R = this.plane.root;
+    if (!this.planeMats) { this.planeMats = []; this.plane.body.traverse((o) => { if (o.isMesh) this.planeMats.push(o.material); }); }
+    for (const m of this.planeMats) m.color.setRGB(1 - 0.45 * d, 1 - 0.58 * d, 1 - 0.6 * d);   // paint blistering and blackening
+    // the boarders' work shows on the wing
+    const wantTears = Math.floor((100 - this.frame) / 9);
+    while (this.tears < wantTears) { this.tears++; this.addScorch(true); if (this.frame < 50) this.debrisOff(); }
+    if (this.phase !== 'sky' && this.phase !== 'board' && this.phase !== 'finale') return;
+    const eng = R.localToWorld(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.55, 1.7));
+    const every = this.hull < 30 ? 2 : this.hull < 50 ? 4 : this.hull < 75 ? 10 : 0;
+    if (every && t % every === 0) {
+      const sm = new THREE.Sprite(this.smokeMat.clone()); sm.material.color.setHex(this.hull < 50 ? 0x1a1414 : 0x8a8288); sm.position.copy(eng); this.scene.add(sm);
+      this.fx.push({ m: sm, t: 0, dur: 50, size: this.hull < 50 ? 1.6 : 1, vy: 0.02, smoke: true, v: new THREE.Vector3(0, 0.03, -1.0) });
+    }
+    if (this.hull < 30 && t % 3 === 0) {
+      const f = new THREE.Sprite(this.glowMat.clone()); f.material.color.setHex(Math.random() < 0.5 ? 0xff6a10 : 0xffc040); f.position.copy(eng); this.scene.add(f);
+      this.fx.push({ m: f, t: 0, dur: 14, size: 1.1, v: new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.04, -0.7), own: true });
+    }
+    if (this.hull < 45 && Math.random() < 0.06) this.sparkAt(this.decals[(Math.random() * this.decals.length) | 0] || R, 0xffa040, 2);
+    // a dying engine coughs and the airframe shudders
+    if (this.plane.prop && this.hull < 25 && t % 40 < 6) this.plane.prop.rotation.z -= 0.6;
+  }
+
+  debrisOff() {
+    const c = new THREE.Mesh(this.bitGeo || (this.bitGeo = new THREE.BoxGeometry(0.12, 0.03, 0.2)), new THREE.MeshLambertMaterial({ color: 0xc81e1e }));
+    c.scale.set(3, 1, 2); c.position.copy(this.plane.root.localToWorld(new THREE.Vector3((Math.random() * 2 - 1) * 4, TW.wingY, TW.wingZ))); this.scene.add(c);
+    this.debris.push({ m: c, t: 60, v: new THREE.Vector3((Math.random() - 0.5) * 0.1, 0.12, -0.6), spin: { x: 0.3, z: 0.2 } });
+    Sound.play('skid', { vol: 0.3, rate: 1.4 });
   }
 
   // ------------------------------------------------- dread
@@ -1082,7 +1264,7 @@ class TornadoStage {
     if (this.lightning > 0) this.lightning--;
     if (this.phase !== 'crash' && Math.random() < 1 / 520) { this.lightning = 10; this.thunderAt = t + 30 + (Math.random() * 40 | 0); }
     if (t === this.thunderAt) Sound.play('boom', { rate: 0.3, vol: 0.45 });
-    if (this.hemi) this.hemi.intensity = 0.8 + (this.lightning > 6 || this.lightning === 3 ? 1.4 : 0);
+    if (this.hemi) this.hemi.intensity = 1.0 + (this.lightning > 6 || this.lightning === 3 ? 1.4 : 0);
     if (this.phase === 'board' && Math.random() < 1 / 650) Sound.whisper();
   }
 
@@ -1258,58 +1440,91 @@ class TornadoStage {
       this.pitch += ((-this.pvy * 1.6) - this.pitch) * 0.15;
     }
     const rollA = this.rollA = this.roll > 0 ? (1 - this.roll / 36) * Math.PI * 2 : 0;
-    if (this.phase !== 'crash') R.rotation.set(this.pitch + (this.phase === 'shot' ? 0.3 : 0), 0, this.bank + rollA + this.planeSpin + Math.sin(t * 0.04) * 0.02);
+    if (this.phase !== 'crash') R.rotation.set(this.pitch + (this.phase === 'shot' ? 0.3 : 0), 0, this.bank + rollA + this.planeSpin + Math.sin(t * 0.04) * 0.02 + (this.hull < 25 ? Math.sin(t * 1.7) * 0.03 * (1 - this.hull / 25) : 0));
     if (this.plane.prop && this.phase !== 'finale' && this.phase !== 'crash') this.plane.prop.rotation.z += 0.7;
     if (this.phase === 'crash') this.updateCrash();
     this.placeChars();
     for (const id of ['sonic', 'tails']) {
       const M = this[id], F = this.fighters[id];
-      if (this.faller && this.faller.M === M) { this.playClip(M, id === 'sonic' ? 'fall' : 'fly'); M.mixer && M.mixer.update(1 / 60); continue; }
-      const seated = id === this.pilot;
-      if (seated) {
-        this.playClip(M, id === 'sonic' ? 'idle' : 'idle');
+      if (id === 'sonic') this.sonic.ball.visible = false;
+      M.body.rotation.set(0, 0, 0); M.body.position.set(0, 0, 0);
+      if (this.faller && this.faller.M === M) { this.playClip(M, id === 'sonic' ? 'fall' : 'fly'); if (M.mixer) M.mixer.update(1 / 60); escLimbPose(M, 'hurt', { t }); continue; }
+      if (id === this.pilot) {
+        // sitting in the cockpit, hands on the stick
+        this.playClip(M, 'idle');
         if (M.mixer) M.mixer.update(1 / 60);
-        if (id === 'sonic') this.sonic.ball.visible = false;
-        // both hands on the stick
-        const B = this.bones[id], fwd = this.v3b.set(0, -0.4, 1).normalize().applyQuaternion(R.quaternion);
-        torAimBone(B.UpperArm_R, fwd, 0.7); torAimBone(B.UpperArm_L, fwd, 0.7);
+        escLimbPose(M, 'pilot', { t, k: 0.5 });
         continue;
       }
       if (this.pilot === 'none') {   // standing on the sand after the crash
         M.root.position.set(F.x, -0.6, 2.2); M.root.rotation.set(0, Math.PI, 0);
-        this.playClip(M, 'idle'); M.mixer && M.mixer.update(1 / 60); continue;
+        this.playClip(M, 'idle'); if (M.mixer) M.mixer.update(1 / 60);
+        escLimbPose(M, 'relax', { t }); continue;
       }
-      const a = F.atk;
-      let clip = 'idle';
-      if (id === 'sonic') {
-        clip = F.stun ? 'hit' : F.y > 0.05 ? (F.vy > 0 ? 'spring' : 'fall') : Math.abs(F.vx) > 0.02 ? 'run' : 'idle';
-        if (a && (a.type === 'kick' || a.type === 'flykick')) clip = 'kick';
-        if (a && a.type === 'boost') clip = 'sprint';
-      } else {
-        clip = F.stun ? 'idle' : F.y > 0.05 || (a && a.type === 'tailspin') ? 'fly' : Math.abs(F.vx) > 0.02 ? 'run' : 'idle';
+      const a = F.atk, sonic = id === 'sonic';
+      const air = F.y > 0.05, moving = Math.abs(F.vx) > 0.02;
+      let clip = F.stun ? (sonic ? 'hit' : 'idle') : air ? (sonic ? (F.vy > 0 ? 'spring' : 'fall') : 'fly') : moving ? 'run' : 'idle';
+      if (a) {
+        if (a.type === 'kick' || a.type === 'flykick') clip = sonic ? 'kick' : clip;
+        if (a.type === 'boost') clip = 'sprint';
+        if (a.type === 'tailspin') clip = 'fly';
       }
-      this.playClip(M, clip, 0.1, clip === 'run' ? 1.3 : 1);
-      const ball = id === 'sonic' && a && a.type === 'spin';
-      if (id === 'sonic') {
+      this.playClip(M, clip, 0.1, clip === 'run' ? 1.4 : 1);
+      const ball = sonic && a && a.type === 'spin';
+      if (sonic) {
         const S = this.sonic;
         S.ball.visible = !!ball; S.body.visible = !ball;
-        if (ball) S.ball.rotation.x += 0.5;
-        const boosting = a && a.type === 'boost';
-        S.aura.material.opacity = boosting ? 0.45 : 0; S.core.material.opacity = boosting ? 0.25 : 0;
+        if (ball) S.ball.rotation.x += 0.55;
+        const boosting = a && a.type === 'boost', fl = 0.8 + Math.random() * 0.4;
+        S.aura.material.opacity = boosting ? 0.5 * fl : 0; S.core.material.opacity = boosting ? 0.3 * fl : 0;
+        S.aura.visible = S.core.visible = boosting;
+        S.trailMat.opacity = boosting ? 0.6 : 0; S.trail.visible = boosting;
+        const bk = boosting ? Math.max(0, 1 - a.t / 16) : 0;
+        S.boom.material.opacity = bk * 0.8; S.boom.visible = bk > 0; S.boom.scale.setScalar(1 + (1 - bk) * 2);
+        S.wave.material.opacity = bk; S.wave.visible = bk > 0; S.wave.scale.setScalar(1 + (1 - bk) * 6);
       }
       if (M.mixer) M.mixer.update(1 / 60);
-      // procedural strikes on top of the clips
-      const B = this.bones[id], face = this.v3b.set(F.face, 0, 0).applyQuaternion(R.quaternion);
-      M.body.rotation.set(0, 0, 0);
-      if (F.stun) M.body.rotation.x = -0.3;
-      if (a) {
-        const k = Math.sin(Math.min(1, a.t / (a.dur * 0.45)) * Math.PI * 0.5) * (a.t > a.dur * 0.7 ? 1 - (a.t - a.dur * 0.7) / (a.dur * 0.3) : 1);
-        if (a.type === 'punch') { const arm = a.side ? 'L' : 'R'; torAimBone(B['UpperArm_' + arm], face, k); torAimBone(B['ForeArm_' + arm], face, k); }
-        if (a.type === 'swing' || a.type === 'whiff') { const d = F.hold ? new THREE.Vector3().setFromMatrixPosition(F.hold.m.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld)).normalize() : face; torAimBone(B.UpperArm_R, d, 0.9); torAimBone(B.UpperArm_L, d, 0.9); }
-        if (a.type === 'kick' && id === 'tails') torAimBone(B.Thigh_R, face, k);
-        if (a.type === 'smack' || a.type === 'tailswipe') M.body.rotation.y = a.t >= 8 ? ((a.t - 8) / (a.dur - 8)) * Math.PI * 2 : -a.t * 0.04;
-        if (a.type === 'tailspin') M.body.rotation.y = a.t * 0.6;
-        if (a.type === 'swing') M.body.rotation.y = -(a.t / a.dur) * Math.PI * 4 * F.face;
+      // body language on top of the clip
+      if (F.stun) { M.body.rotation.x = -0.35; escLimbPose(M, 'hurt', { t }); continue; }
+      if (!a) {
+        escLimbPose(M, air ? 'air' : moving ? 'run' : sonic ? 'guard' : 'guard', { t: t * (moving ? 1.6 : 1) });
+        if (!air && !moving) M.body.position.y = Math.abs(Math.sin(t * 0.15)) * 0.03;   // bouncing on the balls of his feet
+        continue;
+      }
+      const ph = a.t / a.dur, snap = Math.min(1, a.t / 4);
+      switch (a.type) {
+        case 'punch':
+          escLimbPose(M, a.side ? 'cross' : 'jab', { t, k: a.t < a.dur * 0.6 ? 0.8 : 0.3 });
+          M.body.rotation.y = (a.side ? -0.35 : 0.25) * snap * (1 - ph); M.body.rotation.x = 0.15 * snap;
+          break;
+        case 'kick':
+          M.body.rotation.y = -ph * Math.PI * 1.2; M.body.rotation.z = 0.25 * Math.sin(ph * Math.PI);
+          escLimbPose(M, 'kick', { t, k: 0.75 });
+          break;
+        case 'flykick':
+          M.body.rotation.x = 0.35; escLimbPose(M, 'flykick', { t, k: 0.8 });
+          break;
+        case 'boost':
+          M.body.rotation.x = 0.35; escLimbPose(M, 'sprint', { t, k: 0.8 });
+          break;
+        case 'tailswipe': case 'smack': {
+          const wind = a.type === 'smack' ? 9 : 5;
+          M.body.rotation.y = a.t < wind ? -a.t * 0.06 : ((a.t - wind) / (a.dur - wind)) * Math.PI * 2 * (a.type === 'smack' ? 2 : 1);
+          M.body.rotation.x = 0.2;
+          escLimbPose(M, 'wide', { t, k: 0.6 });
+          break;
+        }
+        case 'tailspin':
+          M.body.rotation.y = a.t * 0.7; escLimbPose(M, 'wide', { t, k: 0.6 });
+          break;
+        case 'swing': {
+          M.body.rotation.y = -(a.t / a.dur) * Math.PI * 4 * F.face;
+          const aim = F.hold ? new THREE.Vector3().setFromMatrixPosition(F.hold.m.matrixWorld).sub(new THREE.Vector3().setFromMatrixPosition(M.root.matrixWorld).add(new THREE.Vector3(0, 0.55, 0))).normalize() : null;
+          if (aim) escLimbPose(M, 'grab', { aim }); else escLimbPose(M, 'jab', { t, side: 'R' });
+          break;
+        }
+        case 'whiff': escLimbPose(M, 'cross', { t, k: 0.6 }); break;
+        default: escLimbPose(M, 'guard', { t });
       }
     }
     this.sonic.root.visible = this.tails.root.visible = true;
@@ -1335,7 +1550,7 @@ class TornadoStage {
     } else if (this.phase === 'torn' || this.phase === 'shot') {
       pos = this.camPos.clone(); look = P.clone();
     } else {
-      pos = new THREE.Vector3(P.x * 0.9, P.y * 0.85 + 3.4, -13); look = new THREE.Vector3(P.x * 0.92, P.y * 0.9 + 1.4, 14);
+      pos = new THREE.Vector3(P.x * 0.9, P.y * 0.85 + 3.2, -13); look = new THREE.Vector3(P.x * 0.92, P.y * 0.9 + 1.4 + (this.aimP || 0) * 16, 14);
     }
     const k = this.phase === 'crash' || this.phase === 'tbc' ? 0.05 : 0.12;
     this.camPos.lerp(pos, k); this.camLook.lerp(look, k);
@@ -1361,9 +1576,60 @@ class TornadoStage {
     if (this.phase === 'torn' && t > 40) this.g.text(ctx, 'THE TORNADO WAS TORN APART', VIEW_W / 2, 600, 30, '#ffd23f', 'center', '#5a0b14');
     if (this.phase === 'shot' && t > 40) this.g.text(ctx, 'SHOT DOWN', VIEW_W / 2, 600, 44, '#ff5a3a', 'center', '#2a0806');
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, this.flash)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    for (const pp of this.pops) {
+      const v = pp.p.clone().project(this.camera);
+      if (v.z > 1) continue;
+      const x = (v.x + 1) / 2 * VIEW_W, y = (1 - v.y) / 2 * VIEW_H - 30 - pp.t * 1.2;
+      const sc = Math.min(1, pp.t / 4) * (pp.big ? 1.4 : 1) * (pp.t > 30 ? 1 - (pp.t - 30) / 10 : 1);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(pp.rot); ctx.scale(sc, sc);
+      ctx.font = `${pp.big ? 30 : 20}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'miter'; ctx.lineWidth = 8; ctx.strokeStyle = '#0a0a0a'; ctx.strokeText(pp.text, 4, 4);
+      ctx.fillStyle = '#d4141e'; ctx.fillText(pp.text, 4, 4);
+      ctx.lineWidth = 6; ctx.strokeText(pp.text, 0, 0);
+      ctx.fillStyle = '#ffffff'; ctx.fillText(pp.text, 0, 0);
+      ctx.restore();
+    }
+    if ((this.phase === 'sky' || this.phase === 'board') && this.active === 'pilot') this.drawTargeting(ctx);
     if (this.lightning > 6 || this.lightning === 3) { ctx.fillStyle = 'rgba(220,210,255,.18)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     torDread(ctx, t, this.phase === 'crash' || this.phase === 'tbc' ? 0.5 : 1);
     if (this.phase === 'tbc') this.drawTBC(ctx);
+  }
+
+  // Star Fox-style reticles: a near and a far frame along the guns' line,
+  // red brackets on the auto-aim lock, numbered boxes on missile locks.
+  drawTargeting(ctx) {
+    const t = this.t, scr = (v) => { const q = v.clone().project(this.camera); return q.z > 1 ? null : { x: (q.x + 1) / 2 * VIEW_W, y: (1 - q.y) / 2 * VIEW_H }; };
+    const o = this.nose(new THREE.Vector3()), d = this.aimDir(new THREE.Vector3());
+    const near = scr(o.clone().addScaledVector(d, 22)), far = scr(o.clone().addScaledVector(d, 60));
+    const locked = !!this.lock;
+    ctx.save(); ctx.lineWidth = 3;
+    const frame = (p, r, col) => {
+      if (!p) return;
+      ctx.strokeStyle = col; ctx.beginPath();
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(p.x + sx * r, p.y + sy * r * 0.5); ctx.lineTo(p.x + sx * r, p.y + sy * r); ctx.lineTo(p.x + sx * r * 0.5, p.y + sy * r); }
+      ctx.stroke();
+    };
+    frame(near, 30, locked ? '#ff3b3b' : '#7dff9a'); frame(far, 18, locked ? '#ff3b3b' : '#7dff9a');
+    if (far) { ctx.fillStyle = locked ? '#ff3b3b' : '#7dff9a'; ctx.fillRect(far.x - 2, far.y - 2, 4, 4); }
+    if (this.lock) {
+      const p = scr(new THREE.Vector3(this.lock.x, this.lock.y, this.lock.z));
+      if (p) { const r = 26 + Math.sin(t * 0.5) * 3; ctx.strokeStyle = '#ff3b3b'; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4); ctx.strokeRect(-r / 1.4, -r / 1.4, r * 1.4, r * 1.4); ctx.restore(); }
+    }
+    (this.locks || []).forEach((f, i) => {
+      if (f.dead) return;
+      const p = scr(new THREE.Vector3(f.x, f.y, f.z)); if (!p) return;
+      ctx.strokeStyle = '#ffd23f'; ctx.strokeRect(p.x - 22, p.y - 22, 44, 44);
+      this.g.text(ctx, String(i + 1), p.x + 26, p.y - 18, 12, '#ffd23f', 'left', '#000');
+    });
+    ctx.restore();
+    // missiles, hits and the hyper laser
+    const g = this.g;
+    g.text(ctx, `HITS ${String(this.hits || 0).padStart(3, '0')}`, 32, 90, 18, '#7dff9a');
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i < this.ammo ? '#ffd23f' : 'rgba(255,255,255,.15)'; ctx.fillRect(32 + i * 22, 104, 16, 26); }
+    ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(32, 134, 130 * (this.ammoT / 80) * (this.ammo < 6 ? 1 : 0), 3);
+    g.text(ctx, 'MISSILES', 170, 126, 10, '#ffd23f');
+    if (this.laserT > 0) g.text(ctx, `HYPER LASER ${Math.ceil(this.laserT / 60)}`, 32, 160, 12, Math.floor(t / 8) % 2 ? '#7fd0ff' : '#fff');
+    if (this.painting) g.text(ctx, `LOCK ${this.locks.length}`, VIEW_W / 2, VIEW_H - 150, 16, '#ffd23f', 'center');
   }
 
   drawTBC(ctx) {
@@ -1401,7 +1667,7 @@ class TornadoStage {
     if (this.phase === 'board') bar(VIEW_W - 340, 100, 'WING (BOARDERS)', this.frame, '#2aa0ff', '#7fe3ff');
     const left = this.phase === 'sky' ? TW.SKY - t : TW.BOARD - t;
     if (this.phase === 'board') g.text(ctx, `COAST IN ${Math.max(0, Math.ceil(left / 60))}s`, VIEW_W / 2, 44, 16, '#fff', 'center');
-    if (this.phase !== 'board') { g.text(ctx, `[${keyLabel('punch')}] GUNS  [${keyLabel('laser')}] MISSILE  [${keyLabel('clones')}] BARREL ROLL`, VIEW_W / 2, VIEW_H - 24, 12, '#c9d4ff', 'center'); return; }
+    if (this.phase !== 'board') { g.text(ctx, `${keyLabel('up')}${keyLabel('down')} AIM  [${keyLabel('punch')}] GUNS (AUTO-AIM)  HOLD [${keyLabel('laser')}] LOCK-ON MISSILES  [${keyLabel('clones')}] BARREL ROLL`, VIEW_W / 2, VIEW_H - 24, 11, '#c9d4ff', 'center'); return; }
     // who is where, and who you're controlling
     const seat = (x, role, who, on) => {
       ctx.fillStyle = on ? 'rgba(255,210,63,.85)' : 'rgba(0,0,30,.55)'; ctx.fillRect(x, VIEW_H - 112, 230, 44);
@@ -1422,7 +1688,7 @@ class TornadoStage {
       g.text(ctx, 'BOOST', VIEW_W - 130, 160, 10, '#7fe3ff');
     }
     const hint = this.active === 'pilot'
-      ? `[${keyLabel('punch')}] GUNS  [${keyLabel('laser')}] MISSILE  [${keyLabel('clones')}] ROLL`
+      ? `${keyLabel('up')}${keyLabel('down')} AIM  [${keyLabel('punch')}] GUNS  HOLD [${keyLabel('laser')}] LOCK-ON  [${keyLabel('clones')}] ROLL`
       : this.wingChar === 'sonic'
         ? `[${keyLabel('punch')}] PUNCH  ${keyLabel('down')}+[${keyLabel('punch')}] SPIN  [${keyLabel('laser')}] KICK  [${keyLabel('clones')}] BOOST  [${keyLabel('grab')}] GRAB  [${keyLabel('up')}] JUMP  [${keyLabel('bite')}] BITE`
         : `[${keyLabel('punch')}] PUNCH  [${keyLabel('laser')}] TAIL SMACK  [${keyLabel('clones')}] TAIL SPIN  [${keyLabel('grab')}] GRAB  [${keyLabel('up')}] JUMP  [${keyLabel('bite')}] BITE`;

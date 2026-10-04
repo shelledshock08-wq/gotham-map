@@ -1272,12 +1272,16 @@ class FinalBattle {
     if (t === 260) this.say('sonic', '...', { dur: 100, prio: 5 });
     if (t < 60) return;
     C.t++;
-    if (inp.leftPressed) { C.sel = 'kill'; Sound.play('select', { rate: 0.7 }); }
-    if (inp.rightPressed) { C.sel = 'spare'; Sound.play('select', { rate: 1.2 }); }
-    if (C.sel && (inp.punchPressed || inp.jumpPressed || inp.startPressed)) {
+    // on a file where the choice was already made, it plays out the same way
+    const locked = this.g.fateLocked && this.g.eggChoice;
+    if (locked) { C.sel = this.g.eggChoice; C.locked = true; }
+    if (!locked && inp.leftPressed) { C.sel = 'kill'; Sound.play('select', { rate: 0.7 }); }
+    if (!locked && inp.rightPressed) { C.sel = 'spare'; Sound.play('select', { rate: 1.2 }); }
+    if (C.sel && (locked ? C.t > 150 : inp.punchPressed || inp.jumpPressed || inp.startPressed)) {
       this.g.eggmanFate = C.sel;
       Sound.play('checkpoint', { rate: C.sel === 'kill' ? 0.6 : 1 });
-      this.g.eggChoice = C.sel;   // remembered later (Sonic's account to Tails)
+      this.g.eggChoice = C.sel;   // remembered by the save file, and by Sonic when he tells Tails
+      this.g.fateLocked = true; this.g.saveProgress('final');
       if (C.sel === 'kill') this.startKill(); else { this.spared = true; this.startRescue(); }
     }
   }
@@ -1685,7 +1689,8 @@ class FinalBattle {
     };
     opt('KILL', VIEW_W / 2 - 200, C.sel === 'kill', '#c3141e', '\u25C0');
     opt('SPARE', VIEW_W / 2 + 200, C.sel === 'spare', '#2f7dff', '\u25B6');
-    if (C.sel && Math.floor(t / 20) % 2) g.text(ctx, `PRESS ${keyLabel('punch')} TO CONFIRM`, VIEW_W / 2, 214, 14, '#ffd23f', 'center', '#000');
+    if (C.locked) g.text(ctx, 'YOU ALREADY MADE THIS CHOICE.', VIEW_W / 2, 214, 14, '#ffd23f', 'center', '#000');
+    else if (C.sel && Math.floor(t / 20) % 2) g.text(ctx, `PRESS ${keyLabel('punch')} TO CONFIRM`, VIEW_W / 2, 214, 14, '#ffd23f', 'center', '#000');
     else if (!C.sel) g.text(ctx, 'LEFT OR RIGHT TO CHOOSE', VIEW_W / 2, 214, 14, '#c9d4ff', 'center', '#000');
     ctx.restore();
   }

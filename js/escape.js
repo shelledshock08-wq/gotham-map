@@ -197,6 +197,83 @@ function escBuildModel(M) {
   return { root, meshes, clips };
 }
 
+// ------------------------------------------------------- limb pose layer
+// The Generations clips from the Unity project only rotate the shoulders, so
+// the arms would hang in bind pose (a T-pose). This layer aims the limb bones
+// (their +x runs along the limb in both rigs) at directions given in the
+// character's own space (+z forward, +y up, +x the character's left).
+const _lq = new THREE.Quaternion(), _lq2 = new THREE.Quaternion(), _lv = new THREE.Vector3(), _lw = new THREE.Vector3();
+function escAimBone(bone, dir, k) {
+  if (!bone || k <= 0) return;
+  bone.updateWorldMatrix(true, false);
+  bone.getWorldQuaternion(_lq);
+  _lv.set(1, 0, 0).applyQuaternion(_lq);
+  _lq2.setFromUnitVectors(_lv, dir).multiply(_lq);
+  _lq.slerp(_lq2, k);
+  bone.parent.getWorldQuaternion(_lq2).invert();
+  bone.quaternion.copy(_lq2.multiply(_lq));
+}
+const ESC_LIMBS = ['UpperArm_L', 'ForeArm_L', 'UpperArm_R', 'ForeArm_R', 'Thigh_L', 'Calf_L', 'Thigh_R', 'Calf_R'];
+function escLimbBones(M) {
+  if (M.limbs) return M.limbs;
+  const b = {};
+  if (M.model) for (const n of ESC_LIMBS.concat(['Spine1', 'Head'])) b[n] = M.model.root.getObjectByName(n);
+  return (M.limbs = b);
+}
+// Curl the fingers into fists (the rigs' finger bones bend about their local Y)
+function escFists(M, on) {
+  if (!M.fingers) {
+    M.fingers = [];
+    if (M.model) M.model.root.traverse((o) => { if (/^(Index|Middle|Ring|Pinky)[123]_[LR]$|^Thumb[23]_[LR]$/.test(o.name)) M.fingers.push([o, o.quaternion.clone(), /^Thumb/.test(o.name) ? -0.6 : -1.25]); });
+  }
+  if (M.fist === on) return;
+  M.fist = on;
+  for (const [o, q0, a] of M.fingers) { o.quaternion.copy(q0); if (on) o.rotateY(a); }
+}
+// name: relax | guard | run | sprint | air | pilot | hurt | jab | cross | kick | flykick | grab | wide
+// opts: { t, k (blend per frame), side ('L'|'R' for the striking limb), aim (world dir for grab) }
+function escLimbPose(M, name, opts = {}) {
+  const B = escLimbBones(M);
+  if (!B.UpperArm_L) return;
+  const t = opts.t || 0, k = opts.k == null ? 0.35 : opts.k;
+  M.body.updateWorldMatrix(true, false);
+  const q = M.body.getWorldQuaternion(new THREE.Quaternion());
+  const set = (bone, x, y, z, kk = k) => { if (B[bone]) escAimBone(B[bone], _lw.set(x, y, z).normalize().applyQuaternion(q), kk); };
+  const arms = (fn) => { for (const [sd, s] of [['L', 1], ['R', -1]]) fn(sd, s); };
+  const sw = Math.sin(t * 0.35);
+  escFists(M, ['guard', 'jab', 'cross', 'kick', 'flykick', 'pilot', 'sprint'].includes(name));
+  switch (name) {
+    case 'relax': arms((sd, s) => { set('UpperArm_' + sd, s * 0.32, -0.92, 0.12); set('ForeArm_' + sd, s * 0.2, -0.55, 0.65); }); break;
+    case 'guard':   // Sonic Battle stance: fists up at the chin, elbows in, a little bounce
+      arms((sd, s) => { set('UpperArm_' + sd, s * 0.55, -0.75 + Math.sin(t * 0.15) * 0.05, 0.3); set('ForeArm_' + sd, s * 0.12, 0.5, 0.85); }); break;
+    case 'run': arms((sd, s) => { set('UpperArm_' + sd, s * 0.32, -0.5, -0.75 + sw * s * 0.25); set('ForeArm_' + sd, s * 0.15, -0.05, -0.95); }); break;
+    case 'sprint': arms((sd, s) => { set('UpperArm_' + sd, s * 0.25, -0.25, -1); set('ForeArm_' + sd, s * 0.1, 0.05, -1); }); break;
+    case 'air': arms((sd, s) => { set('UpperArm_' + sd, s * 0.75, 0.45, 0.1); set('ForeArm_' + sd, s * 0.45, 0.85, 0.15); }); break;
+    case 'wide': arms((sd, s) => { set('UpperArm_' + sd, s, 0.15, -0.1); set('ForeArm_' + sd, s, 0.25, 0); }); break;
+    case 'pilot': arms((sd, s) => { set('UpperArm_' + sd, s * 0.22, -0.5, 0.82); set('ForeArm_' + sd, -s * 0.12, -0.3, 0.95); }); break;
+    case 'hurt': arms((sd, s) => { set('UpperArm_' + sd, s * 0.6, 0.55, -0.45); set('ForeArm_' + sd, s * 0.3, 0.9, -0.2); }); break;
+    case 'jab': case 'cross': {
+      // one fist drives straight out, the other stays up in guard
+      const hit = opts.side || (name === 'jab' ? 'L' : 'R');
+      arms((sd, s) => {
+        if (sd === hit) { set('UpperArm_' + sd, -s * 0.05, 0.08, 1, opts.k || 0.75); set('ForeArm_' + sd, -s * 0.05, 0.05, 1, opts.k || 0.75); }
+        else { set('UpperArm_' + sd, s * 0.55, -0.75, 0.3); set('ForeArm_' + sd, s * 0.12, 0.5, 0.85); }
+      });
+      break;
+    }
+    case 'kick':   // roundhouse: leg snaps out level, arms thrown wide for balance
+      arms((sd, s) => { set('UpperArm_' + sd, s * 0.9, 0.2, -0.3); set('ForeArm_' + sd, s * 0.8, 0.4, -0.2); });
+      set('Thigh_R', -0.1, 0.05, 1, opts.k || 0.7); set('Calf_R', -0.1, 0.1, 1, opts.k || 0.7);
+      break;
+    case 'flykick':
+      arms((sd, s) => { set('UpperArm_' + sd, s * 0.35, -0.2, -0.95); set('ForeArm_' + sd, s * 0.2, 0, -1); });
+      set('Thigh_R', 0, -0.25, 1, 0.7); set('Calf_R', 0, -0.2, 1, 0.7);
+      set('Thigh_L', 0, -0.7, -0.6, 0.6); set('Calf_L', 0, -0.1, -1, 0.6);
+      break;
+    case 'grab': if (opts.aim) arms((sd) => { escAimBone(B['UpperArm_' + sd], opts.aim, 0.6); escAimBone(B['ForeArm_' + sd], opts.aim, 0.6); }); break;
+  }
+}
+
 // -------------------------------------------------------------- Sonic
 function escSonicModel() {
   const holder = new THREE.Group();                       // feet at y = 0, faces +z
@@ -1241,6 +1318,9 @@ class EscapeStage {
     else if (this.boosting || sp > 58) this.play('sprint', 0.12, 0.8 + sp / 120);
     else this.play('run', 0.15, 0.6 + sp / 50);
     if (M.mixer) M.mixer.update(ESC_DT);
+    const armPose = this.phase === 'intro' || this.phase === 'tbc' || (this.phase === 'outro' && this.speed < 3 && this.ground) ? 'relax'
+      : this.dead || this.hitT > 0 ? 'hurt' : this.slide ? null : !this.ground ? 'air' : this.boosting || sp > 58 ? 'sprint' : 'run';
+    if (armPose && !inBall) escLimbPose(M, armPose, { t: t * (0.6 + sp / 50) });
     // boost FX
     const B = this.boosting, fl = 0.85 + Math.random() * 0.3;
     M.aura.material.opacity += ((B ? 0.3 * fl : 0) - M.aura.material.opacity) * 0.35;

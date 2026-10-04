@@ -72,8 +72,10 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 |---|---|---|---|
 | Switch between the pilot and the fighter on the wing | Q / Tab | LB | ⇄ |
 | Swap roles (Sonic flies, Tails fights), only for a few seconds | E | RB | ⟲ |
-| Pilot: steer | Arrows / WASD | D-pad / stick | D-pad |
-| Pilot: machine guns (hold) / homing missile / barrel roll (dodges bolts) | Z / X / C | A / X / Y | A / B / X |
+| Pilot: fly left / right; aim the guns up / down (the reticle follows the plane) | Arrows / WASD | D-pad / stick | D-pad |
+| Pilot: machine guns with auto-aim (hold) | Z | A | A |
+| Pilot: hold to lock on to up to 6 enemies, release to fire a missile salvo | hold X | hold X | hold B |
+| Pilot: barrel roll (shrugs off energy bolts) | C | Y | X |
 | Fighter: move along the wing / jump | ← → / ↑ | D-pad | ◀ ▶ / ▲ |
 | Fighter: punch combo (3rd hit: Sonic kicks, Tails swipes with his tails) | Z | A | A |
 | Sonic: spin attack / flying kick / boost dash | ↓ + Z / X / C | | |
@@ -81,7 +83,9 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Grab an enemy by the leg, swing it around and throw it off the plane | V / Shift | B | Y |
 | Bite (don't) | B | LT | ☠ |
 
-**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 0–9) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl, the 3D base escape, the Emerald Ruins (9), the Special Stage (0) or the Sky Chase (the minus key). Turn it off with `DEV_MENU = false` in `js/game.js`.
+**Save files:** pressing Start on the title screen opens DATA SELECT (3 files, Sonic 3 & Knuckles style). An empty file becomes a new save the moment you start it. The game saves at the start of every stage and the moment you decide Eggman's fate. A file in progress always continues where you left off; you can only pick stages once the file is cleared, and on a cleared file Eggman's fate plays out the way you chose it. Press the grab button twice on a file to erase it.
+
+**Developer skip menu (temporary):** on the title screen, click **DEV** (or press 0–9) to jump to Act 1–3, the Eggman ship boss, the Egg Colossus cutscene, the super battle, the brawl, the 3D base escape, the Emerald Ruins (9), the Special Stage (0) or the Sky Chase (the minus key). Skips past the brawl first ask whether Eggman was KILLED or SPARED. Dev skips never touch save files. Turn it off with `DEV_MENU = false` in `js/game.js`.
 
 ## Features
 
@@ -126,6 +130,10 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
   - Neglect the flying and the Tornado is **shot down**.
   - Balance both for 70 seconds and a giant Zombot gunship shoots you down anyway. The Tornado crash-lands on a beach, and both of them walk away. TO BE CONTINUED.
 
+  The flying plays like the classic rail shooters (Star Fox, Panzer Dragoon, After Burner): the enemies come from above, so left/right flies the plane and up/down aims; the Star Fox-style double reticle rides out ahead of the plane and the guns auto-aim at whatever it's over (lock tone, red brackets). Hold the missile button and sweep the reticle to paint up to six locks, Panzer Dragoon-style, then let go for a salvo of corkscrewing missiles with fiery trails and big blasts. Destroyed enemies drop rings (repairs) and hyper laser capsules. A Star Fox-style HITS counter tracks kills. The Tornado shows its damage: the paint blackens, scorch marks appear where bolts hit, the engine smokes and then burns, the prop coughs, and the wing gets ripped up as boarders tear at it.
+
+  On the wing, Sonic and Tails fight Sonic Battle-style with real poses: a fists-up boxer's stance, jab, cross, roundhouse (Sonic) or tail swipe (Tails), flying kick, spin attack, boost dash, leg grab and swing-throw, and Tails' tail smack. Every hit lands with a flash, a shockwave ring, flying feathers or metal plates, hit-stop, camera shake, layered impact sounds and a P5-style SMASH!/BAM! word.
+
   You can swap roles for a few seconds: Tails can fight (his tail smack is the strongest move in the game) until he gets tired, and Sonic can fly until he admits he has no idea how (the controls are reversed and the plane wanders). Biting a Zombot or an infected bird gets you infected by the Metal Virus: instant game over. The stage leans uneasy: a dark sky, glowing eyes opening in the clouds, lightning, film grain and the odd glitch, a low drone with whispers, and a minor-key theme.
 - **Persona 5-style dialogue:** every line is a slanted black panel with a white rim, a red offset shadow and a tilted name tag in the speaker's colour.
 - Title screen, act title cards, score tally (time and ring bonus), pause, game over, ending, and a saved hi-score.
@@ -146,6 +154,7 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | `js/entities.js` | Rings, enemies, monitors, springs, platforms, boss |
 | `js/input.js` | Keyboard, gamepad and touch input |
 | `js/game.js` | State machine, camera, HUD, main loop |
+| `js/save.js` | Save files: data select screen, stage picker for cleared files, the DEV fate prompt |
 | `js/speech.js` | Speech bubbles and button prompts |
 | `js/superboss.js` | Super Sonic final battle and the Egg Colossus |
 | `js/brawl.js` | Eggman brawl, Metal Sonic, impact effects |

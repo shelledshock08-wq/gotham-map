@@ -44,6 +44,7 @@ class Game {
   // ------------------------------------------------------------ game flow
   newGame() {
     document.getElementById('dev').classList.remove('on', 'open');
+    this.slot = null; this.replay = false;
     this.lives = 3; this.score = 0; this.nextLifeScore = 50000; this.levelIndex = 0;
     this.continues = 2;
     this.emeraldsGot = new Set(); this.emeraldCount = 0;
@@ -51,8 +52,58 @@ class Game {
     this.loadLevel(0);
   }
 
+  // ------------------------------------------------------------ saves
+  startSave(slot, data, replay = false) {
+    this.newGame();
+    this.slot = slot; this.replay = replay;
+    this.emeraldsGot = new Set(data.emeralds || []); this.emeraldCount = data.emeraldCount || 0;
+    this.eggChoice = data.eggChoice || null;
+    this.fateLocked = !!data.eggChoice;   // once chosen, Eggman's fate never changes on this file
+    this.score = replay ? 0 : data.score || 0;
+    if (!replay && data.stage !== 'act1') this.speech.say('sonic', 'Picking up where I left off.', { dur: 120 });
+    this.startStage(data.stage);
+  }
+
+  startStage(id) {
+    const arena = () => {
+      this.loadLevel(2); this.card = 0;
+      const a = this.arena, p = this.player;
+      p.reset(a.x + 300, a.groundY); p.y = a.groundY - STAND_H; p.ground = true;
+      this.bossStarted = true; this.timeStopped = true;
+      this.camLock = { x0: a.x, x1: a.x + a.w, y: a.groundY - VIEW_H + 140 };
+      this.rings = 50;
+    };
+    switch (id) {
+      case 'act2': this.loadLevel(1); break;
+      case 'act3': this.loadLevel(2); break;
+      case 'ruins': this.loadLevel(1); this.card = 0; this.emeraldCount = Math.max(4, this.emeraldCount); this.startRuins(); break;
+      case 'special': this.loadLevel(1); this.card = 0; this.emeraldCount = Math.max(7, this.emeraldCount); this.startSpecial(); break;
+      case 'final': arena(); this.emeraldCount = Math.max(8, this.emeraldCount); this.final = new FinalBattle(this, null, true); this.saveProgress('final'); break;
+      case 'escape': arena(); this.startEscape(); break;
+      case 'tornado': this.startTornado('pickup'); break;
+      default: this.loadLevel(0);
+    }
+  }
+
+  // called whenever a stage starts (and when Eggman's fate is decided)
+  saveProgress(stage) {
+    if (this.slot == null || this.replay) return;
+    const cur = Saves.get(this.slot) || {};
+    Saves.put(this.slot, Object.assign(cur, {
+      stage: stage || cur.stage, emeralds: [...(this.emeraldsGot || [])], emeraldCount: this.emeraldCount || 0,
+      eggChoice: this.eggChoice || cur.eggChoice || null, score: this.score, saved: Date.now(),
+    }));
+  }
+
+  saveCleared() {
+    if (this.slot == null) return;
+    const cur = Saves.get(this.slot) || {};
+    Saves.put(this.slot, Object.assign(cur, { done: true, stage: 'act1', eggChoice: this.eggChoice || cur.eggChoice || null, score: Math.max(cur.score || 0, this.score) }));
+  }
+
   loadLevel(i) {
     this.levelIndex = i;
+    this.saveProgress(['act1', 'act2', 'act3'][i]);
     this.checkpoint = null;
     this.buildLevel();
     this.state = 'play';
@@ -228,11 +279,13 @@ class Game {
   onGoalDone() { this.later(40, () => this.startTally()); }
 
   startFinal(egg) {
+    this.saveProgress('final');
     this.boss = null;
     this.final = new FinalBattle(this, egg, false);
   }
   // The 3D boost run out of the collapsing base
   startEscape() {
+    this.saveProgress('escape');
     this.endEscape();
     this.final = null;
     this.rings = 0; this.timeStopped = false;
@@ -249,7 +302,7 @@ class Game {
     this.endEscape(); this.endTornado();
     this.final = null; this.tally = null;
     this.speech.clear();
-    if (from === 'pickup') this.checkpointTornado = 'sky';
+    if (from === 'pickup') { this.checkpointTornado = 'sky'; this.saveProgress('tornado'); }
     this.tornado = new TornadoStage(this, from);
   }
   endTornado() {
@@ -266,12 +319,14 @@ class Game {
   tornadoInfected() { this.endTornado(); this.gameOver('tornado'); }
   // Emerald Ruins (Diamond Rush) and the Special Stage, between Act 2 and Act 3
   startRuins() {
+    this.saveProgress('ruins');
     this.endSpecialModes(); this.endEscape(); this.final = null; this.tally = null;
     this.emeraldCount = Math.max(4, Math.min(4, this.emeraldCount || 4));
     this.speech.clear(); Sound.stopTrack(); Sound.stopMusic();
     this.ruins = new Ruins(this);
   }
   startSpecial() {
+    this.saveProgress('special');
     this.endSpecialModes(); this.tally = null;
     this.speech.clear(); Sound.stopMusic();
     this.special = new SpecialStage(this);
@@ -319,10 +374,17 @@ class Game {
   }
 
   // DEV ONLY: jump straight to a section of the game.
-  devSkip(n) {
+  devSkip(n, fateSet = false) {
     Sound.init(); Sound.stopMusic(); Sound.stopTrack();
     document.getElementById('dev').classList.remove('on', 'open');
+    if ((n === 8 || n === 10) && !fateSet) {
+      this.fatePrompt = new FatePrompt(this, () => this.devSkip(n, true));
+      this.state = 'fate';
+      return;
+    }
+    const fate = fateSet ? this.eggChoice : null;
     this.newGame();
+    this.slot = null; this.replay = false; this.eggChoice = fate; this.fateLocked = !!fate;
     if (n >= 1 && n <= 3) { if (n > 1) this.loadLevel(n - 1); return; }
     if (n === 9 || n === 0) { this.loadLevel(1); this.card = 0; this.lives = 9; if (n === 9) { this.emeraldCount = 4; this.startRuins(); } else { this.emeraldCount = 7; this.startSpecial(); } return; }
     this.loadLevel(2);
@@ -373,7 +435,7 @@ class Game {
       case 'title':
         this.titleCam += 2;
         if (DEV_MENU) document.getElementById('dev').classList.add('on');
-        if (inp.startPressed || inp.jumpPressed || inp.tapped) { Sound.init(); Sound.play('select'); this.newGame(); }
+        if (inp.startPressed || inp.jumpPressed || inp.tapped) { Sound.init(); Sound.play('select'); this.dataSelect = new DataSelect(this); this.state = 'select'; document.getElementById('dev').classList.remove('on', 'open'); }
         Sound.playMusic('meadow');
         return;
       case 'paused':
@@ -391,6 +453,8 @@ class Game {
         } else if (this.goTimer > 90 && (press || this.goTimer > 600)) this.toTitle();
         return;
       }
+      case 'select': this.dataSelect.update(inp); Sound.playMusic('meadow'); return;
+      case 'fate': this.fatePrompt.update(inp); return;
       case 'ending':
         this.endTimer++;
         for (const e of this.endAnimals) e.update(this);
@@ -513,7 +577,7 @@ class Game {
       this.saveHi();
       if (this.levelIndex === 1) this.startRuins();      // the four emeralds open a portal
       else if (this.levelIndex + 1 < LEVELS.length) { this.loadLevel(this.levelIndex + 1); }
-      else { this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); this.endTornado(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
+      else { this.saveCleared(); this.state = 'ending'; this.endTimer = 0; this.endAnimals = []; this.final = null; this.endEscape(); this.endTornado(); document.getElementById('touch').classList.remove('super'); if (!Sound.trackEl) Sound.playMusic('meadow'); }
     }
   }
 
@@ -568,6 +632,8 @@ class Game {
     switch (this.state) {
       case 'loading': this.drawLoading(ctx); break;
       case 'title': this.drawTitle(ctx); break;
+      case 'select': this.dataSelect.draw(ctx); break;
+      case 'fate': this.fatePrompt.draw(ctx); break;
       case 'ending': this.drawEnding(ctx); break;
       default: this.drawPlay(ctx);
     }
