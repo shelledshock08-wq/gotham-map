@@ -4,3 +4,4 @@ dist/
 # copyrighted song: kept local, not published
 assets/music/
 sonic-standalone-full.html
+__pycache__/
