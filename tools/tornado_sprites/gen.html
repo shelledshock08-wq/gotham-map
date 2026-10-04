@@ -11,7 +11,7 @@ const plane = torPlaneModel(); S.add(plane.root); plane.root.scale.setScalar(0.1
 const pilot = torTailsModel(); plane.root.add(pilot.root);
 const jet = torJetModel(); S.add(jet);
 const bird = torBirdModel(); S.add(bird);
-const zom = torZombotModel(); S.add(zom);
+const zom = torZombotModel({ species: 'hedgehog', color: TOR_ZOMBIE_COLORS[0] }); S.add(zom);
 const all = [tails.root, plane.root, jet, bird, zom];
 // what: which object; w,h world frame; px per world unit
 window.render = (what, clip, t, w, h, cy, ppu, yaw) => {

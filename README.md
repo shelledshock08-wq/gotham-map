@@ -73,14 +73,16 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
 | Switch between the pilot and the fighter on the wing | Q / Tab | LB | ⇄ |
 | Swap roles (Sonic flies, Tails fights), only for a few seconds | E | RB | ⟲ |
 | Pilot: fly left / right; aim the guns up / down (the reticle follows the plane) | Arrows / WASD | D-pad / stick | D-pad |
-| Pilot: machine guns with auto-aim (hold) | Z | A | A |
-| Pilot: hold to lock on to up to 6 enemies, release to fire a missile salvo | hold X | hold X | hold B |
+| Pilot: machine guns with auto-aim (hold) | Z or left mouse button | A | A |
+| Pilot: hold to lock on to up to 6 enemies, release to fire a missile salvo | hold X or right mouse button | hold X | hold B |
+| Special moves, paid in rings: 1 Sonic Missile (10), 2 Freeze Ray (20), 3 Shield Ram (30), 4 Autopilot Combo (40), 5 Super Sonic (50) | 1–5 | | 1–5 buttons |
 | Pilot: barrel roll (shrugs off energy bolts) | C | Y | X |
 | Fighter: move along the wing / jump | ← → / ↑ | D-pad | ◀ ▶ / ▲ |
-| Fighter: punch combo (3rd hit: Sonic kicks, Tails swipes with his tails) | Z | A | A |
-| Sonic: spin attack / flying kick / boost dash | ↓ + Z / X / C | | |
+| Fighter: punch combo (3rd hit: Sonic kicks, Tails swipes with his tails); press it just as an enemy strikes to PARRY | Z or left mouse button | A | A |
+| Fighter: uppercut (launches them for a juggle; they SLAM when they land) | ↓ + Z | ↓ + A | ▼ + A |
+| Sonic: flying kick / spin attack / boost dash (costs half the boost gauge, refilled by landing hits) | X / ↓ + X / C | | |
 | Tails: TAIL SMACK (360° whip that clears the wing) / tail spin | X / C | X / Y | B / X |
-| Grab an enemy by the leg, swing it around and throw it off the plane | V / Shift | B | Y |
+| Grab an enemy by the leg, swing it around and throw it off the plane; on a staggered Zombot: ZANDATSU (Sonic) or FATALITY (Tails) | V / Shift | B | Y |
 | Bite (don't) | B | LT | ☠ |
 
 **Save files:** pressing Start on the title screen opens DATA SELECT (3 files, Sonic 3 & Knuckles style). An empty file becomes a new save the moment you start it. The game saves at the start of every stage and the moment you decide Eggman's fate. A file in progress always continues where you left off; you can only pick stages once the file is cleared, and on a cleared file Eggman's fate plays out the way you chose it. Press the grab button twice on a file to erase it.
@@ -131,6 +133,12 @@ To host it, enable **GitHub Pages** for this repo (Settings → Pages → deploy
   - Balance both for 70 seconds and a giant Zombot gunship shoots you down anyway. The Tornado crash-lands on a beach, and both of them walk away. TO BE CONTINUED.
 
   The flying plays like the classic rail shooters (Star Fox, Panzer Dragoon, After Burner): the enemies come from above, so left/right flies the plane and up/down aims; the Star Fox-style double reticle rides out ahead of the plane and the guns auto-aim at whatever it's over (lock tone, red brackets). Hold the missile button and sweep the reticle to paint up to six locks, Panzer Dragoon-style, then let go for a salvo of corkscrewing missiles with fiery trails and big blasts. Destroyed enemies drop rings (repairs) and hyper laser capsules. A Star Fox-style HITS counter tracks kills. The Tornado shows its damage: the paint blackens, scorch marks appear where bolts hit, the engine smokes and then burns, the prop coughs, and the wing gets ripped up as boarders tear at it.
+
+  The wing fight mixes in Metal Gear Rising and Mortal Kombat: time a punch into an enemy's attack to PARRY it (slow motion, the enemy reels); uppercut them into the air and juggle them; build a hit counter (6+ hits add damage); and when a Zombot is beaten down it staggers and the game calls FINISH HIM!. Grab it then and Sonic goes into blade mode and cuts it apart in slow motion (ZANDATSU, which also patches the wing and refills his boost), or Tails lifts it on his spinning tails and whips it to pieces (FATALITY). The boost dash costs half the gauge and no longer one-shots anything, so you have to actually fight.
+
+  The special moves (keys 1–5) cost rings, which you earn from kills and ring drops: 1 fires Sonic out like a missile to spin-slash up to six jets into shards; 2 is a freeze ray that ices every enemy in the sky and on the wing (frozen boarders shatter off the plane with one hit, and stop tearing at it); 3 wraps the Tornado in a shield that soaks up fire and lets you climb up and ram the jets out of the sky; 4 switches on a working autopilot while Sonic and Tails fly off together and wipe out everything on the wing and in the air; 5 turns Sonic into Super Sonic, an unstoppable golden force that tears through everything for twelve seconds while the plane takes no damage.
+
+  The Zombots are infected mobians in the style of Sonic Forces fan OCs: hedgehogs and foxes built on the Generations Sonic and Tails rigs, with dull metallic skin in a random muted colour (blue, green, red, purple...), black sclera and red eyes, spikes pushing out of their heads, shoulders and backs, and a hunched, arms-out zombie lurch. They raise both claws and rake down when they attack.
 
   On the wing, Sonic and Tails fight Sonic Battle-style with real poses: a fists-up boxer's stance, jab, cross, roundhouse (Sonic) or tail swipe (Tails), flying kick, spin attack, boost dash, leg grab and swing-throw, and Tails' tail smack. Every hit lands with a flash, a shockwave ring, flying feathers or metal plates, hit-stop, camera shake, layered impact sounds and a P5-style SMASH!/BAM! word.
 

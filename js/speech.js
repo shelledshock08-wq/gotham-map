@@ -5,6 +5,7 @@
 const KEY_LABELS = {
   kb:    { punch: 'Z', jump: 'Z', laser: 'X', clones: 'C', grab: 'V', down: '↓', up: '↑', swap: 'Q', roles: 'E', bite: 'B' },
   pad:   { punch: 'A', jump: 'A', laser: 'X', clones: 'Y', grab: 'B', down: '↓', up: '↑', swap: 'LB', roles: 'RB', bite: 'LT' },
+  mouse: { punch: 'LMB', jump: 'Z', laser: 'RMB', clones: 'C', grab: 'V', down: '↓', up: '↑', swap: 'Q', roles: 'E', bite: 'B' },
   touch: { punch: 'A', jump: 'A', laser: 'B', clones: 'X', grab: 'Y', down: '▼', up: '▲', swap: '⇄', roles: '⟲', bite: '☠' },
 };
 function keyLabel(action) {

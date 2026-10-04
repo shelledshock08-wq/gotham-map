@@ -155,6 +155,7 @@ function escModelTex(name) {
     const src = (typeof ESC_MODELS !== 'undefined' && ESC_MODELS.tex[name]) || (typeof TOR_MODELS !== 'undefined' && TOR_MODELS.tex[name]);
     const t = new THREE.TextureLoader().load(src);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;   // Generations UVs run outside 0..1
+    t.name = name;
     ESC_TEX_CACHE[name] = t;
   }
   return ESC_TEX_CACHE[name];
@@ -243,15 +244,15 @@ function escLimbPose(M, name, opts = {}) {
   const sw = Math.sin(t * 0.35);
   escFists(M, ['guard', 'jab', 'cross', 'kick', 'flykick', 'pilot', 'sprint'].includes(name));
   switch (name) {
-    case 'relax': arms((sd, s) => { set('UpperArm_' + sd, s * 0.32, -0.92, 0.12); set('ForeArm_' + sd, s * 0.2, -0.55, 0.65); }); break;
+    case 'relax': arms((sd, s) => { set('UpperArm_' + sd, s * 0.3, -0.94, 0.05); set('ForeArm_' + sd, s * 0.15, -0.85, 0.4); }); break;
     case 'guard':   // Sonic Battle stance: fists up at the chin, elbows in, a little bounce
       arms((sd, s) => { set('UpperArm_' + sd, s * 0.55, -0.75 + Math.sin(t * 0.15) * 0.05, 0.3); set('ForeArm_' + sd, s * 0.12, 0.5, 0.85); }); break;
     case 'run': arms((sd, s) => { set('UpperArm_' + sd, s * 0.32, -0.5, -0.75 + sw * s * 0.25); set('ForeArm_' + sd, s * 0.15, -0.05, -0.95); }); break;
     case 'sprint': arms((sd, s) => { set('UpperArm_' + sd, s * 0.25, -0.25, -1); set('ForeArm_' + sd, s * 0.1, 0.05, -1); }); break;
-    case 'air': arms((sd, s) => { set('UpperArm_' + sd, s * 0.75, 0.45, 0.1); set('ForeArm_' + sd, s * 0.45, 0.85, 0.15); }); break;
+    case 'air': arms((sd, s) => { set('UpperArm_' + sd, s * 0.45, -0.55, -0.5); set('ForeArm_' + sd, s * 0.3, -0.2, -0.9); }); break;
     case 'wide': arms((sd, s) => { set('UpperArm_' + sd, s, 0.15, -0.1); set('ForeArm_' + sd, s, 0.25, 0); }); break;
     case 'pilot': arms((sd, s) => { set('UpperArm_' + sd, s * 0.22, -0.5, 0.82); set('ForeArm_' + sd, -s * 0.12, -0.3, 0.95); }); break;
-    case 'hurt': arms((sd, s) => { set('UpperArm_' + sd, s * 0.6, 0.55, -0.45); set('ForeArm_' + sd, s * 0.3, 0.9, -0.2); }); break;
+    case 'hurt': arms((sd, s) => { set('UpperArm_' + sd, s * 0.35, 0.2, 0.6); set('ForeArm_' + sd, -s * 0.1, 0.6, 0.7); }); break;
     case 'jab': case 'cross': {
       // one fist drives straight out, the other stays up in guard
       const hit = opts.side || (name === 'jab' ? 'L' : 'R');
@@ -269,6 +270,16 @@ function escLimbPose(M, name, opts = {}) {
       arms((sd, s) => { set('UpperArm_' + sd, s * 0.35, -0.2, -0.95); set('ForeArm_' + sd, s * 0.2, 0, -1); });
       set('Thigh_R', 0, -0.25, 1, 0.7); set('Calf_R', 0, -0.2, 1, 0.7);
       set('Thigh_L', 0, -0.7, -0.6, 0.6); set('Calf_L', 0, -0.1, -1, 0.6);
+      break;
+    case 'zombie': {   // arms out, reaching, a little out of sync
+      arms((sd, s) => { const w = Math.sin(t * 0.07 + s) * 0.12; set('UpperArm_' + sd, s * 0.22, -0.1 + w, 1); set('ForeArm_' + sd, s * 0.05, -0.15 - w, 1); });
+      break;
+    }
+    case 'claw':   // both arms raised to rake down
+      arms((sd, s) => { set('UpperArm_' + sd, s * 0.45, 0.8, 0.35); set('ForeArm_' + sd, s * 0.15, 0.85, 0.5); });
+      break;
+    case 'rake':
+      arms((sd, s) => { set('UpperArm_' + sd, s * 0.15, -0.5, 0.85, 0.8); set('ForeArm_' + sd, s * 0.05, -0.75, 0.6, 0.8); });
       break;
     case 'grab': if (opts.aim) arms((sd) => { escAimBone(B['UpperArm_' + sd], opts.aim, 0.6); escAimBone(B['ForeArm_' + sd], opts.aim, 0.6); }); break;
   }
@@ -1319,7 +1330,7 @@ class EscapeStage {
     else this.play('run', 0.15, 0.6 + sp / 50);
     if (M.mixer) M.mixer.update(ESC_DT);
     const armPose = this.phase === 'intro' || this.phase === 'tbc' || (this.phase === 'outro' && this.speed < 3 && this.ground) ? 'relax'
-      : this.dead || this.hitT > 0 ? 'hurt' : this.slide ? null : !this.ground ? 'air' : this.boosting || sp > 58 ? 'sprint' : 'run';
+      : this.dead || this.hitT > 0 ? 'hurt' : this.slide ? 'run' : !this.ground ? 'air' : this.boosting || sp > 58 ? 'sprint' : 'run';
     if (armPose && !inBall) escLimbPose(M, armPose, { t: t * (0.6 + sp / 50) });
     // boost FX
     const B = this.boosting, fl = 0.85 + Math.random() * 0.3;

@@ -54,6 +54,12 @@ const Input = {
       const end = (e) => { active.delete(e.pointerId); refresh(); };
       b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
     }
+    // mouse: left click fires / punches, right click locks on / kicks
+    this.mouse = { left: false, right: false }; this.mouseHits = new Set();
+    const scr = document.getElementById('screen');
+    scr.addEventListener('mousedown', (e) => { const k = e.button === 2 ? 'right' : e.button === 0 ? 'left' : null; if (!k) return; this.mouse[k] = true; this.mouseHits.add(k); this.lastDevice = 'mouse'; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.mouse.right = false; if (e.button === 0) this.mouse.left = false; });
+    scr.addEventListener('contextmenu', (e) => e.preventDefault());
     // tapping the canvas starts the game / advances menus
     document.getElementById('screen').addEventListener('pointerdown', () => { Sound.init(); this.tapped = true; });
   },
@@ -73,6 +79,8 @@ const Input = {
     let grab = k.has('KeyV') || k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyI');
     // Sky Chase: switch character, swap pilot/fighter roles, and the bite you shouldn't use
     let swap = k.has('KeyQ') || k.has('Tab'), roles = k.has('KeyE'), bite = k.has('KeyB');
+    const M = this.mouse || { left: false, right: false }, mh = this.mouseHits || new Set();
+    punch = punch || M.left; laser = laser || M.right;
     const t = this.touch;
     swap = swap || t.swap; roles = roles || t.roles; bite = bite || t.bite;
     punch = punch || t.jump; laser = laser || t.laser; clones = clones || t.clones; grab = grab || t.grab;
@@ -102,12 +110,17 @@ const Input = {
     const tapClones = hit('KeyC', 'KeyL'), tapGrab = hit('KeyV', 'ShiftLeft', 'ShiftRight', 'KeyI');
     const tapStart = hit('Enter', 'Escape', 'KeyP');
     const tapSwap = hit('KeyQ', 'Tab'), tapRoles = hit('KeyE'), tapBite = hit('KeyB');
+    // Sky Chase specials on the number keys
+    let special = 0;
+    for (let n = 1; n <= 5; n++) if (hit('Digit' + n, 'Numpad' + n)) special = n;
+    const mPunch = mh.has('left'), mLaser = mh.has('right'); mh.clear();
     const hitU = hit('ArrowUp', 'KeyW'), hitD = hit('ArrowDown', 'KeyS'), hitL = hit('ArrowLeft', 'KeyA'), hitR = hit('ArrowRight', 'KeyD');
     this.hits.clear();
     const th = this.touchHits;
     const tJump = th.has('jump') || th.has('laser') || th.has('clones') || th.has('grab');
     const tSwap = th.has('swap'), tRoles = th.has('roles'), tBite = th.has('bite');
     const tPunch = th.has('jump'), tLaser = th.has('laser'), tClones = th.has('clones'), tGrab = th.has('grab'), tStart = th.has('start');
+    for (let n = 1; n <= 5; n++) if (th.has('sp' + n)) special = n;
     th.clear();
     const s = {
       left, right, up, down, jump, start,
@@ -120,8 +133,9 @@ const Input = {
       tapped,
       mutePressed: k.has('KeyM') && !this.prev.mute,
       punch, laser, clones, grab,
-      punchPressed: (punch && !this.prev.punch) || tapPunch || tPunch,
-      laserPressed: (laser && !this.prev.laser) || tapLaser || tLaser,
+      punchPressed: (punch && !this.prev.punch) || tapPunch || tPunch || mPunch,
+      laserPressed: (laser && !this.prev.laser) || tapLaser || tLaser || mLaser,
+      special,
       clonesPressed: (clones && !this.prev.clones) || tapClones || tClones,
       grabPressed: (grab && !this.prev.grab) || tapGrab || tGrab,
       swap, roles, bite,
