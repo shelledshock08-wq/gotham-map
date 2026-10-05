@@ -10,9 +10,11 @@
     "fetch-sources": "sh tools/fetch_sources.sh",
     "build:models": "python3 tools/build_jason.py && python3 tools/build_dummy.py",
     "vendor": "node tools/vendor_three.mjs",
-    "test:play": "node tools/play_test.mjs"
+    "test:play": "node tools/play_test.mjs",
+    "standalone": "node tools/build_standalone.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright-core": "^1.63.0",
     "three": "^0.186.1"
   }

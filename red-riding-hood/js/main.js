@@ -48,9 +48,19 @@ const effects = new Effects(scene);
 const cam = new CameraRig(camera);
 
 const loader = new GLTFLoader();
-const load = (url) => new Promise((res, rej) => loader.load(url, res, (e) => {
-  if (e.total) $('progress').style.width = `${Math.round((e.loaded / e.total) * 100)}%`;
-}, rej));
+const load = (url) => new Promise((res, rej) => {
+  // the single-file build (red-riding-hood.html) carries the models inline
+  const b64 = window.EMBEDDED_ASSETS?.[url];
+  if (b64) {
+    const bin = atob(b64), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    loader.parse(buf.buffer, '', res, rej);
+    return;
+  }
+  loader.load(url, res, (e) => {
+    if (e.total) $('progress').style.width = `${Math.round((e.loaded / e.total) * 100)}%`;
+  }, rej);
+});
 
 let player, dummies, hitstop = 0;
 const ctx = { input, cam, arena, effects, hitstop: (t) => { hitstop = Math.max(hitstop, t); } };

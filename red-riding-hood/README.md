@@ -12,7 +12,9 @@ Unofficial, non-commercial Jason Todd fan game. This folder is **milestone 1: a 
 
 ## Run it
 
-ES modules need a web server (opening `index.html` from disk will not work):
+**Easiest:** open `red-riding-hood.html`. It's one self-contained file (about 12.5 MB) with the code, three.js and both models built in, so it works offline by double-clicking, with no server. Rebuild it with `npm install && node tools/build_standalone.mjs` after changing the game.
+
+**From the source files** (for development), ES modules need a web server (opening `index.html` from disk will not work):
 
 ```sh
 cd red-riding-hood
