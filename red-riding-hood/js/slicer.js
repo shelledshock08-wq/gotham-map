@@ -9,11 +9,12 @@ const _v = new THREE.Vector3();
 // world-space triangles of every skinned/static mesh under `root`
 export function bakeObject(root) {
   root.updateMatrixWorld(true);
-  const pos = [];
+  const pos = [], uvs = [];
   root.traverse((m) => {
     if (!m.isMesh || !m.visible) return;
     const g = m.geometry;
     const p = g.attributes.position;
+    const uvA = g.attributes.uv;
     const idx = g.index ? g.index.array : null;
     const n = idx ? idx.length : p.count;
     const cache = new Float32Array(p.count * 3);
@@ -27,38 +28,41 @@ export function bakeObject(root) {
         done[i] = 1;
       }
       pos.push(cache[i * 3], cache[i * 3 + 1], cache[i * 3 + 2]);
+      uvs.push(uvA ? uvA.getX(i) : 0, uvA ? uvA.getY(i) : 0);
     }
   });
   const tris = new Float32Array(pos);
-  return { tris, mats: new Uint8Array(tris.length / 9) };
+  return { tris, mats: new Uint8Array(tris.length / 9), uvs: new Float32Array(uvs) };
 }
 
 // split triangles (world space) by plane; returns two sides and cap triangles
-export function slice({ tris, mats }, plane) {
-  const A = [], Am = [], B = [], Bm = [], segs = [];
+export function slice({ tris, mats, uvs }, plane) {
+  const A = [], Am = [], Au = [], B = [], Bm = [], Bu = [], segs = [];
   const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const u = [new THREE.Vector2(), new THREE.Vector2(), new THREE.Vector2()];
   const d = [0, 0, 0];
   const lerp = (a, b, da, db) => a.clone().lerp(b, da / (da - db));
-  const push = (arr, marr, m, ...pts) => { for (const q of pts) arr.push(q.x, q.y, q.z); marr.push(m); };
+  const push = (arr, marr, uarr, m, pts, us) => { for (const q of pts) arr.push(q.x, q.y, q.z); for (const q of us) uarr.push(q.x, q.y); marr.push(m); };
   for (let t = 0; t < tris.length / 9; t++) {
     for (let k = 0; k < 3; k++) {
       p[k].fromArray(tris, t * 9 + k * 3);
+      u[k].fromArray(uvs, t * 6 + k * 2);
       d[k] = plane.distanceToPoint(p[k]);
     }
     const pos = d.map((x) => x >= 0);
     const m = mats[t];
-    if (pos[0] && pos[1] && pos[2]) { push(A, Am, m, p[0], p[1], p[2]); continue; }
-    if (!pos[0] && !pos[1] && !pos[2]) { push(B, Bm, m, p[0], p[1], p[2]); continue; }
+    if (pos[0] && pos[1] && pos[2]) { push(A, Am, Au, m, p, u); continue; }
+    if (!pos[0] && !pos[1] && !pos[2]) { push(B, Bm, Bu, m, p, u); continue; }
     // the vertex alone on its side
     let k = 0;
     if (pos[0] === pos[1]) k = 2; else if (pos[0] === pos[2]) k = 1; else k = 0;
     const i = (k + 1) % 3, j = (k + 2) % 3;
-    const qi = lerp(p[k], p[i], d[k], d[i]);
-    const qj = lerp(p[k], p[j], d[k], d[j]);
-    const [lone, loneM, rest, restM] = pos[k] ? [A, Am, B, Bm] : [B, Bm, A, Am];
-    push(lone, loneM, m, p[k], qi, qj);
-    push(rest, restM, m, qi, p[i], p[j]);
-    push(rest, restM, m, qi, p[j], qj);
+    const qi = lerp(p[k], p[i], d[k], d[i]), qj = lerp(p[k], p[j], d[k], d[j]);
+    const ui = lerp(u[k], u[i], d[k], d[i]), uj = lerp(u[k], u[j], d[k], d[j]);
+    const [lone, loneM, loneU, rest, restM, restU] = pos[k] ? [A, Am, Au, B, Bm, Bu] : [B, Bm, Bu, A, Am, Au];
+    push(lone, loneM, loneU, m, [p[k], qi, qj], [u[k], ui, uj]);
+    push(rest, restM, restU, m, [qi, p[i], p[j]], [ui, u[i], u[j]]);
+    push(rest, restM, restU, m, [qi, p[j], qj], [ui, u[j], uj]);
     segs.push(qi, qj);
   }
   // cap: chain the cut segments into loops and fan-fill them
@@ -93,26 +97,29 @@ export function slice({ tris, mats }, plane) {
       const a = loop[i], b = loop[(i + 1) % loop.length];
       const nrm = new THREE.Vector3().subVectors(a, c).cross(new THREE.Vector3().subVectors(b, c));
       // piece A's cap faces -normal, piece B's faces +normal
-      if (nrm.dot(plane.normal) > 0) { push(capA, [], 1, c, b, a); push(capB, [], 1, c, a, b); } else { push(capA, [], 1, c, a, b); push(capB, [], 1, c, b, a); }
+      const z = [];
+      if (nrm.dot(plane.normal) > 0) { push(capA, [], z, 1, [c, b, a], []); push(capB, [], z, 1, [c, a, b], []); } else { push(capA, [], z, 1, [c, a, b], []); push(capB, [], z, 1, [c, b, a], []); }
     }
   }
-  const pack = (arr, marr, cap) => {
+  const pack = (arr, marr, uarr, cap) => {
     const tris2 = new Float32Array(arr.length + cap.length);
     tris2.set(arr); tris2.set(cap, arr.length);
     const mats2 = new Uint8Array(tris2.length / 9);
     mats2.set(marr);
     mats2.fill(1, marr.length);
-    return { tris: tris2, mats: mats2 };
+    const uv2 = new Float32Array((tris2.length / 9) * 6);
+    uv2.set(uarr);
+    return { tris: tris2, mats: mats2, uvs: uv2 };
   };
   return {
-    a: pack(A, Am, capA), b: pack(B, Bm, capB),
+    a: pack(A, Am, Au, capA), b: pack(B, Bm, Bu, capB),
     cutCenter: segs.length ? segs.reduce((s, q) => s.add(q), new THREE.Vector3()).divideScalar(segs.length) : null,
   };
 }
 
 function buildMesh(part, materials) {
   // centre on the centroid so the piece spins about itself
-  const { tris, mats } = part;
+  const { tris, mats, uvs } = part;
   const c = new THREE.Vector3();
   const n = tris.length / 3;
   for (let i = 0; i < n; i++) c.x += tris[i * 3], c.y += tris[i * 3 + 1], c.z += tris[i * 3 + 2];
@@ -125,10 +132,11 @@ function buildMesh(part, materials) {
   const skinIdx = [], capIdx = [];
   for (let t = 0; t < mats.length; t++) (mats[t] ? capIdx : skinIdx).push(t);
   const take = (list) => {
-    const a = new Float32Array(list.length * 9);
-    list.forEach((t, i) => a.set(local.subarray(t * 9, t * 9 + 9), i * 9));
+    const a = new Float32Array(list.length * 9), uv = new Float32Array(list.length * 6);
+    list.forEach((t, i) => { a.set(local.subarray(t * 9, t * 9 + 9), i * 9); uv.set(uvs.subarray(t * 6, t * 6 + 6), i * 6); });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     return g;
   };
   let skin = mergeVertices(take(skinIdx), 1e-4);
@@ -142,6 +150,9 @@ function buildMesh(part, materials) {
   const N = new Float32Array(sp.length + cp.length); N.set(skin.attributes.normal.array); N.set(cap.attributes.normal.array, sp.length);
   g.setAttribute('position', new THREE.BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+  const su = skin.attributes.uv.array, cu = cap.attributes.uv.array;
+  const U = new Float32Array(su.length + cu.length); U.set(su); U.set(cu, su.length);
+  g.setAttribute('uv', new THREE.BufferAttribute(U, 2));
   g.addGroup(0, sp.length / 3, 0);
   g.addGroup(sp.length / 3, cp.length / 3, 1);
   g.computeBoundingSphere();
@@ -151,7 +162,7 @@ function buildMesh(part, materials) {
   // keep the local triangle soup + per-triangle material for re-cutting
   const order = new Uint8Array(skinIdx.length + capIdx.length);
   order.fill(1, skinIdx.length);
-  mesh.userData.local = { tris: P, mats: order };
+  mesh.userData.local = { tris: P, mats: order, uvs: U };
   return mesh;
 }
 
@@ -189,13 +200,13 @@ export class Pieces {
 
   // world-space triangles of an existing piece
   bake(piece) {
-    const { tris, mats } = piece.mesh.userData.local;
+    const { tris, mats, uvs } = piece.mesh.userData.local;
     piece.mesh.updateMatrixWorld(true);
     const w = new Float32Array(tris.length);
     for (let i = 0; i < tris.length / 3; i++) {
       _v.fromArray(tris, i * 3).applyMatrix4(piece.mesh.matrixWorld).toArray(w, i * 3);
     }
-    return { tris: w, mats };
+    return { tris: w, mats, uvs };
   }
 
   cutPiece(piece, plane) {

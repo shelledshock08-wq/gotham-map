@@ -27,7 +27,7 @@ const result = await esbuild.build({
 const code = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 
 const assets = {};
-for (const f of ['assets/models/jason.glb', 'assets/models/dummy.glb']) {
+for (const f of ['assets/models/jason.glb', 'assets/models/dummy.glb', ...fs.readdirSync(path.join(root, 'assets/models/enemies')).map((n) => `assets/models/enemies/${n}`)]) {
   assets[f] = fs.readFileSync(path.join(root, f)).toString('base64');
 }
 

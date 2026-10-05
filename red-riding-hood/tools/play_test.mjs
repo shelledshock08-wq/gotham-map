@@ -111,7 +111,8 @@ await page.keyboard.down('KeyF'); await step(0.15);
 await click('right'); await step(0.1); await page.keyboard.up('KeyF');
 await step(0.15); await shot('zandatsu');
 await step(1.2); await shot('after_zandatsu');
-// pistol
+// pistol: quick shot, then aimed
+await page.keyboard.press('KeyQ'); await step(0.05); await shot('quick_shot'); await step(0.6);
 await page.keyboard.down('KeyQ'); await step(0.4); await click('left'); await step(0.03); await shot('pistol');
 await page.keyboard.up('KeyQ'); await step(1.5);
 // let the waves play out a bit with Jason idle (enemies attack him)

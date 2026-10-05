@@ -210,12 +210,34 @@ export class Player {
     if (this.lockT?.alive === false) this.lockT = this.ctx.enemies.pick(this.pos, this.fwd(), 15);
 
     if (input.hit('KeyC', 'pad:crouch')) this.crouch = !this.crouch;
-    if (input.hit('KeyX')) this.walkMode = !this.walkMode;
-    if (input.hit('KeyT', 'Mouse1', 'pad:lock')) {
+    if (input.hit('Mouse1', 'pad:lock')) {
       this.lockT = this.lockT ? null : this.ctx.enemies.pick(this.pos, cf, 18);
     }
     const L = input.hit('Mouse0', 'pad:attack');
-    const H = input.hit('Mouse2', 'pad:heavy');
+    // heavy: a tap is a heavy attack (on release), holding it launches;
+    // in the air a press slams down straight away
+    const heavyDown = input.mouse.right || !!input.padNow?.heavy;
+    let H = false;
+    this.launchNow = false;
+    if (!this.onGround && input.hit('Mouse2', 'pad:heavy')) { H = true; this.hUsed = true; }
+    if (this.onGround && input.hit('Mouse2', 'pad:heavy') && !heavyDown) H = true; // tapped within one frame
+    else if (heavyDown) {
+      this.hT = this.hT >= 0 ? this.hT + dt : 0;
+      if (this.hT >= 0.26 && !this.hUsed && this.onGround) { this.launchNow = true; this.hUsed = true; }
+    } else {
+      if (this.hT >= 0 && !this.hUsed) H = true;
+      this.hT = -1; this.hUsed = false;
+    }
+    // pistol: tap Q = quick auto-aimed shot, hold Q = aim
+    if (input.held('KeyQ') || input.padNow?.aim) this.qT = (this.qT || 0) + dt; else {
+      if (this.qT > 0 && this.qT < 0.25 && this.state !== 'aim') this.quickShot();
+      this.qT = 0;
+    }
+    if (this.ammo <= 0 && !this.reloadT) { this.reloadT = 1.1; sfx.click(); }
+    if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) { this.reloadT = 0; this.ammo = 12; sfx.click(); } }
+    if (this.gunOutT > 0) { this.gunOutT -= dt; if (this.gunOutT <= 0 && this.state !== 'aim') this.holsterGun(); }
+    if (input.hit('pad:fire') && this.state !== 'aim') this.quickShot();
+    if (this.launchNow && (this.state === 'move' || this.state === 'attack') && !this.crouch) { this.chain = null; this.doMove('LLH'); }
 
     switch (this.state) {
       case 'move': this.updateMove(dt, input, dir, moving, mv, L, H); break;
@@ -266,8 +288,6 @@ export class Player {
   // ------------------------------------------------------------ movement
   updateMove(dt, input, dir, moving, mv, L, H) {
     if (L && this.tryParry()) return;
-    const backHeavy = H && mv.y < -0.5 && !this.crouch;
-    if (backHeavy && (this.lockT || this.ctx.enemies.pick(this.pos, this.fwd(), 4))) { this.chain = null; return this.doMove('LLH'); }
     // a press shortly after a move ends still continues the string
     if (this.chain && (L || H)) {
       const nid = MOVES[this.chain.id].next?.[L ? 'L' : 'H'];
@@ -283,10 +303,10 @@ export class Player {
       if (H && back) return this.doMove('LLH');
       return this.doMove(L ? 'L1' : 'H1');
     }
-    if (input.hit('KeyZ', 'pad:roll')) return this.dodge(dir, moving);
+    if (input.hit('KeyE', 'KeyZ', 'pad:roll')) return this.dodge(dir, moving);
     if (input.hit('Space', 'pad:jump')) return this.jump(dir, moving, ninja);
     if ((input.held('KeyF') || input.padNow?.blade) && this.focus > 5) return this.enterBlade();
-    if (input.aim || input.hit('KeyG')) return this.enterAim();
+    if (this.qT >= 0.25) return this.enterAim();
 
     const near = this.ctx.enemies.alive.some((e) => e.pos.distanceTo(this.pos) < 12);
     let clip, speed;
@@ -312,6 +332,7 @@ export class Player {
       if (box && box.max.y - this.pos.y < 1.6) { this.vault(box); return; }
     }
     const rate = speed > 0 && this.speeds[clip] ? this.curSpeed / this.speeds[clip] : 1;
+    if (this.gunOutT > 0) { this.playLayered(moving ? 'Walk' : 'Idle_A', 'Pistol_Aim_Neutral'); return; }
     this.play(clip, { speed: THREE.MathUtils.clamp(rate, 0.7, 2.2), fade: 0.16 });
     this.footsteps(clip);
   }
@@ -371,7 +392,7 @@ export class Player {
     if (L && this.tryParry()) return;
     if (L) return this.doMove('AL1');
     if (H) return this.startPlunge();
-    if (input.hit('KeyZ', 'pad:roll')) this.dodge(dir, moving);
+    if (input.hit('KeyE', 'KeyZ', 'pad:roll')) this.dodge(dir, moving);
   }
 
   // ------------------------------------------------------------ attacks
@@ -411,7 +432,7 @@ export class Player {
     if (H && M.layer === 'air') return this.startPlunge();
     if ((this.ctx.input.held('KeyF') || this.ctx.input.padNow?.blade) && this.focus > 5 && k > 0.2) { this.move = null; return this.enterBlade(); }
     if ((L || H) && k > 0.12) m.queued = L ? 'L' : 'H';
-    if (input.hit('KeyZ', 'pad:roll') && k > 0.25) return this.dodge(dir, moving);
+    if (input.hit('KeyE', 'KeyZ', 'pad:roll') && k > 0.25) return this.dodge(dir, moving);
     // slide toward the target (magnetism) and the move's own travel
     const firstHit = m.hits[0]?.t || m.dur * 0.4;
     if (m.target?.alive && m.t < firstHit) {
@@ -518,8 +539,8 @@ export class Player {
     for (const e of E.threats(0.34)) {
       if (e.attack.parried) continue;
       const to = e.pos.clone().sub(this.pos).setY(0).normalize();
-      const toward = this.inputDir ? this.inputDir.dot(to) > 0.35 : (this.lockT === e || this.fwd().dot(to) > 0.6);
-      if (!toward) continue;
+      // simplified: any enemy close by whose red-glint attack is landing
+      if (e.pos.distanceTo(this.pos) > 4) continue;
       if (!e.attack.A.parry) continue; // yellow glint: can't be parried
       e.attack.parried = true;
       e.attack.perfect = e.nextImpact() <= 0.13;
@@ -742,18 +763,49 @@ export class Player {
   }
 
   // ------------------------------------------------------------ pistol
+  // tap Q: draw, snap to the nearest enemy in view and fire
+  quickShot() {
+    if (!['move', 'attack', 'air', 'land'].includes(this.state) || this.ammo <= 0 || this.reloadT > 0) { if (this.ammo <= 0) sfx.click(); return; }
+    const cam = this.ctx.cam;
+    const cf = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+    const e = this.lockT?.alive ? this.lockT : this.ctx.enemies.pick(this.pos, cf, 30);
+    this.pistol.visible = true; this.knife.visible = false;
+    if (this.holsterGrip) this.holsterGrip.visible = false;
+    this.gunOutT = 0.6;
+    this.recoil = 1;
+    this.ammo--;
+    sfx.shot();
+    const muzzle = this.pistol.userData.muzzle.getWorldPosition(v3());
+    this.ctx.fx.muzzle(muzzle);
+    cam.shake(0.08);
+    if (e) {
+      this.yaw = Math.atan2(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
+      const to = e.chest();
+      this.ctx.fx.tracer(muzzle, to);
+      const r = e.takeHit({ dmg: 9, react: 'light', from: this.pos.clone() });
+      if (r !== 'blocked' && r !== 'miss') this.addHit(25);
+    } else {
+      this.ctx.fx.tracer(muzzle, muzzle.clone().addScaledVector(cf, 30));
+    }
+    if (this.state === 'move') this.playLayered(this.curSpeed > 0.5 ? 'Walk' : 'Idle_A', 'Pistol_Aim_Neutral');
+  }
+
+  holsterGun() {
+    this.pistol.visible = false; this.knife.visible = true;
+    if (this.holsterGrip) this.holsterGrip.visible = true;
+    if (this.state === 'move') this.clearLayers();
+  }
+
   enterAim() {
     this.state = 'aim';
     this.pistol.visible = true;
     this.knife.visible = false;
     if (this.holsterGrip) this.holsterGrip.visible = false;
-    this.aimToggle = this.ctx.input.hit('KeyG') ? true : this.aimToggle;
     sfx.draw();
   }
 
   exitAim() {
     this.state = 'move';
-    this.aimToggle = false;
     this.pistol.visible = false;
     this.knife.visible = true;
     if (this.holsterGrip) this.holsterGrip.visible = true;
@@ -766,9 +818,8 @@ export class Player {
   get aiming() { return this.state === 'aim'; }
 
   updateAim(dt, input, dir, moving, mv) {
-    if (input.hit('KeyG')) this.aimToggle = !this.aimToggle;
-    if (!input.aim && !this.aimToggle) return this.exitAim();
-    if (input.hit('KeyZ', 'pad:roll')) { this.exitAim(); return this.dodge(dir, moving); }
+    if (!(input.held('KeyQ') || input.padNow?.aim)) return this.exitAim();
+    if (input.hit('KeyE', 'KeyZ', 'pad:roll')) { this.exitAim(); return this.dodge(dir, moving); }
     const cam = this.ctx.cam;
     this.yaw = cam.yaw;
     let leg = 'Idle_A';
@@ -792,14 +843,14 @@ export class Player {
     }
     if (!reloading && reload.isRunning()) reload.stop();
     if (input.hit('Mouse0', 'pad:fire') && !reloading) this.fire();
-    if (input.hit('KeyR', 'pad:reload') && !reloading && this.ammo < 12) {
+    if (false) {
       reload.reset().play(); reload.setEffectiveWeight(1); reload.timeScale = 1.6;
       sfx.click(); setTimeout(() => { this.ammo = 12; sfx.click(); }, 1100);
     }
   }
 
   fire() {
-    if (this.ammo <= 0) { sfx.click(); return; }
+    if (this.ammo <= 0 || this.reloadT > 0) { sfx.click(); return; }
     this.ammo--;
     this.recoil = 1;
     sfx.shot();
@@ -826,7 +877,7 @@ export class Player {
   }
 
   postPose(dt) {
-    if (this.recoil > 0 && this.state === 'aim') {
+    if (this.recoil > 0 && this.pistol.visible) {
       this.bones.lowerarm_r.rotateX(-0.25 * this.recoil);
       this.bones.hand_r.rotateX(-0.35 * this.recoil);
       this.recoil = Math.max(0, this.recoil - dt * 9);

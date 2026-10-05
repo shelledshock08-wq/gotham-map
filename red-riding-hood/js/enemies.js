@@ -31,11 +31,20 @@ const ATTACKS = {
   scratch: { clip: 'Zombie_Scratch', speed: 1.3, dmg: 14, range: 2.2, parry: true },
 };
 
+// models: CC0 characters by elbolilloduro (via Mesh2Motion), already rigged
+// to the same skeleton as the animations. pelvis = hip height vs the
+// mannequin the clips were made on (Mesh2Motion's pelvisPositionScale).
+export const VARIANTS = {
+  male_6: 1, male_10: 1, male_15: 1, male_32: 1,
+  killer_4: 1.02, killer_5: 1.05, killer_6: 1.05,
+  swat_male: 1, monster: 1.37,
+};
+
 const TYPES = {
-  brawler: { hp: 42, run: 6.8, color: 0x8d877f, attacks: ['jab', 'cross', 'hook', 'kick', 'shove'], block: 0.2, dodge: 0.12, guard: 'Defend', bp: 100 },
-  blade: { hp: 55, run: 7.0, color: 0x47434a, weapon: 'machete', attacks: ['slashA', 'slashB', 'slashC', 'overhead', 'lunge'], block: 0.3, dodge: 0.18, guard: 'Sword_Block', stance: 'Idle_Sword', bp: 150 },
-  gunner: { hp: 34, run: 6.2, color: 0x5d6852, weapon: 'pistol', attacks: ['shoot', 'shove'], ranged: true, block: 0.05, dodge: 0.3, guard: 'Defend', bp: 120 },
-  brute: { hp: 170, run: 5.2, color: 0x3a3532, scale: 1.24, attacks: ['pound', 'charge', 'haymaker', 'scratch'], armor: true, block: 0, dodge: 0, guard: 'Defend', bp: 400 },
+  brawler: { hp: 42, run: 6.8, models: ['male_6', 'male_10', 'male_15', 'male_32'], attacks: ['jab', 'cross', 'hook', 'kick', 'shove'], block: 0.2, dodge: 0.12, guard: 'Defend', bp: 100 },
+  blade: { hp: 55, run: 7.0, models: ['killer_4', 'killer_5', 'killer_6'], weapon: 'machete', attacks: ['slashA', 'slashB', 'slashC', 'overhead', 'lunge'], block: 0.3, dodge: 0.18, guard: 'Sword_Block', stance: 'Idle_Sword', bp: 150 },
+  gunner: { hp: 34, run: 6.2, models: ['swat_male'], weapon: 'pistol', attacks: ['shoot', 'shove'], ranged: true, block: 0.05, dodge: 0.3, guard: 'Defend', bp: 120 },
+  brute: { hp: 170, run: 5.2, models: ['monster'], scale: 1.32, attacks: ['pound', 'charge', 'haymaker', 'scratch'], armor: true, block: 0, dodge: 0, guard: 'Defend', bp: 400 },
 };
 
 const LOOP = new Set(['Idle_A', 'Fighting Idle', 'Idle_Sword', 'Walk', 'Jog', 'Sprint', 'Strafe_left', 'Strafe_right',
@@ -56,16 +65,15 @@ class Enemy {
     this.kind = kind;
     this.T = TYPES[kind];
     this.root = new THREE.Group();
-    this.model = skClone(mgr.gltf.scene);
-    const s = this.T.scale || 1;
-    this.model.scale.setScalar(s);
+    this.variant = this.T.models[Math.floor(Math.random() * this.T.models.length)];
+    this.model = skClone(mgr.models[this.variant].scene);
     this.mat = null;
     this.model.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = o.receiveShadow = true; o.frustumCulled = false;
-        o.material = o.material.clone();
-        o.material.color.setHex(this.T.color);
-        o.material.roughness = 0.7;
+        o.material = o.material.clone(); // own copy for the hit flash
+        o.material.roughness = Math.max(o.material.roughness, 0.6);
+        o.material.metalness = 0;
         this.mat = o.material;
       }
     });
@@ -78,7 +86,7 @@ class Enemy {
     if (this.T.weapon === 'pistol') this.weapon = attachToHand(this.model, makePistol(), 'gun');
     this.mixer = new THREE.AnimationMixer(this.model);
     this.actions = {};
-    for (const [name, clip] of Object.entries(mgr.clips)) {
+    for (const [name, clip] of Object.entries(mgr.clipsFor(this.variant))) {
       const a = this.mixer.clipAction(clip);
       if (!LOOP.has(name)) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
       this.actions[name] = a;
@@ -354,7 +362,7 @@ class Enemy {
     const colliders = this.mgr.arena.colliders;
     if (this.flashT > 0) {
       this.flashT -= dt;
-      this.mat.emissive.setHex(this.flashT > 0 ? 0x661010 : 0x000000);
+      this.mat.emissive.setHex(this.flashT > 0 ? 0x2a0606 : 0x000000);
     }
     // momentum from hits
     if (this.push.lengthSq() > 1e-4) {
@@ -529,9 +537,12 @@ class Enemy {
 }
 
 export class Enemies {
-  constructor(gltf, ctx) {
+  // gltf: the animation library (mannequin); models: { variant: gltf }
+  constructor(gltf, models, ctx) {
     this.ctx = ctx;
     this.gltf = gltf;
+    this.models = models;
+    this.variantClips = {};
     this.fx = ctx.fx;
     this.pieces = ctx.pieces;
     this.arena = ctx.arena;
@@ -555,6 +566,28 @@ export class Enemies {
       const clip = this.clips[A.clip];
       this.strikes[A.clip] = A.ranged ? [0.12] : strikeTimes(tmp, mixer, clip, { from: 0.15, to: 0.85, count: A.hits || 1, gap: 0.2 });
     }
+  }
+
+  // the library clips fitted to one character: rotations only (each model
+  // keeps its own proportions), hips scaled to its height
+  clipsFor(variant) {
+    if (this.variantClips[variant]) return this.variantClips[variant];
+    const k = VARIANTS[variant] || 1;
+    const out = {};
+    for (const [name, clip] of Object.entries(this.clips)) {
+      const tracks = [];
+      for (const t of clip.tracks) {
+        if (t.name.endsWith('.quaternion')) tracks.push(t);
+        else if (t.name === 'pelvis.position' || t.name === 'root.position') {
+          const v = t.values.slice();
+          for (let i = 0; i < v.length; i++) v[i] *= k;
+          tracks.push(new THREE.VectorKeyframeTrack(t.name, t.times, v));
+        }
+      }
+      out[name] = new THREE.AnimationClip(name, clip.duration, tracks);
+    }
+    this.variantClips[variant] = out;
+    return out;
   }
 
   // attack tokens: at most two melee attackers at once (the brute counts double)

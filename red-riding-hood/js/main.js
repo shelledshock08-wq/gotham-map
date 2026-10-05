@@ -9,7 +9,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { buildArena, groundAt } from './arena.js';
 import { Player } from './player.js';
-import { Enemies } from './enemies.js';
+import { Enemies, VARIANTS } from './enemies.js';
 import { CameraRig } from './camera.js';
 import { Input } from './input.js';
 import { FX } from './fx.js';
@@ -109,8 +109,11 @@ const load = (url) => new Promise((res, rej) => {
 });
 
 let player, enemies, running = false;
-Promise.all([load('assets/models/jason.glb'), load('assets/models/dummy.glb')]).then(([jg, eg]) => {
-  ctx.enemies = enemies = new Enemies(eg, ctx);
+const variantNames = Object.keys(VARIANTS);
+Promise.all([load('assets/models/jason.glb'), load('assets/models/dummy.glb'),
+  ...variantNames.map((v) => load(`assets/models/enemies/${v}.glb`))]).then(([jg, eg, ...vg]) => {
+  const models = Object.fromEntries(variantNames.map((v, i) => [v, vg[i]]));
+  ctx.enemies = enemies = new Enemies(eg, models, ctx);
   ctx.player = player = new Player(jg, scene, ctx);
   cam.yaw = player.yaw;
   $('loading').classList.add('hidden');

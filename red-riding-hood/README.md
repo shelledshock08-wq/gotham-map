@@ -29,28 +29,23 @@ Speeds: Jason runs at 7.5 m/s and Ninja Runs at 13 m/s. Attacks play at 1.3–2.
 
 | Input | Action |
 |---|---|
-| WASD / Mouse | move (camera relative) / look (click locks the mouse) |
-| Left click | light attack. **Pushing toward an enemy as his attack lands = parry** |
-| Right click | heavy attack |
-| Strings | L L L L · H H H · L H · L L H (launcher). Back + H is also a launcher; hold H (or press Space) to jump after him |
-| Red glint | parryable. Parry right before impact = **perfect parry**: slow-mo, automatic counter, enemy stunned |
-| Yellow glint | can't be parried (brute ground pound and charge, machete overhead): dodge or jump |
-| Hold F | **Blade Mode**: the world slows to 6%, swipe the mouse to angle the cut, left click cuts along it, right click cuts across it. Bodies, corpses and pieces really split along the plane and can be cut again |
-| Blue glow | stunned enemy (low health, perfect parry, or broken brute armour). Cut through the glow in Blade Mode = **Zandatsu**: +50 health, full Blade Mode gauge |
-| Hold Shift | Ninja Run: vaults crates automatically, deflects bullets coming from the front. Ninja Run + L = dash stab, + H = shoulder charge |
-| Space | jump. In the air: L = 4-hit air combo with hang time (juggles), R = plunge slam with shockwave |
-| C | crouch. Crouched: L = low slash string, R = slide tackle |
-| Z | dodge (direction keys choose: roll, side step, back step), with invincibility frames |
-| T / middle click | lock-on (enemy health over the target) |
-| Q (hold) / G | pistol: left click fires, R reloads. Head shots stagger |
+| WASD · Mouse | move · look (click locks the mouse) |
+| Left click | attack; keep clicking for combos. **Red glint on an enemy: attack = parry** (right before the hit = perfect parry with counter) |
+| Right click | heavy attack. **Hold** = launcher (keep holding to jump after him). In the air = plunge slam |
+| Shift | Ninja Run (vaults crates, deflects bullets; attack while running = dash stab / charge) |
+| Space | jump; click in the air for the air combo |
+| E | dodge. **Yellow glint** = can't be parried, dodge it |
+| F (hold) | **Blade Mode**: move the mouse to aim the cut, click to cut (right click cuts across). **Blue glow** = cut it for **Zandatsu** |
+| Q | shoot: tap = auto-aimed quick shot, hold = aim and click. Reloads by itself |
+| C | crouch; crouched attacks are low slashes and a slide tackle |
 | H | show / hide controls |
-| Gamepad | X light, Y heavy, A jump, B dodge, RB Ninja Run, LB Blade Mode (right stick angles the cut), R3 lock-on, L3 crouch, LT/RT pistol |
+| Gamepad | X attack · Y heavy (hold = launch) · A jump · B dodge · RB Ninja Run · LB Blade Mode · RT shoot · LT aim · L3 crouch |
 
-**Enemies** come in endless waves (placeholder mannequins, tinted by type):
-- **Brawler:** jab, cross, hook, kick, shove; blocks some light hits.
-- **Blade thug (machete):** three slashes, a lunge, and an unparryable overhead.
-- **Gunman:** keeps 7–11 m away and strafes; bullets can be parried, deflected by Ninja Run, or cut in Blade Mode.
-- **Brute:** bigger, armoured (light hits don't stagger him), with a ground pound and a charge (both yellow) and a parryable haymaker. Break his poise with heavy hits and parries.
+**Enemies** come in endless waves. They use free CC0 character models by elbolilloduro, from the [Mesh2Motion](https://github.com/scottpetrovic/mesh2motion-app) library and already rigged to the same skeleton as the animations:
+- **Brawler** (street thugs `male_6/10/15/32`): jab, cross, hook, kick, shove; blocks some light hits.
+- **Blade thug** (masked killers `killer_4/5/6`, with a machete): three slashes, a lunge, and an unparryable overhead.
+- **Gunman** (`swat_male`, balaclava): keeps 7–11 m away and strafes; bullets can be parried, deflected by Ninja Run, or cut in Blade Mode.
+- **Brute** (`monster`, a pale feral man): bigger, armoured (light hits don't stagger him), with a ground pound and a charge (both yellow) and a parryable haymaker. Break his poise with heavy hits and parries.
 
 At most two of them attack at once. They block (heavy attacks break guard), dodge, brace while you combo them, stagger, get knocked down and get up, fly when launched, and die by animation chosen from how they were hit (four death clips, knockback flips, falls from the air). Bodies stay with spreading blood pools. HUD: health, Blade Mode gauge, hit counter, Battle Points, wave.
 
@@ -75,7 +70,7 @@ At most two of them attack at once. They block (heavy attacks break guard), dodg
 
 **Placeholder (for testing only, not story content):**
 - **The warehouse arena.** No story location is decided; Japan, Nanda Parbat, Hawaii and Texas are still open.
-- **The enemies' look.** They're the stock Mesh2Motion mannequin, tinted per type. Their behaviour and moves are real; their models are not.
+- **The enemy models.** They're free CC0 stand-ins, low-poly with photo textures, until there are designed characters. I left out `killer_7` (a clown mask) because of the brief's Joker exclusion.
 - **The knife and pistol geometry.** It is simple: the knife follows the wavy UTRH blade from ref 2; the pistol is generic.
 - **Sound.** All of it is synthesised in the browser. No music is included.
 
@@ -117,7 +112,17 @@ npm install && node tools/play_test.mjs # optional: scripted play-test screensho
 ## Sources and licences
 
 - **Body:** [MakeHuman / MPFB2](https://github.com/makehumancommunity/mpfb2) assets — CC0.
+- **Enemy models:** elbolilloduro and Quaternius characters via Mesh2Motion — CC0 (licences listed in Mesh2Motion's `src/lib/RigModelVariations.ts`).
 - **Skeleton and animations:** [Mesh2Motion](https://github.com/scottpetrovic/mesh2motion-app) — art assets CC0, code MIT.
 - **Engine:** [three.js](https://threejs.org) r186 — MIT (`vendor/three/LICENSE`).
 - **Textures, sounds, suit, arena:** generated by the scripts in this folder.
 - Red Hood, Jason Todd and Under the Red Hood belong to DC. This is a non-commercial fan project.
+
+## Why Jason is still the custom model
+
+I searched for a free Red Hood model to use instead (October 2026). There is no free, full-body, rigged one:
+- The rigged Red Hood models are paid: [CGTrader](https://www.cgtrader.com/3d-models/character/man/red-hood), [Sketchfab Store](https://sketchfab.com/3d-models/red-hood-character-rig-67bf19ea651140148ba2d4bffbe5ce3e), [RenderHub](https://www.renderhub.com/billnguyen1411/red-hood-character-rig).
+- The free ones are helmets only. [RockitStorm's helmet](https://sketchfab.com/3d-models/red-hood-helmet-and-weapon-models-89a03c6a0c5942c08a488228b6a9dd5f) is CC-BY but marked NoAI, so I did not process it.
+- "Free" sites like [assetsfree.com](https://assetsfree.com/red-hood-10/) host ripped game models, which can't be redistributed.
+
+Sketchfab is also blocked from the build environment. If you buy or download a rigged Red Hood you have the rights to use, drop the file in and it can be swapped in.
