@@ -1,0 +1,104 @@
+# Red Riding Hood — Milestone 1
+
+Unofficial, non-commercial Jason Todd fan game. This folder is **milestone 1: a playable movement and combat test**. It is not the full game. It proves the pipeline the rest of the game will use: a realistic, rigged, animated Jason in the main Under the Red Hood suit, controlled in third person in a real-time 3D scene.
+
+![model](docs/milestone1/model_turnaround.jpg)
+
+| | |
+|---|---|
+| ![title](docs/milestone1/title.jpg) | ![knife](docs/milestone1/knife_finisher.jpg) |
+| ![kick](docs/milestone1/kick_knockdown.jpg) | ![aim](docs/milestone1/pistol_aim.jpg) |
+| ![roll](docs/milestone1/roll.jpg) | ![helmet](docs/milestone1/helmet_closeup.jpg) |
+
+## Run it
+
+ES modules need a web server (opening `index.html` from disk will not work):
+
+```sh
+cd red-riding-hood
+node tools/serve.mjs        # then open http://localhost:8080
+```
+
+Any static server works (`python3 -m http.server 8080` too). Nothing is downloaded at runtime: three.js is vendored in `vendor/three/`. `?q=low` lowers the render quality for weak machines. `viewer.html` is a model and animation viewer for checking the character.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| WASD | move (camera relative) |
+| Mouse | look (click to lock the pointer) |
+| Shift | sprint |
+| X | walk / jog toggle |
+| C | crouch toggle (Shift while crouched = stealth run) |
+| Space | jump (crates are climbable) |
+| Left click | knife combo, click again to chain (3 hits, the last one lunges) |
+| F | kick |
+| E | roll / dodge (forward = roll; back, left or right = dodge that way) |
+| Q | turn around in place (also automatic when you reverse from standing) |
+| Right mouse (hold) or G | draw and aim the pistol from the thigh holster; left click fires |
+| R | reload |
+| H | show / hide controls |
+| Gamepad | sticks; A jump, X knife, Y kick, B roll, LT aim, RT fire, L3 sprint, R3 crouch |
+
+## What is real and what is placeholder
+
+**Real (meant to carry forward):**
+- **Jason's model** (`assets/models/jason.glb`). A MakeHuman body built here from its CC0 data, wearing the main UTRH suit modelled from refs 1–3:
+  - smooth red helmet with angled white lenses and dark surrounds
+  - grey high-neck zipped under-layer with darker chest and ab plates
+  - cropped dark leather jacket with a standing collar, open at the front
+  - belt with a rectangular buckle
+  - black trousers bloused into boots with grey straps and soles
+  - gloves with grey cuffs and back plates
+  - right-thigh holster with a pistol grip, and a knife sheath on the left hip
+  - **no bat emblem anywhere**
+- **Rig and 54 animations** on Jason's own skeleton (from the Mesh2Motion CC0 library): idle, walk, jog, sprint, crouch, stealth, strafes, turns, rolls, dodges, jumps, knife/sword combos, punches, kick, pistol aim/shoot/reload, hit reactions, deaths.
+- **The third-person controller.** Clip speed is matched to each animation's measured foot speed, so there is no foot sliding. It also has turn-in-place driven by the clip's own rotation, a combo system with hit windows, hit-stop and camera shake, the pistol drawn from the holster with an upper-body aim layer and recoil, jumping onto crates, and a wall-aware camera.
+- **The build pipeline.** Everything is regenerated from scripts (see below), so the model can be changed and rebuilt in about 40 seconds.
+
+**Placeholder (for testing only, not story content):**
+- **The warehouse arena.** No story location is decided; Japan, Nanda Parbat, Hawaii and Texas are still open.
+- **The training dummies.** These are the stock Mesh2Motion mannequin; two of them spar back.
+- **The knife and pistol geometry.** It is simple: the knife follows the wavy UTRH blade from ref 2; the pistol is generic.
+- **Sound.** All of it is synthesised in the browser. No music is included.
+
+**My provisional choices (not from the brief, change freely):**
+- Body: age set to read about 21 (the brief says "19?"), height 1.855 m, athletic. These are parameters in `tools/mh_body.py`.
+- The key bindings and the decision to use Mesh2Motion's sword clips for the knife.
+- The weapon handling in this test: knife on the mouse, gun on aim. **This does not decide the weapon-switching question in the brief.**
+
+## Honest limits of this milestone
+
+- It is **realistic-proportioned, not photoreal**. The suit is generated from the body surface, so it has no cloth simulation and no sculpted wrinkles. Detail comes from normal maps.
+- **Only the masked look is done.** The unmasked face (ref 3), the alternate suits and the civilian outfits are not modelled yet. The bare body is still in `build/jason.blend` for that work.
+- The animations are general-purpose library clips, not custom Jason mocap. Zandatsu, parry, progression, story, choices and saving are **not implemented**. They are the next milestones.
+- The automated test renders in software (SwiftShader), so **real-GPU frame rate has not been measured**.
+
+## Rebuild the model
+
+```sh
+pip install bpy==4.5.4 scipy pillow     # Blender as a Python module, no Blender install needed
+sh tools/fetch_sources.sh               # CC0 source data -> .sources/ (git only)
+python3 tools/build_jason.py            # -> assets/models/jason.glb (+ build/jason.blend)
+python3 tools/build_dummy.py            # -> assets/models/dummy.glb
+npm install && node tools/play_test.mjs # optional: scripted play-test screenshots -> build/play/
+```
+
+| File | What it does |
+|---|---|
+| `tools/mh_body.py` | MakeHuman hm08 base mesh + age/gender/muscle/height targets, joints, skin weights |
+| `tools/rig_body.py` | bends the body into the Mesh2Motion T-pose (limbs only) |
+| `tools/build_jason.py` | fits the Mesh2Motion skeleton to Jason, keeps every bone's orientation so the clips play unchanged, exports the GLB |
+| `tools/suit.py` | the suit, every piece generated from the body surface (shells, bands, hull-built helmet and boots) |
+| `tools/materials.py` | PBR materials with textures generated in numpy (leather, twill, knit, brushed metal, tread, paint) |
+| `js/player.js` | controller, animation state machine, knife, pistol |
+| `js/arena.js`, `js/textures.js` | placeholder arena with procedural concrete, corrugated steel, wood and painted steel |
+| `js/dummies.js` | placeholder training dummies |
+
+## Sources and licences
+
+- **Body:** [MakeHuman / MPFB2](https://github.com/makehumancommunity/mpfb2) assets — CC0.
+- **Skeleton and animations:** [Mesh2Motion](https://github.com/scottpetrovic/mesh2motion-app) — art assets CC0, code MIT.
+- **Engine:** [three.js](https://threejs.org) r186 — MIT (`vendor/three/LICENSE`).
+- **Textures, sounds, suit, arena:** generated by the scripts in this folder.
+- Red Hood, Jason Todd and Under the Red Hood belong to DC. This is a non-commercial fan project.

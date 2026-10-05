@@ -1,0 +1,19 @@
+{
+  "name": "red-riding-hood",
+  "version": "0.1.0",
+  "description": "Red Riding Hood - unofficial non-commercial Jason Todd fan game (milestone 1: movement & combat test)",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "fetch-sources": "sh tools/fetch_sources.sh",
+    "build:models": "python3 tools/build_jason.py && python3 tools/build_dummy.py",
+    "vendor": "node tools/vendor_three.mjs",
+    "test:play": "node tools/play_test.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0",
+    "three": "^0.186.1"
+  }
+}
