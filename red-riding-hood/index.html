@@ -38,6 +38,39 @@
   #help table { border-collapse: collapse; }
   #help td { padding: 1px 0; vertical-align: top; }
   #help td:first-child { color: #fff; padding-right: 12px; white-space: nowrap; }
+  #help { max-height: calc(100vh - 140px); overflow: hidden; }
+  /* combat HUD */
+  #bars { position: absolute; left: 18px; top: 16px; width: min(340px, 60vw); }
+  #bars .name { font: 700 13px Georgia, serif; letter-spacing: .25em; margin-bottom: 4px; }
+  .bar { height: 9px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25); margin-bottom: 4px; transform: skewX(-20deg); }
+  .bar div { height: 100%; transition: width .12s; }
+  #hpfill { background: linear-gradient(90deg, #7d0d0d, #e0342a); }
+  #focusfill { background: linear-gradient(90deg, #1b5f9a, #8fdcff); height: 5px; }
+  #focusbar { height: 5px; width: 82%; }
+  #wave { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font: 700 14px Georgia, serif; letter-spacing: .3em; color: var(--dim); }
+  #bp { position: absolute; right: 22px; top: 16px; font: 700 18px Georgia, serif; letter-spacing: .1em; }
+  #combo { position: absolute; right: 26px; top: 38%; text-align: right; font: italic 700 15px Georgia, serif; letter-spacing: .2em; }
+  #combonum { display: block; font-size: 54px; line-height: 1; color: #fff; text-shadow: 0 0 18px rgba(255,80,60,.6); }
+  #pops { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; }
+  .pop { font: italic 800 34px Georgia, serif; letter-spacing: .12em; animation: pop 1.3s ease-out forwards; text-shadow: 0 0 20px rgba(0,0,0,.8); }
+  .pop.gold { color: #ffd35a; } .pop.white { color: #fff; } .pop.blue { color: #9fe0ff; } .pop.big { font-size: 64px; }
+  @keyframes pop { 0% { transform: scale(1.6); opacity: 0; } 12% { transform: scale(1); opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
+  #banner { position: absolute; left: 0; right: 0; top: 42%; text-align: center; font: 800 46px Georgia, serif; letter-spacing: .5em; opacity: 0; }
+  #banner.show { animation: banner 2s ease-out; }
+  @keyframes banner { 0% { opacity: 0; letter-spacing: 1em; } 20% { opacity: 1; letter-spacing: .5em; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  #dmg { position: absolute; inset: 0; box-shadow: inset 0 0 160px rgba(200,0,0,.75); opacity: 0; }
+  #dmg.show { animation: dmg .5s ease-out; }
+  @keyframes dmg { 0% { opacity: 1; } 100% { opacity: 0; } }
+  #bladeui { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(40,120,200,0) 30%, rgba(10,40,80,.55) 100%); }
+  #bladeui::before { content: "BLADE MODE"; position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); font: 700 13px Georgia, serif; letter-spacing: .4em; color: #9fe0ff; }
+  #cutline { position: absolute; left: 50%; top: 50%; width: 140vmax; height: 2px; background: linear-gradient(90deg, transparent, rgba(160,225,255,.9) 40%, #fff 50%, rgba(160,225,255,.9) 60%, transparent); box-shadow: 0 0 12px #6cf; }
+  .slashfx { position: absolute; left: 50%; top: 50%; width: 140vmax; height: 6px; background: #fff; box-shadow: 0 0 30px #9ef; animation: slashfx .26s ease-out forwards; }
+  @keyframes slashfx { 0% { opacity: 1; height: 10px; } 100% { opacity: 0; height: 1px; } }
+  #lock { position: absolute; width: 46px; height: 46px; margin: -23px; border: 2px solid rgba(255,60,50,.9); transform: rotate(45deg); }
+  #lockhpbar { position: absolute; left: 50%; top: -22px; width: 70px; height: 4px; margin-left: -35px; background: rgba(0,0,0,.6); transform: rotate(-45deg) translate(0, 0); transform-origin: 50% 0; }
+  #lockhp { height: 100%; background: #e0342a; }
+  #deadscreen { position: fixed; inset: 0; background: rgba(40,0,0,.55); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+  #deadscreen h2 { font: 800 56px Georgia, serif; letter-spacing: .3em; margin: 0; color: #e0342a; }
   @media (max-width: 640px) { #help { left: 16px; right: 16px; max-width: none; top: auto; bottom: 44px; } }
 </style>
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
@@ -47,33 +80,44 @@
 <div id="loading" class="overlay">Loading Jason<div id="bar"><div id="progress"></div></div></div>
 <div id="title" class="overlay hidden">
   <h1>Red <span>Riding</span> Hood</h1>
-  <div class="sub">Milestone 1 · movement &amp; combat test</div>
-  <p>Jason in the Under the Red Hood suit. The warehouse and the training dummies are placeholders for testing,
-    not story content.</p>
+  <div class="sub">Combat test · Metal Gear Rising style</div>
+  <p>Jason in the Under the Red Hood suit against endless waves. The warehouse and the mannequin enemies are
+    placeholders for testing, not story content.</p>
   <button id="play">Play</button>
 </div>
 <div id="hud" class="hidden">
-  <div id="tag">Milestone 1 · placeholder arena</div>
+  <div id="bars"><div class="name">JASON</div><div class="bar"><div id="hpfill"></div></div><div class="bar" id="focusbar"><div id="focusfill"></div></div></div>
+  <div id="wave"></div>
+  <div id="bp"></div>
+  <div id="combo" class="hidden"><span id="combonum">0</span>HITS</div>
+  <div id="pops"></div>
+  <div id="banner"></div>
+  <div id="dmg"></div>
+  <div id="bladeui" class="hidden"><div id="cutline"></div></div>
+  <div id="lock" class="hidden"><div id="lockhpbar"><div id="lockhp"></div></div></div>
   <div id="crosshair" class="hidden"></div>
   <div id="ammo" class="hidden"></div>
   <div id="state"></div>
 </div>
+<div id="deadscreen" class="hidden"><h2>YOU DIED</h2><p>Click or press Enter to get back up</p></div>
 <div id="help" class="hidden">
   <b>Controls</b> <span style="color:#9a958d">(H to hide)</span>
   <table>
-    <tr><td>WASD</td><td>move (camera relative)</td></tr>
-    <tr><td>Mouse</td><td>look (click to lock the mouse)</td></tr>
-    <tr><td>Shift</td><td>sprint</td></tr>
-    <tr><td>X</td><td>walk / jog toggle</td></tr>
-    <tr><td>C</td><td>crouch toggle</td></tr>
-    <tr><td>Space</td><td>jump (crates are climbable)</td></tr>
-    <tr><td>Left click</td><td>knife combo (click again to chain)</td></tr>
-    <tr><td>F</td><td>kick</td></tr>
-    <tr><td>E</td><td>roll / dodge (direction keys pick which)</td></tr>
-    <tr><td>Q</td><td>turn around in place</td></tr>
-    <tr><td>Right mouse (hold) / G</td><td>draw &amp; aim pistol; left click fires</td></tr>
-    <tr><td>R</td><td>reload</td></tr>
-    <tr><td>Gamepad</td><td>sticks, A jump, X knife, Y kick, B roll, LT aim, RT fire, L3 sprint, R3 crouch</td></tr>
+    <tr><td>WASD / Mouse</td><td>move / look (click locks the mouse)</td></tr>
+    <tr><td>Left click</td><td>light attack</td></tr>
+    <tr><td>Right click</td><td>heavy attack</td></tr>
+    <tr><td>Light + toward enemy</td><td><b>parry</b> (red glint). Right before the hit = perfect parry + counter</td></tr>
+    <tr><td>Yellow glint</td><td>can't be parried: dodge (Z) or jump</td></tr>
+    <tr><td>Strings</td><td>L L L L · H H H · L H · L L H (launcher) · back + H (launcher)</td></tr>
+    <tr><td>Hold F</td><td><b>Blade Mode</b>: swipe the mouse to angle the cut, left click cuts, right click cuts across</td></tr>
+    <tr><td>Blue glow</td><td>stunned: cut through it in Blade Mode = <b>Zandatsu</b> (health + full gauge)</td></tr>
+    <tr><td>Hold Shift</td><td>Ninja Run (vaults, deflects bullets); + L dash stab, + H charge</td></tr>
+    <tr><td>Space</td><td>jump; in the air L = air combo, R = plunge. Hold R after a launcher to follow up</td></tr>
+    <tr><td>C</td><td>crouch; crouched L = low slashes, R = slide tackle</td></tr>
+    <tr><td>Z</td><td>dodge</td></tr>
+    <tr><td>T / middle click</td><td>lock-on</td></tr>
+    <tr><td>Q (hold) / G</td><td>pistol; left click fires, R reloads</td></tr>
+    <tr><td>Gamepad</td><td>X light, Y heavy, A jump, B dodge, RB Ninja Run, LB Blade Mode, R3 lock, LT/RT pistol</td></tr>
   </table>
 </div>
 <script type="module" src="js/main.js"></script>

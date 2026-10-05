@@ -1,445 +1,801 @@
-// Jason: third-person controller, animation state machine, knife and pistol.
+// Jason: Metal Gear Rising style controller. Light/heavy strings with
+// cancels, parry (light attack toward the attacker), perfect parry counters,
+// Ninja Run, Blade Mode with free cutting and Zandatsu, air and crouch
+// attacks, dodge, lock-on, the pistol as a sub-weapon.
 import * as THREE from 'three';
-import { extractRootMotion, sampleMotion, splitClip, stripScale } from './anim.js';
-import { makeKnife, makePistol } from './weapons.js';
+import { extractRootMotion, splitClip, stripScale, strikeTimes } from './anim.js';
+import { attachToHand, makeKnife, makePistol } from './weapons.js';
 import { collide, groundAt } from './arena.js';
 import { sfx } from './sfx.js';
 
-const FADE = 0.18;
 const LIFT = 0.022; // boot soles sit below the body's feet
-const UP = new THREE.Vector3(0, 1, 0);
+const GRAV = 27;
 
-// which clips loop
-const LOOPS = new Set(['Idle_A', 'Idle_Sword', 'Walk', 'Jog', 'Sprint', 'Walk_Backwards', 'Strafe_left', 'Strafe_right',
-  'Crouch_Idle', 'Crouch_Walk', 'Walk_Stealth', 'Run_Stealth', 'Jump_air', 'Fighting Idle', 'Pistol_Idle',
-  'Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Aim_Down', 'Idle_FoldArms', 'Idle_Talking']);
+const LOOPS = new Set(['Idle_A', 'Idle_Sword', 'Fighting Idle', 'Walk', 'Jog', 'Sprint', 'Run_Anime', 'Walk_Backwards',
+  'Strafe_left', 'Strafe_right', 'Crouch_Idle', 'Crouch_Walk', 'Run_Stealth', 'Jump_air', 'NinjaJump_Idle',
+  'Pistol_Idle', 'Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Aim_Down']);
 
-// travel added to in-place clips: [x (his left), z (forward)] metres, eased
-// over the given part of the clip
-const TRAVEL = {
-  Roll: [[0, 3.0], 0.05, 0.8], Dodge_back: [[0, -1.9], 0.05, 0.7], Dodge_left: [[1.8, 0], 0.05, 0.7],
-  Dodge_right: [[-1.8, 0], 0.05, 0.7], Sword_Regular_A: [[0, 0.25], 0.1, 0.5], Sword_Regular_B: [[0, 0.25], 0.1, 0.5],
-  Sword_Regular_C: [[0, 0.9], 0.1, 0.55], Kick_Breach: [[0, 0.35], 0.15, 0.45], Hit_Knockback: [[0, -0.8], 0, 0.6],
+// Move list. speed = playback rate; from/to = part of the clip used;
+// hits = strikes in it; cancel = when the next input takes over; end = when
+// it hands back to movement; travel = forward slide (m); layer = upper-body
+// clip over crouch/air legs.
+const MOVES = {
+  L1: { clip: 'Sword_Regular_A', speed: 1.35, dmg: 9, react: 'light', next: { L: 'L2', H: 'LH' }, cancel: 0.42, end: 0.78, travel: 0.4 },
+  L2: { clip: 'Sword_Regular_B', speed: 1.35, dmg: 9, react: 'light', next: { L: 'L3', H: 'LLH' }, cancel: 0.42, end: 0.78, travel: 0.4 },
+  L3: { clip: 'Sword_Regular_Combo', speed: 1.8, from: 0, to: 0.48, hits: 2, dmg: 8, react: 'light', next: { L: 'L4', H: 'LLH' }, cancel: 0.72, end: 1, travel: 0.6 },
+  L4: { clip: 'Sword_Regular_C', speed: 1.8, dmg: 16, react: 'knockback', heavy: true, next: { L: 'L1', H: 'H1' }, cancel: 0.62, end: 0.82, travel: 1.4 },
+  H1: { clip: 'Kick_Breach', speed: 1.75, dmg: 13, react: 'stagger', heavy: true, next: { H: 'H2', L: 'L2' }, cancel: 0.5, end: 0.72, travel: 0.5 },
+  H2: { clip: 'Chop_Tree', speed: 1.7, dmg: 16, react: 'stagger', heavy: true, next: { H: 'H3', L: 'L3' }, cancel: 0.58, end: 0.8 },
+  H3: { clip: 'Attack_Ground_Pound', speed: 1.55, dmg: 20, react: 'knockdown', heavy: true, aoe: 3.4, end: 0.86 },
+  LH: { clip: 'Melee_Hook', speed: 1.3, dmg: 13, react: 'stagger', heavy: true, next: { L: 'L3', H: 'H2' }, cancel: 0.55, end: 0.78, travel: 0.8 },
+  LLH: { clip: 'Sword_Attack', speed: 1.8, from: 0.05, to: 0.7, hits: 2, dmg: 11, react: 'launch', heavy: true, end: 0.9, launcher: true },
+  DASH_L: { clip: 'Sword_Dash_RM', speed: 1.7, dmg: 16, react: 'knockback', heavy: true, travel: 4.5, end: 0.72 },
+  DASH_H: { clip: 'Shield_Dash_RM', speed: 1.7, dmg: 12, react: 'knockdown', heavy: true, travel: 5.5, end: 0.7, multi: true },
+  CL1: { layer: 'crouch', clip: 'Sword_Regular_A', speed: 1.5, dmg: 8, react: 'light', next: { L: 'CL2', H: 'CH' }, cancel: 0.45, end: 0.78 },
+  CL2: { layer: 'crouch', clip: 'Sword_Regular_B', speed: 1.5, dmg: 8, react: 'light', next: { L: 'CL3', H: 'CH' }, cancel: 0.45, end: 0.78 },
+  CL3: { layer: 'crouch', clip: 'Sword_Regular_C', speed: 2.0, dmg: 12, react: 'stagger', heavy: true, next: { L: 'CL1', H: 'CH' }, cancel: 0.6, end: 0.8 },
+  CH: { clip: 'Slide', speed: 1.5, dmg: 12, react: 'knockdown', heavy: true, travel: 5, end: 0.8, multi: true },
+  AL1: { layer: 'air', clip: 'Sword_Regular_A', speed: 1.6, dmg: 8, react: 'air', next: { L: 'AL2' }, cancel: 0.42, end: 0.8 },
+  AL2: { layer: 'air', clip: 'Sword_Regular_B', speed: 1.6, dmg: 8, react: 'air', next: { L: 'AL3' }, cancel: 0.42, end: 0.8 },
+  AL3: { layer: 'air', clip: 'Sword_Regular_A', speed: 1.6, dmg: 8, react: 'air', next: { L: 'AL4' }, cancel: 0.42, end: 0.8 },
+  AL4: { layer: 'air', clip: 'Sword_Regular_C', speed: 2.0, dmg: 14, react: 'knockdown', heavy: true, end: 0.8 },
+  COUNTER: { clip: 'Sword_Regular_C', speed: 2.4, dmg: 18, react: 'none', heavy: true, end: 0.75, travel: 0.6 },
 };
-const ease = (t) => t * t * (3 - 2 * t);
 
-// knife combo: clip, impact time (fraction), damage, reach
-const COMBO = [
-  { clip: 'Sword_Regular_A', hit: 0.5, dmg: 1, reach: 1.7 },
-  { clip: 'Sword_Regular_B', hit: 0.5, dmg: 1, reach: 1.7 },
-  { clip: 'Sword_Regular_C', hit: 0.42, dmg: 2, reach: 2.1, heavy: true },
-];
+const v3 = () => new THREE.Vector3();
 
 export class Player {
   constructor(gltf, scene, ctx) {
-    this.ctx = ctx; // { input, cam, arena, effects, dummies, hud }
+    this.ctx = ctx;
     this.root = new THREE.Group();
     this.model = gltf.scene;
     this.model.position.y = LIFT;
     this.root.add(this.model);
     scene.add(this.root);
-    this.model.traverse((o) => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; }
-    });
+    this.model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     this.bones = {};
     this.model.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
     this.holsterGrip = this.model.getObjectByName('Pistol_Grip');
 
-    // ---- clips
+    // weapons go on in the bind pose, before anything animates the skeleton
+    this.knife = attachToHand(this.model, makeKnife(), 'blade');
+    this.pistol = attachToHand(this.model, makePistol(), 'gun');
+    this.pistol.visible = false;
+
     this.mixer = new THREE.AnimationMixer(this.model);
-    this.motion = {};
     this.clips = {};
-    const rootBone = this.bones.root;
-    for (let c of gltf.animations) {
-      c = stripScale(c);
-      const turn = c.name.startsWith('Turn_');
-      const r = extractRootMotion(c, rootBone, turn ? 0.05 : 0.18);
-      this.clips[c.name] = r.clip;
-      if (r.motion) this.motion[c.name] = r.motion;
-      if (turn) this.motion[c.name] = { ...(r.motion || {}), yaw: this.extractYaw(r, rootBone) };
-    }
+    for (let c of gltf.animations) this.clips[c.name] = extractRootMotion(stripScale(c), this.bones.root, 0.3).clip;
     this.actions = {};
     for (const [name, clip] of Object.entries(this.clips)) {
       const a = this.mixer.clipAction(clip);
       if (!LOOPS.has(name)) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
       this.actions[name] = a;
     }
-    // upper-body pistol layer and lower-body legs for moving while aiming
-    this.upper = {};
-    for (const n of ['Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Aim_Down', 'Pistol_Reload', 'Pistol_Idle']) {
+    // layers: upper-body strikes over crouched / airborne legs, pistol aim
+    this.upperClips = {};
+    for (const n of ['Sword_Regular_A', 'Sword_Regular_B', 'Sword_Regular_C', 'Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Aim_Down', 'Pistol_Reload']) {
       const a = this.mixer.clipAction(splitClip(this.clips[n], 'upper'));
-      if (n === 'Pistol_Reload') { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
-      this.upper[n] = a;
+      if (!n.startsWith('Pistol_Aim')) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+      this.upperClips[n] = a;
     }
-    this.lower = {};
-    for (const n of ['Idle_A', 'Walk', 'Walk_Backwards', 'Strafe_left', 'Strafe_right', 'Crouch_Idle', 'Crouch_Walk']) {
-      this.lower[n] = this.mixer.clipAction(splitClip(this.clips[n], 'lower'));
+    this.lowerClips = {};
+    for (const n of ['Idle_A', 'Walk', 'Walk_Backwards', 'Strafe_left', 'Strafe_right', 'Crouch_Idle', 'Crouch_Walk', 'Jump_air']) {
+      this.lowerClips[n] = this.mixer.clipAction(splitClip(this.clips[n], 'lower'));
     }
-
-    this.attachWeapons(); // needs the bind pose, so before anything poses the skeleton
+    // strike frames for every move, from the animation itself
+    this.strikes = {};
+    for (const [id, M] of Object.entries(MOVES)) {
+      this.strikes[id] = strikeTimes(this.model, this.mixer, this.clips[M.clip], { from: (M.from || 0) + 0.08, to: (M.to || 1) - 0.08, count: M.hits || 1, gap: 0.12 });
+    }
     this.measureSpeeds();
 
-    // ---- state
     this.pos = this.root.position;
     this.pos.copy(ctx.arena.spawn);
-    this.yaw = Math.PI; // face into the warehouse
-    this.vel = new THREE.Vector3();
+    this.yaw = Math.PI;
+    this.vel = v3();
     this.vy = 0;
     this.onGround = true;
-    this.state = 'loco';
-    this.locoClip = null;
+    this.state = 'move';
+    this.hp = 100;
+    this.focus = 100;
+    this.combo = 0;
+    this.comboT = 0;
+    this.bp = 0;
     this.crouch = false;
     this.walkMode = false;
-    this.aiming = false;
     this.ammo = 12;
-    this.comboStep = -1;
-    this.queued = false;
-    this.knifeTimer = 0;
-    this.recoil = 0;
     this.invuln = 0;
-    this.stepPhase = 0;
+    this.parryBullet = 0;
     this.curSpeed = 0;
-    this.base = null; // current full-body action
+    this.cutAngle = 0;
+    this.base = null;
     this.play('Idle_A');
   }
 
-  extractYaw(r, rootBone) {
-    // yaw of the pelvis over time in model space, removed from the clip so
-    // the controller can turn the whole character instead
-    const clip = r.clip;
-    const tr = clip.tracks.find((t) => t.name === 'pelvis.quaternion');
-    if (!tr) return null;
-    rootBone.updateWorldMatrix(true, false);
-    const rq = new THREE.Quaternion();
-    rootBone.getWorldQuaternion(rq);
-    const rqi = rq.clone().invert();
-    const q = new THREE.Quaternion(), f = new THREE.Vector3();
-    const n = tr.times.length, yaws = new Float32Array(n);
-    let y0 = 0;
-    const vals = tr.values.slice();
-    for (let i = 0; i < n; i++) {
-      q.fromArray(tr.values, i * 4).premultiply(rq);
-      f.set(0, 0, 1).applyQuaternion(q);
-      // pelvis "forward" in model space: use the projected z axis of the bone frame
-      const y = Math.atan2(f.x, f.z);
-      if (i === 0) y0 = y;
-      let d = y - y0;
-      while (d > Math.PI) d -= 2 * Math.PI;
-      while (d < -Math.PI) d += 2 * Math.PI;
-      if (i > 0) { // unwrap
-        let prev = yaws[i - 1];
-        while (d - prev > Math.PI) d -= 2 * Math.PI;
-        while (d - prev < -Math.PI) d += 2 * Math.PI;
-      }
-      yaws[i] = d;
-      const unYaw = new THREE.Quaternion().setFromAxisAngle(UP, -d);
-      q.premultiply(unYaw).premultiply(rqi);
-      q.toArray(vals, i * 4);
-    }
-    const fixed = new THREE.QuaternionKeyframeTrack(tr.name, tr.times, vals);
-    clip.tracks = clip.tracks.map((t) => (t === tr ? fixed : t));
-    return { times: tr.times, yaw: yaws };
-  }
+  chest() { return this.pos.clone().add(new THREE.Vector3(0, 1.25, 0)); }
+  get dead() { return this.state === 'dead'; }
+  get airAttacking() { return this.state === 'attack' && this.move?.M.layer === 'air'; }
+  fwd() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
 
-  // ground speed of each in-place locomotion clip: while a foot is planted
-  // it slides backward (against the travel direction) at the ground speed
   measureSpeeds() {
     this.speeds = {};
-    const travel = {
-      Walk: [0, 1], Jog: [0, 1], Sprint: [0, 1], Crouch_Walk: [0, 1], Run_Stealth: [0, 1], Walk_Stealth: [0, 1],
-      Walk_Backwards: [0, -1], Strafe_left: [1, 0], Strafe_right: [-1, 0],
-    };
+    const travel = { Walk: 1, Jog: 1, Sprint: 1, Run_Anime: 1, Crouch_Walk: 1, Run_Stealth: 1, Walk_Backwards: -1 };
     const feet = [this.bones.foot_l, this.bones.foot_r];
-    const p = new THREE.Vector3();
-    const inv = new THREE.Matrix4();
-    for (const [name, [tx, tz]] of Object.entries(travel)) {
+    const p = v3(), inv = new THREE.Matrix4();
+    for (const [name, dirz] of Object.entries(travel)) {
       const a = this.actions[name];
       if (!a) continue;
       a.reset().play();
-      a.setEffectiveWeight(1);
       const dur = a.getClip().duration, N = 90, dt = dur / N;
       const pos = [[], []];
       for (let i = 0; i <= N; i++) {
         this.mixer.setTime(i * dt);
         this.model.updateMatrixWorld(true);
         inv.copy(this.model.matrixWorld).invert();
-        feet.forEach((f, k) => { f.getWorldPosition(p).applyMatrix4(inv); pos[k].push(p.clone()); });
+        feet.forEach((f, k) => pos[k].push(f.getWorldPosition(p).applyMatrix4(inv).clone()));
       }
       a.stop();
       const v = [];
       for (const fp of pos) {
         const ys = fp.map((q) => q.y), lo = Math.min(...ys), hi = Math.max(...ys);
         for (let i = 1; i <= N; i++) {
-          if (fp[i].y > lo + (hi - lo) * 0.35) continue; // only the planted part of the cycle
-          const back = -((fp[i].x - fp[i - 1].x) * tx + (fp[i].z - fp[i - 1].z) * tz) / dt;
+          if (fp[i].y > lo + (hi - lo) * 0.35) continue;
+          const back = -((fp[i].z - fp[i - 1].z) * dirz) / dt;
           if (back > 0) v.push(back);
         }
       }
       v.sort((x, y) => x - y);
-      this.speeds[name] = v.length ? v[Math.floor(v.length * 0.6)] : 1.5;
+      this.speeds[name] = v.length ? v[Math.floor(v.length * 0.6)] : 2;
     }
     this.mixer.setTime(0);
   }
 
-  attachWeapons() {
-    this.model.updateMatrixWorld(true);
-    const wp = (n) => this.bones[n].getWorldPosition(new THREE.Vector3());
-    const hand = wp('hand_r'), mid = wp('middle_01_r'), idx = wp('index_01_r'), pinky = wp('pinky_01_r');
-    const fingers = mid.clone().sub(hand).normalize();
-    const thumbSide = idx.clone().sub(pinky).normalize();
-    const palm = new THREE.Vector3().crossVectors(fingers, thumbSide).normalize();
-    // palm should point down in the T-pose; flip if the cross product disagrees
-    if (palm.y > 0) palm.negate();
-    const fist = hand.clone().addScaledVector(fingers, 0.075).addScaledVector(palm, 0.025);
-    const attach = (obj, x, y, z, at) => {
-      const m = new THREE.Matrix4().makeBasis(x, y, z).setPosition(at);
-      const inv = this.bones.hand_r.matrixWorld.clone().invert();
-      m.premultiply(inv);
-      m.decompose(obj.position, obj.quaternion, obj.scale);
-      this.bones.hand_r.add(obj);
-    };
-    // knife: blade out of the thumb side of the fist, edge toward the fingers
-    this.knife = makeKnife();
-    {
-      const y = thumbSide.clone();
-      const x = fingers.clone().addScaledVector(y, -fingers.dot(y)).normalize();
-      const z = new THREE.Vector3().crossVectors(x, y);
-      attach(this.knife, x, y, z, fist);
-    }
-    // pistol: barrel along the fingers, grip into the palm, top on the thumb side
-    this.pistol = makePistol();
-    {
-      const z = fingers.clone();
-      const y = thumbSide.clone().addScaledVector(z, -thumbSide.dot(z)).normalize();
-      const x = new THREE.Vector3().crossVectors(y, z);
-      attach(this.pistol, x, y, z, fist.clone().addScaledVector(thumbSide, -0.01));
-    }
-    this.knife.visible = false;
-    this.pistol.visible = false;
-  }
-
-  // ---------------------------------------------------------------- anim
-  play(name, { fade = FADE, speed = 1, from = 0 } = {}) {
+  // ------------------------------------------------------------ animation
+  play(name, { fade = 0.12, speed = 1, from = 0, restart = false } = {}) {
     const a = this.actions[name];
     if (!a) return null;
-    if (this.base === a) { a.timeScale = speed; return a; }
+    this.clearLayers();
+    if (this.base === a && !restart) { a.timeScale = speed; return a; }
     a.reset();
     a.time = from * a.getClip().duration;
     a.timeScale = speed;
-    a.setEffectiveWeight(1);
-    a.play();
-    if (this.base) a.crossFadeFrom(this.base, fade, false);
-    else a.fadeIn(fade);
+    a.setEffectiveWeight(1).play();
+    if (this.base && this.base !== a) a.crossFadeFrom(this.base, fade, false);
+    else if (!this.base) a.fadeIn(fade);
     this.base = a;
     this.baseName = name;
-    this.motionPrev = null;
     return a;
   }
 
-  setLayer(layer, name, weight, fade = 0.15) {
-    // layer: dict of actions; makes `name` the active one at `weight`
-    for (const [n, a] of Object.entries(layer)) {
-      const target = n === name ? weight : 0;
-      if (target > 0 && !a.isRunning()) { a.reset().play(); a.setEffectiveWeight(0); }
-      const w = a.getEffectiveWeight();
-      a.setEffectiveWeight(w + (target - w) * Math.min(1, (1 / fade) * this.dt));
-      if (target === 0 && a.getEffectiveWeight() < 0.01 && a.isRunning()) a.stop();
+  // legs from one clip, arms from another (crouch/air strikes, pistol)
+  playLayered(lower, upper, { speed = 1, from = 0 } = {}) {
+    if (this.base) { this.base.fadeOut(0.08); this.base = null; this.baseName = null; }
+    for (const [n, a] of Object.entries(this.lowerClips)) {
+      if (n === lower) { if (!a.isRunning()) { a.reset().play(); } a.setEffectiveWeight(1); } else if (a.isRunning()) a.stop();
     }
+    let up = null;
+    for (const [n, a] of Object.entries(this.upperClips)) {
+      if (n === upper) { a.reset(); a.time = from * a.getClip().duration; a.timeScale = speed; a.setEffectiveWeight(1).play(); up = a; } else if (a.isRunning() && !n.startsWith('Pistol')) a.stop();
+    }
+    this.layered = true;
+    return up;
   }
 
-  stopLayer(layer) {
-    for (const a of Object.values(layer)) if (a.isRunning()) { a.stop(); a.setEffectiveWeight(0); }
+  clearLayers() {
+    if (!this.layered) return;
+    for (const a of [...Object.values(this.lowerClips), ...Object.values(this.upperClips)]) if (a.isRunning()) a.stop();
+    this.layered = false;
   }
 
-  // one-shot full body action with optional root motion
-  action(name, { fade = 0.12, onEnd = null, hits = null, speed = 1, lock = true } = {}) {
-    const a = this.play(name, { fade, speed });
-    if (!a) return;
-    this.state = 'action';
-    this.act = { name, a, onEnd, hits: hits ? hits.map((h) => ({ ...h, done: false })) : [], lock };
-    this.motionPrev = null;
-    this.travelPrev = 0;
-  }
-
-  // ---------------------------------------------------------------- update
+  // ------------------------------------------------------------ main update
   update(dt) {
     this.dt = dt;
     const { input, cam } = this.ctx;
     const mv = input.move();
     const moving = Math.hypot(mv.x, mv.y) > 0.1;
-    // camera-relative direction
-    const fwd = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
-    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-    const dir = new THREE.Vector3().addScaledVector(right, mv.x).addScaledVector(fwd, mv.y);
+    const cf = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+    const cr = new THREE.Vector3(-cf.z, 0, cf.x);
+    const dir = v3().addScaledVector(cr, mv.x).addScaledVector(cf, mv.y);
     if (dir.lengthSq() > 1e-4) dir.normalize();
-
-    if (input.hit('KeyC') || input.hit('pad:crouch')) this.crouch = !this.crouch;
-    if (input.hit('KeyX')) this.walkMode = !this.walkMode;
-    if (input.hit('KeyG')) this.aimToggle = !this.aimToggle;
-    const wantAim = input.aim || this.aimToggle;
+    this.inputDir = moving ? dir.clone() : null;
     this.invuln = Math.max(0, this.invuln - dt);
-    this.knifeTimer = Math.max(0, this.knifeTimer - dt);
-    if (this.state !== 'action' || this.act?.name?.startsWith('Sword')) this.knife.visible = this.knifeTimer > 0;
+    this.parryBullet = Math.max(0, this.parryBullet - dt);
+    this.comboT -= dt;
+    if (this.comboT <= 0) this.combo = 0;
+    if (this.followT > 0) {
+      this.followT -= dt;
+      const want = this.ctx.input.mouse.right || this.ctx.input.padNow?.heavy || this.ctx.input.hit('Space', 'pad:jump');
+      if (want && this.followE?.alive && (this.state === 'attack' || this.state === 'move') && this.followT < 0.42) this.followUp();
+    }
+    if (this.lockT?.alive === false) this.lockT = this.ctx.enemies.pick(this.pos, this.fwd(), 15);
 
-    if (this.state === 'action') {
-      this.updateAction(dt, input, dir, moving);
-    } else if (!this.onGround) {
-      this.updateAir(dt, dir, moving);
-    } else if (wantAim) {
-      this.updateAim(dt, input, dir, moving, mv);
-    } else {
-      if (this.aiming) this.holster();
-      this.updateLoco(dt, input, dir, moving, mv);
+    if (input.hit('KeyC', 'pad:crouch')) this.crouch = !this.crouch;
+    if (input.hit('KeyX')) this.walkMode = !this.walkMode;
+    if (input.hit('KeyT', 'Mouse1', 'pad:lock')) {
+      this.lockT = this.lockT ? null : this.ctx.enemies.pick(this.pos, cf, 18);
+    }
+    const L = input.hit('Mouse0', 'pad:attack');
+    const H = input.hit('Mouse2', 'pad:heavy');
+
+    switch (this.state) {
+      case 'move': this.updateMove(dt, input, dir, moving, mv, L, H); break;
+      case 'attack': this.updateAttack(dt, input, dir, moving, L, H); break;
+      case 'air': this.updateAir(dt, input, dir, moving, L, H); break;
+      case 'plunge': this.updatePlunge(dt); break;
+      case 'dodge': this.updateTimed(dt, true); break;
+      case 'parry': this.updateTimed(dt); if (this.state === 'parry' && L) this.tryParry(); break;
+      case 'hurt': case 'down': case 'land': case 'zandatsu': this.updateTimed(dt, this.state === 'land' && moving); break;
+      case 'blade': this.updateBlade(dt, input, dir, moving); break;
+      case 'aim': this.updateAim(dt, input, dir, moving, mv); break;
+      case 'dead': break;
+      default: break;
     }
 
-    // gravity / ground
+    // gravity and ground
     const g = groundAt(this.ctx.arena.colliders, this.pos.x, this.pos.z, this.pos.y);
     if (!this.onGround) {
-      this.vy -= 18 * dt;
+      const hang = this.airAttacking ? 5 : GRAV;
+      this.vy -= hang * dt;
+      if (this.airAttacking) this.vy = Math.max(this.vy, -2.5);
       this.pos.y += this.vy * dt;
-      if (this.pos.y <= g && this.vy <= 0) {
-        this.pos.y = g; this.onGround = true; this.vy = 0;
-        sfx.land();
-        if (this.state !== 'action') this.action('Jump_Land', { fade: 0.08, speed: 1.6, lock: false });
-        this.landT = 0.35;
-      }
-    } else if (this.pos.y > g + 0.05) {
-      this.onGround = false; this.vy = 0; // walked off an edge
-      if (this.state !== 'action') this.play('Jump_air', { fade: 0.25 });
-    } else {
-      this.pos.y = g;
-    }
-    // collisions
+      this.pos.addScaledVector(this.vel, dt);
+      if (this.pos.y <= g && this.vy <= 0) this.land(g);
+    } else if (this.pos.y > g + 0.08 && this.state !== 'dead') {
+      this.onGround = false; this.vy = 0;
+      if (this.state === 'move') { this.state = 'air'; this.play('Jump_air', { fade: 0.2 }); }
+    } else this.pos.y = g;
+
     collide(this.ctx.arena.colliders, this.pos, 0.32);
     const b = this.ctx.arena.bounds;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, b.minX, b.maxX);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, b.minZ, b.maxZ);
-    for (const d of this.ctx.dummies.list) {
-      if (d.dead) continue;
-      const dx = this.pos.x - d.root.position.x, dz = this.pos.z - d.root.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < 0.62 && dist > 1e-4) { this.pos.x += (dx / dist) * (0.62 - dist); this.pos.z += (dz / dist) * (0.62 - dist); }
+    for (const e of this.ctx.enemies.alive) {
+      if (e.air || this.state === 'dodge') continue;
+      const dx = this.pos.x - e.pos.x, dz = this.pos.z - e.pos.z, d = Math.hypot(dx, dz), min = 0.65 * (e.T.scale || 1);
+      if (d < min && d > 1e-4 && Math.abs(this.pos.y - e.pos.y) < 1) { this.pos.x += (dx / d) * (min - d); this.pos.z += (dz / d) * (min - d); }
     }
 
     this.root.rotation.y = this.yaw;
     this.mixer.update(dt);
-    this.postProcessPose(dt);
+    this.postPose(dt);
+    // blade trail
+    const swinging = this.state === 'attack' || this.state === 'blade' && this.bladeSwing > 0 || this.state === 'parry';
+    this.ctx.fx.trailPush(this.knife.userData.base.getWorldPosition(v3()), this.knife.userData.tip.getWorldPosition(v3()), swinging);
   }
 
-  updateLoco(dt, input, dir, moving, mv) {
-    // actions
-    if (input.mouse.leftPressed || input.hit('pad:attack')) return this.startCombo();
-    if (input.hit('KeyF', 'pad:kick')) return this.kick();
-    if (input.hit('KeyE', 'pad:roll')) return this.dodge(dir, moving, mv);
-    if (input.hit('Space', 'pad:jump')) return this.jump(dir, moving);
-    if ((input.hit('KeyQ', 'pad:turnL') || input.hit('pad:turnR')) && !moving) {
-      return this.turn(input.hit('pad:turnR') ? 'Turn_Right_180' : 'Turn_Left_180', Math.PI);
+  // ------------------------------------------------------------ movement
+  updateMove(dt, input, dir, moving, mv, L, H) {
+    if (L && this.tryParry()) return;
+    const backHeavy = H && mv.y < -0.5 && !this.crouch;
+    if (backHeavy && (this.lockT || this.ctx.enemies.pick(this.pos, this.fwd(), 4))) { this.chain = null; return this.doMove('LLH'); }
+    // a press shortly after a move ends still continues the string
+    if (this.chain && (L || H)) {
+      const nid = MOVES[this.chain.id].next?.[L ? 'L' : 'H'];
+      this.chainT = 0;
+      if (nid && !MOVES[nid].layer || nid && MOVES[nid].layer === 'crouch' && this.crouch) { this.chain = null; return this.doMove(nid); }
     }
-    const mag = Math.min(1, Math.hypot(mv.x, mv.y));
+    if (this.chain) { this.chainT -= dt; if (this.chainT <= 0) this.chain = null; }
+    const ninja = input.sprint && !this.crouch;
+    if (L || H) {
+      if (this.crouch) return this.doMove(L ? 'CL1' : 'CH');
+      if (ninja && this.curSpeed > 8) return this.doMove(L ? 'DASH_L' : 'DASH_H');
+      const back = mv.y < -0.5 && (this.lockT || this.ctx.enemies.pick(this.pos, this.fwd(), 4));
+      if (H && back) return this.doMove('LLH');
+      return this.doMove(L ? 'L1' : 'H1');
+    }
+    if (input.hit('KeyZ', 'pad:roll')) return this.dodge(dir, moving);
+    if (input.hit('Space', 'pad:jump')) return this.jump(dir, moving, ninja);
+    if ((input.held('KeyF') || input.padNow?.blade) && this.focus > 5) return this.enterBlade();
+    if (input.aim || input.hit('KeyG')) return this.enterAim();
+
+    const near = this.ctx.enemies.alive.some((e) => e.pos.distanceTo(this.pos) < 12);
     let clip, speed;
-    if (!moving) {
-      clip = this.crouch ? 'Crouch_Idle' : 'Idle_A';
-      speed = 0;
-    } else if (this.crouch) {
-      const run = input.sprint;
-      clip = run ? 'Run_Stealth' : 'Crouch_Walk';
-      speed = run ? 4.2 : 1.05;
-    } else if (input.sprint) {
-      clip = 'Sprint'; speed = 6.4;
-    } else if (this.walkMode || mag < 0.55) {
-      clip = 'Walk'; speed = 1.25;
-    } else {
-      clip = 'Jog'; speed = 4.0;
-    }
-    // turn toward the move direction (quick 180 from a standstill)
+    if (!moving) { clip = this.crouch ? 'Crouch_Idle' : (near ? 'Idle_Sword' : 'Idle_A'); speed = 0; }
+    else if (this.crouch) { clip = input.sprint ? 'Run_Stealth' : 'Crouch_Walk'; speed = input.sprint ? 6.5 : 3.2; }
+    else if (ninja) { clip = 'Run_Anime'; speed = 13; }
+    else if (this.walkMode) { clip = 'Walk'; speed = 1.7; }
+    else { clip = 'Sprint'; speed = 7.5; }
     if (moving) {
       const target = Math.atan2(dir.x, dir.z);
       let d = target - this.yaw;
       while (d > Math.PI) d -= 2 * Math.PI;
       while (d < -Math.PI) d += 2 * Math.PI;
-      if (Math.abs(d) > 2.6 && this.curSpeed < 0.5 && !this.crouch) {
-        return this.turn(d > 0 ? 'Turn_Left_180' : 'Turn_Right_180', d);
-      }
-      const rate = clip === 'Sprint' ? 6 : 11;
+      const rate = ninja ? 9 : 20;
       this.yaw += THREE.MathUtils.clamp(d, -rate * dt, rate * dt);
     }
-    this.curSpeed = THREE.MathUtils.damp(this.curSpeed || 0, speed, 8, dt);
-    const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-    this.pos.addScaledVector(fwd, this.curSpeed * dt);
+    this.curSpeed = THREE.MathUtils.damp(this.curSpeed, speed, speed > this.curSpeed ? 9 : 14, dt);
+    this.pos.addScaledVector(this.fwd(), this.curSpeed * dt);
+    // Ninja Run vaults over anything up to chest height
+    if (ninja && moving && this.curSpeed > 8) {
+      const ahead = this.pos.clone().addScaledVector(this.fwd(), 0.75); ahead.y += 0.4;
+      const box = this.ctx.arena.colliders.find((b) => b.containsPoint(ahead));
+      if (box && box.max.y - this.pos.y < 1.6) { this.vault(box); return; }
+    }
     const rate = speed > 0 && this.speeds[clip] ? this.curSpeed / this.speeds[clip] : 1;
-    this.play(clip, { speed: THREE.MathUtils.clamp(rate, 0.6, 1.7), fade: 0.22 });
-    this.footsteps(dt, this.curSpeed, clip);
+    this.play(clip, { speed: THREE.MathUtils.clamp(rate, 0.7, 2.2), fade: 0.16 });
+    this.footsteps(clip);
   }
 
-  footsteps(dt, speed, clip) {
-    if (speed < 0.3) return;
-    const a = this.base;
-    const dur = a.getClip().duration;
-    const ph = (a.time / dur) * 2 % 1; // two steps per cycle
+  footsteps(clip) {
+    if (this.curSpeed < 0.5 || !this.base) return;
+    const ph = (this.base.time / this.base.getClip().duration) * 2 % 1;
     if (this.stepPhase > ph) sfx.step(this.crouch || clip === 'Walk');
     this.stepPhase = ph;
   }
 
+  vault(box) {
+    this.onGround = false;
+    this.vy = Math.sqrt(2 * GRAV * Math.max(0.5, box.max.y - this.pos.y + 0.35));
+    this.vel.copy(this.fwd()).multiplyScalar(Math.max(8, this.curSpeed * 0.85));
+    this.state = 'air';
+    this.play('Run Jump', { fade: 0.06, speed: 1.6, restart: true });
+    sfx.whoosh();
+  }
+
+  jump(dir, moving, ninja) {
+    this.onGround = false;
+    this.vy = ninja ? 9.5 : 10.5;
+    this.vel.copy(moving ? dir : this.fwd()).multiplyScalar(moving ? Math.max(3, this.curSpeed) : 0);
+    if (moving) this.yaw = Math.atan2(dir.x, dir.z);
+    this.state = 'air';
+    this.airMoves = 0;
+    this.play(ninja && moving ? 'Run Jump' : 'Jump_air', { fade: 0.06, speed: ninja ? 1.5 : 1, from: ninja ? 0 : 0.1, restart: true });
+    sfx.whoosh();
+  }
+
+  land(g) {
+    this.pos.y = g;
+    this.onGround = true;
+    this.vy = 0;
+    this.vel.set(0, 0, 0);
+    sfx.land();
+    if (this.state === 'plunge') return this.plungeImpact();
+    if (this.state === 'dead' || this.state === 'down' || this.state === 'hurt') return;
+    if (this.state === 'attack') { this.move = null; }
+    this.state = 'land';
+    this.timer = 0.22;
+    this.play('Jump_Land', { fade: 0.05, speed: 2, restart: true });
+  }
+
+  updateAir(dt, input, dir, moving, L, H) {
+    if (moving) {
+      this.vel.addScaledVector(dir, 16 * dt);
+      const h = Math.hypot(this.vel.x, this.vel.z), max = Math.max(7.5, this.ninjaCarry || 0);
+      if (h > max) { this.vel.x *= max / h; this.vel.z *= max / h; }
+      const target = Math.atan2(dir.x, dir.z);
+      let d = target - this.yaw;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      this.yaw += THREE.MathUtils.clamp(d, -10 * dt, 10 * dt);
+    }
+    if (L && this.tryParry()) return;
+    if (L) return this.doMove('AL1');
+    if (H) return this.startPlunge();
+    if (input.hit('KeyZ', 'pad:roll')) this.dodge(dir, moving);
+  }
+
+  // ------------------------------------------------------------ attacks
+  doMove(id, target) {
+    const M = MOVES[id];
+    const E = this.ctx.enemies;
+    target = target || this.lockT || E.pick(this.pos, this.inputDir || this.fwd(), M.layer === 'air' ? 5 : 7.5);
+    if (target && target.alive) {
+      this.yaw = Math.atan2(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
+      target.onThreat?.();
+    }
+    const from = M.from || 0, to = M.to || 1;
+    let a;
+    if (M.layer) a = this.playLayered(M.layer === 'crouch' ? 'Crouch_Idle' : 'Jump_air', M.clip, { speed: M.speed, from });
+    else a = this.play(M.clip, { fade: 0.06, speed: M.speed, from, restart: true });
+    const clipDur = a.getClip().duration;
+    this.state = 'attack';
+    this.move = {
+      id, M, a, target, t: 0,
+      dur: (to - from) * clipDur / M.speed,
+      hits: this.strikes[id].map((f) => ({ t: (f - from) * clipDur / M.speed, done: false })),
+      queued: null, travelled: 0,
+      lunge: target ? Math.max(0, Math.min(4, target.pos.distanceTo(this.pos) - 1.25)) : 0,
+    };
+    if (M.layer === 'air') { this.vy = Math.max(this.vy, 1.5); this.vel.multiplyScalar(0.2); }
+    this.curSpeed = 0;
+    sfx.swish(M.heavy);
+  }
+
+  updateAttack(dt, input, dir, moving, L, H) {
+    const m = this.move;
+    const M = m.M;
+    m.t += dt;
+    const k = m.t / m.dur;
+    // buffer the next input (light also parries if something is incoming)
+    if (L && this.tryParry()) return;
+    if (H && M.layer === 'air') return this.startPlunge();
+    if ((this.ctx.input.held('KeyF') || this.ctx.input.padNow?.blade) && this.focus > 5 && k > 0.2) { this.move = null; return this.enterBlade(); }
+    if ((L || H) && k > 0.12) m.queued = L ? 'L' : 'H';
+    if (input.hit('KeyZ', 'pad:roll') && k > 0.25) return this.dodge(dir, moving);
+    // slide toward the target (magnetism) and the move's own travel
+    const firstHit = m.hits[0]?.t || m.dur * 0.4;
+    if (m.target?.alive && m.t < firstHit) {
+      const to = m.target.pos.clone().sub(this.pos); to.y = 0;
+      const d = to.length();
+      this.yaw = Math.atan2(to.x, to.z);
+      if (d > 1.3) this.pos.addScaledVector(to.normalize(), Math.min(d - 1.3, Math.max(m.lunge / firstHit, 6) * dt));
+    }
+    if (M.travel) {
+      const f = THREE.MathUtils.clamp(k / 0.6, 0, 1);
+      const want = M.travel * (f * f * (3 - 2 * f));
+      const blocked = !M.multi && m.target?.alive && m.target.pos.distanceTo(this.pos) < 1.2;
+      if (!blocked) this.pos.addScaledVector(this.fwd(), want - m.travelled);
+      m.travelled = want;
+    }
+    for (const h of m.hits) {
+      if (!h.done && m.t >= h.t) { h.done = true; this.strike(M, h === m.hits[m.hits.length - 1]); }
+    }
+    if (M.layer === 'crouch') { this.crouch = true; }
+    if (m.queued && M.next?.[m.queued] && k >= M.cancel) {
+      const nid = M.next[m.queued];
+      if (MOVES[nid].layer === 'air' && this.onGround) return;
+      return this.doMove(nid);
+    }
+    if (k >= M.end) {
+      this.move = null;
+      if (M.next) { this.chain = { id: m.id }; this.chainT = 0.35; }
+      if (M.layer === 'air') { this.state = 'air'; this.play('Jump_air', { fade: 0.15, from: 0.4 }); return; }
+      this.state = 'move';
+    }
+  }
+
+  strike(M, last) {
+    const E = this.ctx.enemies;
+    const fwd = this.fwd();
+    let landed = 0;
+    for (const e of E.alive) {
+      const to = e.pos.clone().sub(this.pos);
+      const dy = Math.abs(to.y);
+      to.y = 0;
+      const d = to.length();
+      const reach = (M.aoe || 2.4) * (e.T.scale || 1) ** 0.5;
+      const ok = M.aoe ? d < M.aoe : d < reach && to.normalize().dot(fwd) > 0.2;
+      if (!ok || dy > (M.layer === 'air' ? 2 : 1.3)) continue;
+      const res = e.takeHit({ dmg: M.dmg, react: M.react, from: this.pos.clone(), heavy: !!M.heavy });
+      if (res === 'blocked' || res === 'miss') continue;
+      landed++;
+      if (res === 'armor') continue;
+      this.addHit(M.heavy ? 30 : 15);
+      if (M.launcher && res === 'hit' && e.air) this.launchFollow = e;
+    }
+    if (M.aoe) { this.ctx.fx.ring(this.pos.clone(), M.aoe, 0xbfe8ff); this.ctx.cam.shake(0.25); }
+    if (landed) {
+      sfx.slash(M.heavy);
+      this.ctx.cam.shake(M.heavy ? 0.16 : 0.07);
+      this.ctx.time.hitstop(M.heavy ? 0.085 : 0.045);
+      this.focus = Math.min(100, this.focus + (M.heavy ? 5 : 3));
+    }
+    // launcher: holding heavy (or pressing jump) right after sends Jason up after him
+    if (this.launchFollow) { this.followE = this.launchFollow; this.followT = 0.6; this.launchFollow = null; }
+  }
+
+  followUp() {
+    const e = this.followE;
+    this.followE = null; this.followT = 0;
+    this.move = null;
+    this.onGround = false; this.vy = 11.5; this.vel.set(0, 0, 0);
+    this.state = 'air';
+    this.yaw = Math.atan2(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
+    this.play('NinjaJump_Start', { fade: 0.05, speed: 1.6, from: 0.15, restart: true });
+    sfx.whoosh();
+  }
+
+  addHit(bp) {
+    this.combo++;
+    this.comboT = 2.5;
+    this.bp += bp + this.combo * 2;
+  }
+
+  startPlunge() {
+    this.state = 'plunge';
+    this.vy = -32;
+    this.vel.set(0, 0, 0);
+    this.play('Attack_Ground_Pound', { fade: 0.05, speed: 1.2, from: 0.38, restart: true });
+    this.base.timeScale = 0;
+    sfx.whoosh();
+  }
+
+  updatePlunge() { /* falls under gravity in update(); impact in land() */ }
+
+  plungeImpact() {
+    this.state = 'land';
+    this.timer = 0.45;
+    this.play('Land_Three_Point', { fade: 0.03, speed: 1.6, from: 0.45, restart: true });
+    this.strike({ dmg: 18, react: 'knockdown', heavy: true, aoe: 3.6 }, true);
+    this.ctx.cam.shake(0.3);
+  }
+
+  // ------------------------------------------------------------ defence
+  // Light attack while pushing toward an enemy about to hit you = parry.
+  tryParry() {
+    const E = this.ctx.enemies;
+    let ok = false;
+    for (const e of E.threats(0.34)) {
+      if (e.attack.parried) continue;
+      const to = e.pos.clone().sub(this.pos).setY(0).normalize();
+      const toward = this.inputDir ? this.inputDir.dot(to) > 0.35 : (this.lockT === e || this.fwd().dot(to) > 0.6);
+      if (!toward) continue;
+      if (!e.attack.A.parry) continue; // yellow glint: can't be parried
+      e.attack.parried = true;
+      e.attack.perfect = e.nextImpact() <= 0.13;
+      this.yaw = Math.atan2(to.x, to.z);
+      ok = true;
+    }
+    // bullets coming in: deflect them
+    if (E.bullets.some((b) => !b.deflected && b.mesh.position.distanceTo(this.chest()) < 6)) { this.parryBullet = 0.3; ok = true; }
+    if (!ok) return false;
+    this.state = 'parry';
+    this.timer = 0.38;
+    this.move = null;
+    this.play('Sword_Block', { fade: 0.04, speed: 2.4, restart: true });
+    return true;
+  }
+
+  onParry(e, perfect) {
+    this.ctx.hud.msg(perfect ? 'PERFECT PARRY' : 'PARRY', perfect ? 'gold' : 'white');
+    this.ctx.time.slow(perfect ? 0.12 : 0.35, perfect ? 0.55 : 0.18);
+    this.focus = Math.min(100, this.focus + (perfect ? 25 : 10));
+    this.bp += perfect ? 200 : 60;
+    this.ctx.cam.shake(perfect ? 0.2 : 0.1);
+    if (perfect) { this.state = 'move'; this.doMove('COUNTER', e); }
+  }
+
+  dodge(dir, moving) {
+    let clip = 'Dodge_back', d = this.fwd().negate();
+    if (moving) {
+      const f = this.fwd();
+      const side = new THREE.Vector3(f.z, 0, -f.x); // his right
+      const df = dir.dot(f), ds = dir.dot(side);
+      if (Math.abs(ds) > Math.abs(df)) { clip = ds > 0 ? 'Dodge_right' : 'Dodge_left'; d = dir.clone(); }
+      else if (df > 0) { clip = 'Roll'; d = dir.clone(); }
+      else d = dir.clone();
+    }
+    this.move = null;
+    this.state = 'dodge';
+    this.timer = clip === 'Roll' ? 0.5 : 0.36;
+    this.dodgeV = d.multiplyScalar((clip === 'Roll' ? 5.5 : 4.2) / this.timer);
+    this.invuln = 0.4;
+    this.play(clip, { fade: 0.04, speed: clip === 'Roll' ? 2.4 : 2.2, restart: true });
+    sfx.whoosh();
+  }
+
+  // timed states (dodge, parry, hurt, landing...) hand back to movement
+  updateTimed(dt, cancelable) {
+    this.timer -= dt;
+    if (this.state === 'dodge') this.pos.addScaledVector(this.dodgeV, dt);
+    if (this.state === 'hurt' || this.state === 'down') {
+      this.pos.addScaledVector(this.knock, dt);
+      this.knock.multiplyScalar(Math.max(0, 1 - 6 * dt));
+    }
+    if (this.timer <= 0 || cancelable && this.timer < 0.12) {
+      if (this.state === 'down') this.invuln = 0.6;
+      this.state = this.onGround ? 'move' : 'air';
+      if (this.state === 'air') this.play('Jump_air', { fade: 0.15 });
+    }
+  }
+
+  receiveHit({ dmg, react, from }) {
+    if (this.dead || this.invuln > 0 || this.state === 'dodge' || this.state === 'zandatsu') return false;
+    if (this.state === 'blade') this.exitBlade();
+    if (this.state === 'aim') this.exitAim();
+    this.hp -= dmg;
+    this.combo = 0;
+    this.move = null;
+    const to = from.clone().sub(this.pos).setY(0).normalize();
+    this.yaw = Math.atan2(to.x, to.z);
+    this.ctx.fx.bloodBurst(this.chest().addScaledVector(to, 0.2), to, 10);
+    this.ctx.hud.damage();
+    this.ctx.cam.shake(0.2);
+    sfx.hit(react === 'knockdown');
+    if (this.hp <= 0) return this.die();
+    this.knock = to.clone().multiplyScalar(react === 'knockdown' ? -6 : -2);
+    if (react === 'knockdown') {
+      this.state = 'down'; this.timer = 1.2;
+      this.play('Hit_Knockback', { fade: 0.04, speed: 1.1, restart: true });
+    } else {
+      this.state = 'hurt'; this.timer = 0.32;
+      this.play(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { fade: 0.04, speed: 1.6, restart: true });
+    }
+    this.invuln = 0.25;
+    return true;
+  }
+
+  receiveBullet(b) {
+    if (this.dead || this.state === 'dodge') return 'miss';
+    const from = b.vel.clone().negate().setY(0).normalize();
+    const ninja = this.state === 'move' && this.curSpeed > 9 && this.fwd().dot(from) > 0.2;
+    if (this.parryBullet > 0 || ninja || this.state === 'parry' || this.state === 'blade') {
+      this.bp += 40;
+      return 'deflect';
+    }
+    this.receiveHit({ dmg: b.owner.attack?.A.dmg || 8, react: 'light', from: b.mesh.position.clone().sub(b.vel) });
+    return 'hit';
+  }
+
+  die() {
+    this.state = 'dead';
+    this.hp = 0;
+    this.exitBlade();
+    this.play('Death_A', { fade: 0.08, restart: true });
+    this.ctx.hud.dead(true);
+    return true;
+  }
+
+  respawn() {
+    this.hp = 100; this.focus = 100; this.combo = 0;
+    this.state = 'move';
+    this.invuln = 2;
+    this.play('Idle_A', { fade: 0.3 });
+    this.ctx.hud.dead(false);
+  }
+
+  onKill(e, sliced) {
+    this.bp += e.T.bp * (sliced ? 2 : 1);
+    if (this.lockT === e) this.lockT = this.ctx.enemies.alive.find((x) => x !== e && x.pos.distanceTo(this.pos) < 15) || null;
+    if (!this.ctx.enemies.alive.some((x) => x !== e)) this.ctx.time.slow(0.25, 0.6); // last kill of the wave
+  }
+
+  // ------------------------------------------------------------ blade mode
+  enterBlade() {
+    this.state = 'blade';
+    this.move = null;
+    this.bladeSwing = 0;
+    this.ctx.time.blade = true;
+    this.play('Idle_Sword', { fade: 0.1 });
+    this.ctx.hud.blade(true);
+    sfx.bladeIn();
+  }
+
+  exitBlade() {
+    if (this.state === 'blade') this.state = this.onGround ? 'move' : 'air';
+    this.ctx.time.blade = false;
+    this.ctx.hud.blade(false);
+  }
+
+  updateBlade(dt, input, dir, moving) {
+    this.focus -= dt * 9;
+    if (!(input.held('KeyF') || input.padNow?.blade) || this.focus <= 0) { this.focus = Math.max(0, this.focus); sfx.bladeOut(); return this.exitBlade(); }
+    // the cut angle follows the mouse swipe (or the right stick)
+    const md = this.ctx.input.bladeSwipe;
+    if (md && Math.hypot(md.x, md.y) > 3) this.cutAngle = Math.atan2(-md.y, md.x);
+    this.ctx.hud.cutAngle(this.cutAngle);
+    // face where the camera looks, shuffle slowly
+    this.yaw = this.ctx.cam.yaw;
+    if (moving) this.pos.addScaledVector(dir, 2 * dt);
+    this.bladeSwing -= dt;
+    if (this.bladeSwing <= 0 && !this.layered) this.play('Idle_Sword', { fade: 0.1 });
+    const L = input.hit('Mouse0', 'pad:attack');
+    const H = input.hit('Mouse2', 'pad:heavy');
+    const swipeHeld = input.mouse.left && md && Math.hypot(md.x, md.y) > 14;
+    if (L || H || (swipeHeld && this.bladeSwing <= -0.04)) this.cut(H ? this.cutAngle + Math.PI / 2 : this.cutAngle);
+  }
+
+  // the cut plane passes through this point, in front of Jason's chest
+  bladeAnchor() { return this.chest().addScaledVector(this.fwd(), 1.3); }
+
+  cut(angle) {
+    const cam = this.ctx.cam.camera;
+    const f = cam.getWorldDirection(v3());
+    const right = v3().crossVectors(f, cam.up).normalize();
+    const up = v3().crossVectors(right, f).normalize();
+    const sdir = right.multiplyScalar(Math.cos(angle)).addScaledVector(up, Math.sin(angle));
+    const normal = v3().crossVectors(f, sdir).normalize();
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, this.bladeAnchor());
+    this.focus = Math.max(0, this.focus - 3);
+    this.bladeSwing = 0.12;
+    this.slashFlip = !this.slashFlip;
+    this.playLayered('Idle_A', this.slashFlip ? 'Sword_Regular_A' : 'Sword_Regular_B', { speed: 4.5, from: 0.25 });
+    sfx.swish(true);
+    this.ctx.hud.slash(angle);
+    const reachC = this.chest();
+    let any = false;
+    // enemies (alive or dead) the plane passes through
+    for (const e of this.ctx.enemies.list) {
+      if (e.state === 'gone' || e.pos.distanceTo(this.pos) > 3.8) continue;
+      const pts = ['head', 'pelvis', 'hand_l', 'hand_r', 'foot_l', 'foot_r', 'spine_03'].map((n) => e.model.getObjectByName(n).getWorldPosition(v3()));
+      const sides = pts.map((p) => Math.sign(plane.distanceToPoint(p)));
+      if (sides.every((s) => s === sides[0])) continue;
+      if (e.T.armor && e.state !== 'stunned' && e.alive) {
+        this.ctx.fx.sparks(e.chest(), normal, 0xffffff, 18, 5); sfx.clang(); any = true; continue;
+      }
+      const zan = e.state === 'stunned' && e.core && Math.abs(plane.distanceToPoint(e.chest())) < 0.22;
+      const pieces = e.slice(plane, zan);
+      any = true;
+      this.bp += 80;
+      if (zan) this.zandatsu(pieces);
+    }
+    // pieces already on the ground can be cut again
+    for (const p of this.ctx.pieces.near(reachC, 3.5)) if (this.ctx.pieces.cutPiece(p, plane)) any = true;
+    // bullets in the air
+    for (const b of this.ctx.enemies.bullets) {
+      if (b.mesh.position.distanceTo(reachC) < 4 && Math.abs(plane.distanceToPoint(b.mesh.position)) < 0.4) { b.life = 0; this.ctx.fx.sparks(b.mesh.position.clone(), normal, 0xffd6a0, 10); }
+    }
+    if (any) { sfx.slice(); this.ctx.cam.shake(0.06); this.addHit(20); }
+  }
+
+  zandatsu(pieces) {
+    this.hp = Math.min(100, this.hp + 50);
+    this.focus = 100;
+    this.bp += 500;
+    this.ctx.hud.msg('ZANDATSU', 'blue big');
+    sfx.zandatsu();
+    // a few extra cuts through the halves for the finish
+    for (let i = 0; i < 3; i++) {
+      const list = this.ctx.pieces.near(this.chest(), 4).slice(-4);
+      for (const p of list) {
+        const n = new THREE.Vector3().randomDirection();
+        this.ctx.pieces.cutPiece(p, new THREE.Plane().setFromNormalAndCoplanarPoint(n, p.mesh.position));
+      }
+    }
+    this.exitBlade();
+    this.state = 'zandatsu';
+    this.timer = 0.7;
+    this.invuln = 1;
+    this.play('Power Up', { fade: 0.05, speed: 2.2, restart: true });
+    this.ctx.time.slow(0.2, 0.9);
+    void pieces;
+  }
+
+  // ------------------------------------------------------------ pistol
+  enterAim() {
+    this.state = 'aim';
+    this.pistol.visible = true;
+    this.knife.visible = false;
+    if (this.holsterGrip) this.holsterGrip.visible = false;
+    this.aimToggle = this.ctx.input.hit('KeyG') ? true : this.aimToggle;
+    sfx.draw();
+  }
+
+  exitAim() {
+    this.state = 'move';
+    this.aimToggle = false;
+    this.pistol.visible = false;
+    this.knife.visible = true;
+    if (this.holsterGrip) this.holsterGrip.visible = true;
+    this.clearLayers();
+    this.base = null;
+    this.play('Idle_A', { fade: 0.15 });
+    sfx.draw();
+  }
+
+  get aiming() { return this.state === 'aim'; }
+
   updateAim(dt, input, dir, moving, mv) {
-    if (!this.aiming) this.draw();
+    if (input.hit('KeyG')) this.aimToggle = !this.aimToggle;
+    if (!input.aim && !this.aimToggle) return this.exitAim();
+    if (input.hit('KeyZ', 'pad:roll')) { this.exitAim(); return this.dodge(dir, moving); }
     const cam = this.ctx.cam;
-    // face the camera direction
-    let d = cam.yaw - this.yaw;
-    while (d > Math.PI) d -= 2 * Math.PI;
-    while (d < -Math.PI) d += 2 * Math.PI;
-    this.yaw += THREE.MathUtils.clamp(d, -14 * dt, 14 * dt);
-    // legs: strafe / walk / back, upper: aim pose blended by pitch
+    this.yaw = cam.yaw;
     let leg = 'Idle_A';
     if (moving) {
       if (Math.abs(mv.x) > Math.abs(mv.y)) leg = mv.x > 0 ? 'Strafe_right' : 'Strafe_left';
       else leg = mv.y > 0 ? 'Walk' : 'Walk_Backwards';
-      if (this.crouch && leg === 'Walk') leg = 'Crouch_Walk';
-    } else if (this.crouch) leg = 'Crouch_Idle';
-    const speed = moving ? (this.crouch ? 0.9 : 1.15) : 0;
-    this.pos.addScaledVector(dir, speed * dt);
-    if (this.base) { this.base.fadeOut(0.15); this.base = null; }
-    this.setLayer(this.lower, leg, 1);
-    const L = this.lower[leg];
-    if (moving && this.speeds[leg]) L.timeScale = THREE.MathUtils.clamp(speed / this.speeds[leg], 0.6, 1.8);
-    const reloading = this.upper.Pistol_Reload.isRunning() && this.upper.Pistol_Reload.time < this.upper.Pistol_Reload.getClip().duration - 0.05;
-    const p = cam.pitch; // + looking down
-    const up = Math.max(0, -p / 0.7), down = Math.max(0, p / 0.7);
-    if (reloading) {
-      this.setLayer(this.upper, 'Pistol_Reload', 1);
-    } else {
-      if (this.upper.Pistol_Reload.isRunning()) this.upper.Pistol_Reload.stop();
-      for (const [n, w] of [['Pistol_Aim_Up', Math.min(1, up)], ['Pistol_Aim_Down', Math.min(1, down)],
-        ['Pistol_Aim_Neutral', 1 - Math.min(1, up + down)]]) {
-        const a = this.upper[n];
-        if (!a.isRunning()) a.reset().play();
-        a.setEffectiveWeight(w);
-      }
-      this.upper.Pistol_Idle.stop();
     }
-    if ((input.mouse.leftPressed || input.hit('pad:fire')) && !reloading) this.fire();
-    if (input.hit('KeyR', 'pad:reload') && !reloading && this.ammo < 12) this.reload();
-    if (input.hit('KeyE', 'pad:roll')) { this.holster(); return this.dodge(dir, moving, mv); }
-  }
-
-  draw() {
-    this.aiming = true;
-    this.state = 'aim';
-    this.pistol.visible = true;
-    if (this.holsterGrip) this.holsterGrip.visible = false;
-    this.knife.visible = false; this.knifeTimer = 0;
-    sfx.draw();
-  }
-
-  holster() {
-    this.aiming = false;
-    this.state = 'loco';
-    this.pistol.visible = false;
-    if (this.holsterGrip) this.holsterGrip.visible = true;
-    this.stopLayer(this.upper);
-    this.stopLayer(this.lower);
-    this.base = null;
-    this.play('Idle_A', { fade: 0.2 });
-    sfx.draw();
+    this.pos.addScaledVector(dir, (moving ? 3.6 : 0) * dt);
+    if (this.base) { this.base.fadeOut(0.1); this.base = null; }
+    for (const [n, a] of Object.entries(this.lowerClips)) {
+      if (n === leg) { if (!a.isRunning()) a.reset().play(); a.setEffectiveWeight(1); a.timeScale = moving ? 2 : 1; } else if (a.isRunning()) a.stop();
+    }
+    this.layered = true;
+    const reload = this.upperClips.Pistol_Reload;
+    const reloading = reload.isRunning() && reload.time < reload.getClip().duration - 0.05;
+    const up = Math.max(0, -cam.pitch / 0.7), down = Math.max(0, cam.pitch / 0.7);
+    for (const [n, w] of [['Pistol_Aim_Up', Math.min(1, up)], ['Pistol_Aim_Down', Math.min(1, down)], ['Pistol_Aim_Neutral', 1 - Math.min(1, up + down)]]) {
+      const a = this.upperClips[n];
+      if (!a.isRunning()) a.reset().play();
+      a.setEffectiveWeight(reloading ? 0 : w);
+    }
+    if (!reloading && reload.isRunning()) reload.stop();
+    if (input.hit('Mouse0', 'pad:fire') && !reloading) this.fire();
+    if (input.hit('KeyR', 'pad:reload') && !reloading && this.ammo < 12) {
+      reload.reset().play(); reload.setEffectiveWeight(1); reload.timeScale = 1.6;
+      sfx.click(); setTimeout(() => { this.ammo = 12; sfx.click(); }, 1100);
+    }
   }
 
   fire() {
@@ -447,236 +803,33 @@ export class Player {
     this.ammo--;
     this.recoil = 1;
     sfx.shot();
-    const { cam, effects } = this.ctx;
-    const muzzle = this.pistol.userData.muzzle.getWorldPosition(new THREE.Vector3());
-    effects.muzzle(muzzle);
-    cam.shake(0.12);
-    // aim ray from the camera centre; the bullet travels from the muzzle to what it hits
-    const ray = new THREE.Ray(cam.camera.position.clone(), cam.camera.getWorldDirection(new THREE.Vector3()));
-    let best = 60, hitN = new THREE.Vector3(0, 1, 0), target = null, part = null;
+    const { cam, fx } = this.ctx;
+    const muzzle = this.pistol.userData.muzzle.getWorldPosition(v3());
+    fx.muzzle(muzzle);
+    cam.shake(0.1);
+    const ray = new THREE.Ray(cam.camera.position.clone(), cam.camera.getWorldDirection(v3()));
+    let best = 60, hitN = new THREE.Vector3(0, 1, 0), hitE = null, part = null;
+    const p = v3();
     for (const b of this.ctx.arena.colliders) {
-      const p = ray.intersectBox(b, new THREE.Vector3());
-      if (p) {
-        const d = p.distanceTo(ray.origin);
-        if (d < best && d > 0.5) { best = d; hitN = boxNormal(b, p); }
-      }
+      if (ray.intersectBox(b, p)) { const d = p.distanceTo(ray.origin); if (d < best && d > 0.5) { best = d; hitN = ray.direction.clone().negate(); } }
     }
     const floorT = ray.direction.y < 0 ? -ray.origin.y / ray.direction.y : Infinity;
     if (floorT < best) { best = floorT; hitN = new THREE.Vector3(0, 1, 0); }
-    const dh = this.ctx.dummies.raycast(ray, best);
-    if (dh) { best = dh.dist; target = dh.dummy; part = dh.part; }
-    const hit = ray.at(best, new THREE.Vector3());
-    effects.tracer(muzzle, hit);
-    if (target) {
-      target.damage(part === 'head' ? 3 : 1, this.pos, part === 'head' ? 'Hit_Head' : 'Hit_Chest');
-      effects.sparks(hit, ray.direction.clone().negate(), 0x8a1010, 10);
-    } else {
-      effects.sparks(hit, hitN, 0xffc070, 12);
-    }
+    const eh = this.ctx.enemies.raycast(ray, best);
+    if (eh) { best = eh.dist; hitE = eh.enemy; part = eh.part; }
+    const hit = ray.at(best, v3());
+    fx.tracer(muzzle, hit);
+    if (hitE) {
+      const r = hitE.takeHit({ dmg: part === 'head' ? 30 : 9, react: part === 'head' ? 'stagger' : 'light', from: this.pos.clone() });
+      if (r !== 'blocked') this.addHit(25);
+    } else fx.sparks(hit, hitN, 0xffc070, 12);
   }
 
-  reload() {
-    sfx.click();
-    setTimeout(() => sfx.click(), 700);
-    setTimeout(() => sfx.click(), 1500);
-    this.upper.Pistol_Reload.reset().play();
-    this.upper.Pistol_Reload.setEffectiveWeight(1);
-    for (const n of ['Pistol_Aim_Up', 'Pistol_Aim_Down', 'Pistol_Aim_Neutral']) this.upper[n].setEffectiveWeight(0);
-    this.reloadEnd = setTimeout(() => { this.ammo = 12; }, 1800);
-  }
-
-  startCombo() {
-    this.comboStep = 0;
-    this.queued = false;
-    this.knife.visible = true;
-    this.knifeTimer = 3;
-    this.doComboStep();
-  }
-
-  doComboStep() {
-    const c = COMBO[this.comboStep];
-    this.faceNearest(2.6);
-    sfx.swish();
-    this.action(c.clip, {
-      fade: 0.08,
-      speed: 1.15,
-      hits: [{ t: c.hit, fn: () => this.meleeHit(c.dmg, c.reach, c.heavy ? 'Hit_Knockback' : (this.comboStep === 1 ? 'Hit_Head' : 'Hit_Chest')) }],
-      onEnd: () => {
-        if (this.queued && this.comboStep < COMBO.length - 1) {
-          this.comboStep++; this.queued = false; this.doComboStep();
-        } else {
-          this.comboStep = -1;
-          this.state = 'loco';
-          this.play(this.crouch ? 'Crouch_Idle' : 'Idle_A', { fade: 0.3 });
-        }
-      },
-    });
-  }
-
-  kick() {
-    this.faceNearest(2.6);
-    this.action('Kick_Breach', {
-      hits: [{ t: 0.36, fn: () => this.meleeHit(2, 1.9, 'Hit_Knockback') }],
-      onEnd: () => { this.state = 'loco'; this.play('Idle_A', { fade: 0.3 }); },
-    });
-  }
-
-  dodge(dir, moving, mv) {
-    let clip = 'Dodge_back';
-    if (moving) {
-      // roll toward the input direction; sideways input -> side dodge
-      const target = Math.atan2(dir.x, dir.z);
-      if (Math.abs(mv.x) > Math.abs(mv.y) * 1.3 && !this.crouch) {
-        clip = mv.x > 0 ? 'Dodge_right' : 'Dodge_left';
-        this.yaw = this.ctx.cam.yaw;
-      } else if (mv.y < -0.5) {
-        clip = 'Dodge_back';
-        this.yaw = this.ctx.cam.yaw;
-      } else {
-        clip = 'Roll';
-        this.yaw = target;
-      }
-    }
-    this.invuln = 0.6;
-    sfx.whoosh();
-    this.action(clip, { fade: 0.08, speed: clip === 'Roll' ? 1.35 : 1.1, onEnd: () => { this.state = 'loco'; this.play('Idle_A', { fade: 0.25 }); } });
-  }
-
-  jump(dir, moving) {
-    this.vy = 6.2;
-    this.onGround = false;
-    this.airDir = moving ? dir.clone().multiplyScalar(Math.max(2.2, this.curSpeed || 0)) : new THREE.Vector3();
-    this.play('Jump_air', { fade: 0.1, from: 0.1 });
-    sfx.whoosh();
-  }
-
-  updateAir(dt, dir, moving) {
-    if (moving) {
-      this.airDir.lerp(dir.clone().multiplyScalar(Math.max(2.2, this.airDir.length())), 2 * dt);
-      const target = Math.atan2(dir.x, dir.z);
-      let d = target - this.yaw;
-      while (d > Math.PI) d -= 2 * Math.PI;
-      while (d < -Math.PI) d += 2 * Math.PI;
-      this.yaw += THREE.MathUtils.clamp(d, -6 * dt, 6 * dt);
-    }
-    if (this.airDir) this.pos.addScaledVector(this.airDir, dt);
-  }
-
-  turn(clip, delta) {
-    this.turnDelta = delta;
-    this.action(clip, { fade: 0.12, speed: 1.4, onEnd: () => { this.state = 'loco'; this.play('Idle_A', { fade: 0.2 }); } });
-  }
-
-  updateAction(dt, input, dir) {
-    const { a, hits, onEnd } = this.act;
-    if (this.act.name.startsWith('Sword') && (input.mouse.leftPressed || input.hit('pad:attack')) && a.time > a.getClip().duration * 0.25) this.queued = true;
-    const dur = a.getClip().duration;
-    const t = Math.min(a.time + dt * a.timeScale, dur); // time after this frame's mixer update
-    for (const h of hits) if (!h.done && t >= h.t * dur) { h.done = true; h.fn(); }
-    // root motion
-    const m = this.motion[this.act.name];
-    if (m) {
-      if (m.x) {
-        const [x, z] = sampleMotion(m, t);
-        if (this.motionPrev) {
-          const dx = x - this.motionPrev[0], dz = z - this.motionPrev[1];
-          const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
-          this.pos.x += dx * c + dz * s;
-          this.pos.z += -dx * s + dz * c;
-        }
-        this.motionPrev = [x, z];
-      }
-      if (m.yaw) {
-        const yw = interp(m.yaw.times, m.yaw.yaw, t);
-        if (this.yawPrev !== undefined) this.yaw += yw - this.yawPrev;
-        this.yawPrev = yw;
-      }
-    }
-    const tv = TRAVEL[this.act.name];
-    if (tv) {
-      const [[tx, tz], t0, t1] = tv;
-      const f = ease(THREE.MathUtils.clamp((t / dur - t0) / (t1 - t0), 0, 1));
-      let df = f - (this.travelPrev || 0);
-      this.travelPrev = f;
-      // attacks stop at the enemy instead of passing through him
-      if (tz > 0 && !this.act.name.startsWith('Roll') && this.ctx.dummies.nearest(this.pos, 0.85, this.yaw)) df = 0;
-      const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
-      this.pos.x += (tx * c + tz * s) * df;
-      this.pos.z += (-tx * s + tz * c) * df;
-    }
-    if (this.act.name === 'Jump_Land' && input.move && Math.hypot(input.move().x, input.move().y) > 0.1 && a.time > 0.15) {
-      this.state = 'loco'; this.yawPrev = undefined; return;
-    }
-    if (t >= dur - 1e-3 || (this.act.name.startsWith('Sword') && this.queued && t > dur * 0.62)) {
-      this.yawPrev = undefined;
-      this.state = 'loco';
-      const fn = onEnd;
-      this.act = null;
-      if (fn) fn(); else this.play('Idle_A', { fade: 0.25 });
-    }
-  }
-
-  faceNearest(range) {
-    const d = this.ctx.dummies.nearest(this.pos, range, this.yaw);
-    if (d) this.yaw = Math.atan2(d.root.position.x - this.pos.x, d.root.position.z - this.pos.z);
-  }
-
-  meleeHit(dmg, reach, reaction) {
-    const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-    let any = false;
-    for (const d of this.ctx.dummies.list) {
-      if (d.dead) continue;
-      const to = d.root.position.clone().sub(this.pos); to.y = 0;
-      const dist = to.length();
-      if (dist < reach && to.normalize().dot(fwd) > 0.35) {
-        d.damage(dmg, this.pos, reaction);
-        any = true;
-        const p = d.root.position.clone(); p.y = 1.25;
-        this.ctx.effects.sparks(p, fwd.clone().negate(), 0x8a1010, 12);
-      }
-    }
-    if (any) { sfx.hit(dmg > 1); this.ctx.cam.shake(dmg > 1 ? 0.18 : 0.08); this.ctx.hitstop?.(dmg > 1 ? 0.09 : 0.05); }
-  }
-
-  // called by a dummy's punch
-  takeHit(from) {
-    if (this.invuln > 0 || this.state === 'action' && this.act?.name?.startsWith('Dodge')) return false;
-    if (this.aiming) this.holster();
-    this.yaw = Math.atan2(from.x - this.pos.x, from.z - this.pos.z);
-    sfx.hit(false);
-    this.ctx.cam.shake(0.15);
-    this.action(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { fade: 0.06, onEnd: () => { this.state = 'loco'; this.play('Idle_A', { fade: 0.25 }); } });
-    this.invuln = 0.8;
-    return true;
-  }
-
-  postProcessPose(dt) {
-    // pistol recoil: kick the forearm/hand up after each shot
-    if (this.recoil > 0 && this.aiming) {
-      const k = this.recoil;
-      this.bones.lowerarm_r.rotateX(-0.25 * k);
-      this.bones.hand_r.rotateX(-0.35 * k);
+  postPose(dt) {
+    if (this.recoil > 0 && this.state === 'aim') {
+      this.bones.lowerarm_r.rotateX(-0.25 * this.recoil);
+      this.bones.hand_r.rotateX(-0.35 * this.recoil);
       this.recoil = Math.max(0, this.recoil - dt * 9);
     }
   }
-}
-
-function interp(times, vals, t) {
-  if (t <= times[0]) return vals[0];
-  const n = times.length - 1;
-  if (t >= times[n]) return vals[n];
-  let i = 1;
-  while (times[i] < t) i++;
-  const f = (t - times[i - 1]) / (times[i] - times[i - 1]);
-  return vals[i - 1] + (vals[i] - vals[i - 1]) * f;
-}
-
-function boxNormal(b, p) {
-  const e = 1e-3;
-  if (Math.abs(p.x - b.min.x) < e) return new THREE.Vector3(-1, 0, 0);
-  if (Math.abs(p.x - b.max.x) < e) return new THREE.Vector3(1, 0, 0);
-  if (Math.abs(p.z - b.min.z) < e) return new THREE.Vector3(0, 0, -1);
-  if (Math.abs(p.z - b.max.z) < e) return new THREE.Vector3(0, 0, 1);
-  if (Math.abs(p.y - b.max.y) < e) return new THREE.Vector3(0, 1, 0);
-  return new THREE.Vector3(0, -1, 0);
 }

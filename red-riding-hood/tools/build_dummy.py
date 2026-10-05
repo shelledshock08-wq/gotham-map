@@ -9,13 +9,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_jason  # noqa: E402
 import rig_body  # noqa: E402
 
-CLIPS = ["Idle_A", "Fighting Idle", "Hit_Chest", "Hit_Head", "Hit_Knockback", "Death_A", "Death_B", "Death_C",
-         "Punch_Jab", "Punch_Cross", "Walk", "Jog", "Dizzy", "Idle Hurt", "Zombie_Rise"]
+CLIPS = ["Idle_A", "Fighting Idle", "Walk", "Jog", "Sprint", "Strafe_left", "Strafe_right", "Walk_Backwards",
+         "Punch_Jab", "Punch_Cross", "Melee_Hook", "Kick_Breach", "Fighting Left Jab", "Fighting Right Jab",
+         "Zombie_Scratch", "Push", "Sword_Regular_A", "Sword_Regular_B", "Sword_Regular_C", "Sword_Attack",
+         "Sword_Dash_RM", "Sword_Block", "Defend", "Attack_Ground_Pound", "Shield_Dash_RM", "Idle_Sword",
+         "Pistol_Idle", "Pistol_Aim_Neutral", "Pistol_Shoot", "Pistol_Reload",
+         "Hit_Chest", "Hit_Head", "Hit_Knockback", "Idle_Shield_Break", "Dizzy", "LayToIdle",
+         "Death_A", "Death_B", "Death_C", "Death_D", "Dodge_back", "Dodge_left", "Dodge_right", "Roll", "Jump_air",
+         "Zombie Yell", "Angry"]
 
 build_jason.reset()
 arm = None
 mesh = None
-for name in ("human-base-animations.glb", "human-addon-animations.glb"):
+for name in ("human-base-animations.glb", "human-addon-animations.glb", "human-mocap-animations.glb"):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(rig_body.M2M, name))
     new = [o for o in bpy.data.objects if o not in before]

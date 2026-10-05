@@ -23,24 +23,38 @@ node tools/serve.mjs        # then open http://localhost:8080
 
 Any static server works (`python3 -m http.server 8080` too). Nothing is downloaded at runtime: three.js is vendored in `vendor/three/`. `?q=low` lowers the render quality for weak machines. `viewer.html` is a model and animation viewer for checking the character.
 
-## Controls
+## Combat (Metal Gear Rising style)
+
+Speeds: Jason runs at 7.5 m/s and Ninja Runs at 13 m/s. Attacks play at 1.3–2.4× the library speed. Enemies sprint at 5–7 m/s.
 
 | Input | Action |
 |---|---|
-| WASD | move (camera relative) |
-| Mouse | look (click to lock the pointer) |
-| Shift | sprint |
-| X | walk / jog toggle |
-| C | crouch toggle (Shift while crouched = stealth run) |
-| Space | jump (crates are climbable) |
-| Left click | knife combo, click again to chain (3 hits, the last one lunges) |
-| F | kick |
-| E | roll / dodge (forward = roll; back, left or right = dodge that way) |
-| Q | turn around in place (also automatic when you reverse from standing) |
-| Right mouse (hold) or G | draw and aim the pistol from the thigh holster; left click fires |
-| R | reload |
+| WASD / Mouse | move (camera relative) / look (click locks the mouse) |
+| Left click | light attack. **Pushing toward an enemy as his attack lands = parry** |
+| Right click | heavy attack |
+| Strings | L L L L · H H H · L H · L L H (launcher). Back + H is also a launcher; hold H (or press Space) to jump after him |
+| Red glint | parryable. Parry right before impact = **perfect parry**: slow-mo, automatic counter, enemy stunned |
+| Yellow glint | can't be parried (brute ground pound and charge, machete overhead): dodge or jump |
+| Hold F | **Blade Mode**: the world slows to 6%, swipe the mouse to angle the cut, left click cuts along it, right click cuts across it. Bodies, corpses and pieces really split along the plane and can be cut again |
+| Blue glow | stunned enemy (low health, perfect parry, or broken brute armour). Cut through the glow in Blade Mode = **Zandatsu**: +50 health, full Blade Mode gauge |
+| Hold Shift | Ninja Run: vaults crates automatically, deflects bullets coming from the front. Ninja Run + L = dash stab, + H = shoulder charge |
+| Space | jump. In the air: L = 4-hit air combo with hang time (juggles), R = plunge slam with shockwave |
+| C | crouch. Crouched: L = low slash string, R = slide tackle |
+| Z | dodge (direction keys choose: roll, side step, back step), with invincibility frames |
+| T / middle click | lock-on (enemy health over the target) |
+| Q (hold) / G | pistol: left click fires, R reloads. Head shots stagger |
 | H | show / hide controls |
-| Gamepad | sticks; A jump, X knife, Y kick, B roll, LT aim, RT fire, L3 sprint, R3 crouch |
+| Gamepad | X light, Y heavy, A jump, B dodge, RB Ninja Run, LB Blade Mode (right stick angles the cut), R3 lock-on, L3 crouch, LT/RT pistol |
+
+**Enemies** come in endless waves (placeholder mannequins, tinted by type):
+- **Brawler:** jab, cross, hook, kick, shove; blocks some light hits.
+- **Blade thug (machete):** three slashes, a lunge, and an unparryable overhead.
+- **Gunman:** keeps 7–11 m away and strafes; bullets can be parried, deflected by Ninja Run, or cut in Blade Mode.
+- **Brute:** bigger, armoured (light hits don't stagger him), with a ground pound and a charge (both yellow) and a parryable haymaker. Break his poise with heavy hits and parries.
+
+At most two of them attack at once. They block (heavy attacks break guard), dodge, brace while you combo them, stagger, get knocked down and get up, fly when launched, and die by animation chosen from how they were hit (four death clips, knockback flips, falls from the air). Bodies stay with spreading blood pools. HUD: health, Blade Mode gauge, hit counter, Battle Points, wave.
+
+**Not like Metal Gear Rising yet:** no bosses, no executions or Ripper Mode, no upgrade shop, one blade (the UTRH knife; the sword clips drive it), placeholder enemies. The **Zandatsu reward (health + gauge) is my provisional choice.** The brief says not to import Raiden's cyborg fuel explanation, so nothing in the game explains it yet.
 
 ## What is real and what is placeholder
 
@@ -54,13 +68,14 @@ Any static server works (`python3 -m http.server 8080` too). Nothing is download
   - gloves with grey cuffs and back plates
   - right-thigh holster with a pistol grip, and a knife sheath on the left hip
   - **no bat emblem anywhere**
-- **Rig and 54 animations** on Jason's own skeleton (from the Mesh2Motion CC0 library): idle, walk, jog, sprint, crouch, stealth, strafes, turns, rolls, dodges, jumps, knife/sword combos, punches, kick, pistol aim/shoot/reload, hit reactions, deaths.
-- **The third-person controller.** Clip speed is matched to each animation's measured foot speed, so there is no foot sliding. It also has turn-in-place driven by the clip's own rotation, a combo system with hit windows, hit-stop and camera shake, the pistol drawn from the holster with an upper-body aim layer and recoil, jumping onto crates, and a wall-aware camera.
+- **Rig and 67 animations** on Jason's own skeleton (from the Mesh2Motion CC0 library): idle, walk, jog, sprint, crouch, stealth, strafes, turns, rolls, dodges, jumps, knife/sword combos, punches, kick, pistol aim/shoot/reload, hit reactions, deaths.
+- **The combat controller** described above. Strike frames are detected automatically from each animation (the fastest-moving hand or foot), and leg speed is matched to the clips, so feet don't slide.
+- **The Blade Mode slicer** (`js/slicer.js`): freezes the animated mesh, splits its triangles by the plane, caps the cut and simulates the pieces.
 - **The build pipeline.** Everything is regenerated from scripts (see below), so the model can be changed and rebuilt in about 40 seconds.
 
 **Placeholder (for testing only, not story content):**
 - **The warehouse arena.** No story location is decided; Japan, Nanda Parbat, Hawaii and Texas are still open.
-- **The training dummies.** These are the stock Mesh2Motion mannequin; two of them spar back.
+- **The enemies' look.** They're the stock Mesh2Motion mannequin, tinted per type. Their behaviour and moves are real; their models are not.
 - **The knife and pistol geometry.** It is simple: the knife follows the wavy UTRH blade from ref 2; the pistol is generic.
 - **Sound.** All of it is synthesised in the browser. No music is included.
 
@@ -93,9 +108,11 @@ npm install && node tools/play_test.mjs # optional: scripted play-test screensho
 | `tools/build_jason.py` | fits the Mesh2Motion skeleton to Jason, keeps every bone's orientation so the clips play unchanged, exports the GLB |
 | `tools/suit.py` | the suit, every piece generated from the body surface (shells, bands, hull-built helmet and boots) |
 | `tools/materials.py` | PBR materials with textures generated in numpy (leather, twill, knit, brushed metal, tread, paint) |
-| `js/player.js` | controller, animation state machine, knife, pistol |
+| `js/player.js` | Jason: moves, strings, parry, Blade Mode, Zandatsu, pistol |
+| `js/enemies.js` | enemy types, AI, attack tokens, reactions, deaths, waves, bullets |
+| `js/slicer.js` | Blade Mode mesh cutting and pieces |
+| `js/fx.js` | blood, splats, pools, sparks, glints, shockwaves, blade trail |
 | `js/arena.js`, `js/textures.js` | placeholder arena with procedural concrete, corrugated steel, wood and painted steel |
-| `js/dummies.js` | placeholder training dummies |
 
 ## Sources and licences
 

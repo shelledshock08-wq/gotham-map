@@ -195,6 +195,8 @@ export function buildArena(scene, renderer) {
   return {
     colliders, update, bounds,
     spawn: new THREE.Vector3(2.2, 0, 7.5),
+    enemySpawns: [new THREE.Vector3(0, 0, 19), new THREE.Vector3(-12, 0, -10), new THREE.Vector3(12, 0, -10),
+      new THREE.Vector3(-12, 0, 9), new THREE.Vector3(12.5, 0, 6), new THREE.Vector3(4, 0, -11)],
     dummySpawns: [new THREE.Vector3(-3, 0, -2), new THREE.Vector3(2.5, 0, -3.5), new THREE.Vector3(6, 0, 2),
       new THREE.Vector3(-6, 0, 2.5)],
   };

@@ -1,5 +1,5 @@
-// Jason's hand weapons for the milestone: the wavy UTRH knife (ref 2) and a
-// pistol, plus muzzle flash, tracer and impact sparks.
+// Hand weapons: the wavy UTRH knife (ref 2), a pistol, a machete, and the
+// helper that puts them in a hand.
 import * as THREE from 'three';
 
 const steel = () => new THREE.MeshStandardMaterial({ color: 0xc9ccd2, metalness: 1, roughness: 0.22 });
@@ -36,6 +36,8 @@ export function makeKnife() {
   const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.015, 12, 8), steel());
   pommel.position.y = -0.053; g.add(pommel);
   for (const m of g.children) m.castShadow = true;
+  g.userData.tip = new THREE.Object3D(); g.userData.tip.position.set(0, 0.27, 0); g.add(g.userData.tip);
+  g.userData.base = new THREE.Object3D(); g.userData.base.position.set(0, 0.07, 0); g.add(g.userData.base);
   return g;
 }
 
@@ -58,63 +60,51 @@ export function makePistol() {
   return g;
 }
 
-export class Effects {
-  constructor(scene) {
-    this.scene = scene;
-    this.items = [];
-    this.flashLight = new THREE.PointLight(0xffb060, 0, 6, 2);
-    scene.add(this.flashLight);
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const x = c.getContext('2d');
-    const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,240,200,1)'); gr.addColorStop(0.3, 'rgba(255,170,60,0.8)'); gr.addColorStop(1, 'rgba(255,100,0,0)');
-    x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
-    this.flashTex = new THREE.CanvasTexture(c);
-  }
+// Machete for the blade thugs: blade along +Y, edge +X, origin = grip.
+export function makeMachete() {
+  const g = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.018, 0); shape.lineTo(0.02, 0); shape.lineTo(0.03, 0.36); shape.quadraticCurveTo(0.03, 0.42, 0.0, 0.43);
+  shape.lineTo(-0.018, 0.4); shape.lineTo(-0.018, 0);
+  const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.003, bevelEnabled: true, bevelThickness: 0.001, bevelSize: 0.001, bevelSegments: 1 }),
+    new THREE.MeshStandardMaterial({ color: 0x8a8d92, metalness: 0.9, roughness: 0.45 }));
+  blade.geometry.translate(0, 0.06, -0.0015);
+  g.add(blade);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.014, 0.12, 10), black());
+  g.add(handle);
+  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+  g.userData.tip = new THREE.Object3D(); g.userData.tip.position.set(0.01, 0.48, 0); g.add(g.userData.tip);
+  return g;
+}
 
-  muzzle(pos) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.flashTex, blending: THREE.AdditiveBlending, depthWrite: false }));
-    s.position.copy(pos); s.scale.setScalar(0.16);
-    this.scene.add(s);
-    this.items.push({ obj: s, life: 0.05 });
-    this.flashLight.position.copy(pos); this.flashLight.intensity = 8;
-    this.flashT = 0.06;
+// Puts a weapon in a hand, computed from the hand bones in the bind pose
+// (call before any animation has posed the skeleton). mode 'blade': blade
+// out of the thumb side; 'gun': barrel along the fingers.
+export function attachToHand(model, obj, mode, side = 'r') {
+  model.updateMatrixWorld(true);
+  const bone = (n) => model.getObjectByName(`${n}_${side}`);
+  const wp = (n) => bone(n).getWorldPosition(new THREE.Vector3());
+  const hand = wp('hand'), mid = wp('middle_01'), idx = wp('index_01'), pinky = wp('pinky_01');
+  const fingers = mid.clone().sub(hand).normalize();
+  const thumbSide = idx.clone().sub(pinky).normalize();
+  const palm = new THREE.Vector3().crossVectors(fingers, thumbSide).normalize();
+  if (palm.y > 0) palm.negate();
+  const fist = hand.clone().addScaledVector(fingers, 0.075).addScaledVector(palm, 0.025);
+  let x, y, z, at = fist;
+  if (mode === 'blade') {
+    y = thumbSide.clone();
+    x = fingers.clone().addScaledVector(y, -fingers.dot(y)).normalize();
+    z = new THREE.Vector3().crossVectors(x, y);
+  } else {
+    z = fingers.clone();
+    y = thumbSide.clone().addScaledVector(z, -thumbSide.dot(z)).normalize();
+    x = new THREE.Vector3().crossVectors(y, z);
+    at = fist.clone().addScaledVector(thumbSide, -0.01);
   }
-
-  tracer(from, to) {
-    const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
-    const l = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.8 }));
-    this.scene.add(l);
-    this.items.push({ obj: l, life: 0.06, fade: true });
-  }
-
-  sparks(pos, normal, color = 0xffc070, count = 14) {
-    const geo = new THREE.BufferGeometry();
-    const p = new Float32Array(count * 3), v = [];
-    for (let i = 0; i < count; i++) {
-      p.set([pos.x, pos.y, pos.z], i * 3);
-      const d = new THREE.Vector3().randomDirection().multiplyScalar(0.6).add(normal).normalize().multiplyScalar(2 + Math.random() * 3);
-      v.push(d);
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size: 0.03, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    this.scene.add(pts);
-    this.items.push({ obj: pts, life: 0.35, vel: v, fade: true });
-  }
-
-  update(dt) {
-    if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) this.flashLight.intensity = 0; }
-    for (const it of this.items) {
-      it.life -= dt;
-      if (it.vel) {
-        const a = it.obj.geometry.attributes.position.array;
-        it.vel.forEach((v, i) => { v.y -= 9.8 * dt; a[i * 3] += v.x * dt; a[i * 3 + 1] += v.y * dt; a[i * 3 + 2] += v.z * dt; });
-        it.obj.geometry.attributes.position.needsUpdate = true;
-      }
-      if (it.fade) it.obj.material.opacity = Math.max(0, it.life * 4);
-      if (it.life <= 0) { this.scene.remove(it.obj); it.obj.geometry?.dispose(); it.obj.material?.dispose(); }
-    }
-    this.items = this.items.filter((it) => it.life > 0);
-  }
+  const hb = model.getObjectByName(`hand_${side}`);
+  const m = new THREE.Matrix4().makeBasis(x, y, z).setPosition(at);
+  m.premultiply(hb.matrixWorld.clone().invert());
+  m.decompose(obj.position, obj.quaternion, obj.scale);
+  hb.add(obj);
+  return obj;
 }

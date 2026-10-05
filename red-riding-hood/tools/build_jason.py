@@ -21,17 +21,22 @@ OUT = os.path.join(ROOT, "assets", "models")
 
 # Clips the test arena uses (Mesh2Motion names). Kept short to keep the file small.
 CLIPS = [
-    "Idle_A", "Idle_Sword", "Idle_ShakeOff", "Walk", "Jog", "Sprint", "Walk_Backwards",
-    "Strafe_left", "Strafe_right", "Crouch_Idle", "Crouch_Walk", "Walk_Stealth", "Run_Stealth",
+    # locomotion
+    "Idle_A", "Idle_Sword", "Fighting Idle", "Walk", "Jog", "Sprint", "Run_Anime", "Walk_Backwards",
+    "Strafe_left", "Strafe_right", "Crouch_Idle", "Crouch_Walk", "Run_Stealth",
     "Turn_Left_90", "Turn_Right_90", "Turn_Left_180", "Turn_Right_180",
-    "Roll", "Dodge_back", "Dodge_left", "Dodge_right", "Jump_Start", "Jump_air", "Jump_Land",
+    # air
+    "Jump_Start", "Jump_air", "Jump_Land", "Run Jump", "NinjaJump_Start", "NinjaJump_Idle", "NinjaJump_Land",
     "Land_Three_Point", "Backflip",
+    # attacks
     "Sword_Regular_A", "Sword_Regular_B", "Sword_Regular_C", "Sword_Regular_Combo", "Sword_Attack",
-    "Sword_Block", "Sword_Dash_RM", "Sword_Attack_Air_Vertical",
-    "Punch_Jab", "Punch_Cross", "Melee_Hook", "Kick_Breach", "Fighting Idle",
+    "Sword_Attack_Air_Vertical", "Sword_Dash_RM", "Chop_Tree", "Melee_Hook", "Kick_Breach", "Attack_Ground_Pound",
+    "Punch_Jab", "Punch_Cross", "Shield_Dash_RM", "Slide", "Slide_Start", "Slide_Exit", "Push",
+    # defence / reactions
+    "Sword_Block", "Roll", "Dodge_back", "Dodge_left", "Dodge_right", "Hit_Chest", "Hit_Head", "Hit_Knockback",
+    "Idle_Shield_Break", "LayToIdle", "Death_A", "Death_B", "Power Up", "Victory",
+    # pistol
     "Pistol_Idle", "Pistol_Aim_Neutral", "Pistol_Aim_Up", "Pistol_Aim_Down", "Pistol_Shoot", "Pistol_Reload",
-    "OverhandThrow", "Throw Object",
-    "Hit_Chest", "Hit_Head", "Hit_Knockback", "Death_A", "Death_B", "Idle_FoldArms", "Idle_Talking",
 ]
 
 
