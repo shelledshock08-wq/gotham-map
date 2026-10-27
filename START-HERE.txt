@@ -1,0 +1,7 @@
+Charmcaster Avatar v2
+
+Extract this archive completely into a folder, then open index.html in Chrome or Edge.
+Allow the camera. All artwork and tracking models are embedded in index.html.
+Full-body avatar is enabled by default. Step back to let the camera see your arms and legs.
+Use Expression pose to select one of 80 variations. Live speech and blinks remain active.
+This is a 2D puppet; extreme turns and crossed limbs may distort it.
