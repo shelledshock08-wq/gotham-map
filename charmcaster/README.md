@@ -15,7 +15,13 @@ Shading follows your real body and lighting, so it moves naturally.
 
 ## Windows app (.exe)
 
-`CharmcasterLens.exe` is a portable app: download it and double-click it, with nothing to install. Everything it needs is inside, so it works offline. Windows may show "Windows protected your PC" the first time because the app isn't code-signed; click **More info → Run anyway**.
+Download `CharmcasterLens-Setup.exe` from the `charmcaster-latest` release and double-click it. It installs in a few seconds into your user folder (no admin rights needed), adds a desktop shortcut and opens the lens. Everything it needs is inside, so it works offline. Windows may show "Windows protected your PC" the first time because the app isn't code-signed; click **More info → Run anyway**.
+
+If the window stays dark, that's almost always the graphics driver:
+
+- After 20 seconds a prompt offers **safe graphics mode**: it draws in software, which is slower but works on any PC. You can also press **F9** at any time to switch modes.
+- The title bar shows what the app is doing while it starts.
+- A log is written to `%APPDATA%\Charmcaster Lens\CharmcasterLens-log.txt`; the prompt has an **Open log** button.
 
 | Key | What happens |
 |---|---|
@@ -26,18 +32,20 @@ Shading follows your real body and lighting, so it moves naturally.
 | M | Mirror on / off |
 | C | Next webcam |
 | F11 or F | Fullscreen |
+| F9 | Safe graphics mode on / off |
+| F12 | Developer tools |
 
 For full-body shots, stand back until your knees or feet are in view. Your face keeps driving hers even when it's small in the frame.
 
-Build it yourself (Node 20+):
+Build it yourself on Windows (Node 20+):
 
 ```bash
 cd charmcaster/desktop
 npm ci
-npm run dist:win    # downloads the models into ../vendor, writes dist/CharmcasterLens.exe
+npm run dist:win    # downloads the models into ../vendor, writes dist/CharmcasterLens-Setup.exe
 ```
 
-On Linux or macOS add `-c.win.signAndEditExecutable=false` to the `electron-builder` call; on Windows the icon gets embedded too. The `Charmcaster Lens (Windows exe)` GitHub workflow builds it on a Windows runner and attaches it to the `charmcaster-latest` release.
+The installer needs Windows (or Wine) to build. On Linux, `npx electron-builder --linux dir` makes a test build of the same app. The `Charmcaster Lens (Windows exe)` GitHub workflow builds the installer on a Windows runner and attaches it to the `charmcaster-latest` release.
 
 ## Use it on a phone
 

@@ -355,6 +355,13 @@ export class ToonRenderer {
     this.w = this.h = 0;
   }
 
+  // GPU name as WebGL reports it (e.g. "ANGLE (Intel ... Direct3D11)" or "SwiftShader" in software)
+  rendererInfo() {
+    const gl = this.gl;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  }
+
   resize(w, h) {
     if (w === this.w && h === this.h && this.texS) return;
     const gl = this.gl;

@@ -107,8 +107,14 @@ const outCtx = ui.out.getContext('2d', { alpha: false });
 window.__lens = { state, get tracker() { return tracker; }, frames: 0, face: false };
 
 // ---------- boot ----------
+// Desktop app: the native title bar shows progress, so a stuck start is never a silent black window.
+function desktopTitle(text) {
+  if (OPT.desktop) document.title = text ? `Charmcaster Lens — ${text}` : 'Charmcaster Lens';
+}
+
 function showError(msg) {
   console.error(msg);
+  desktopTitle('error (see window)');
   ui.loader.hidden = true;
   ui.err.hidden = false;
   ui.errText.textContent = msg;
@@ -117,18 +123,32 @@ function showError(msg) {
 
 function setProgress(p, text) {
   ui.bar.style.width = `${Math.round(Math.min(1, p) * 100)}%`;
-  if (text) ui.loadText.textContent = text;
+  if (text) {
+    ui.loadText.textContent = text;
+    desktopTitle(text);
+  }
 }
+
+const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+nextPaint().then(() => console.info('[charmcaster] painted'));
 
 async function boot() {
   ui.start.hidden = true;
   ui.err.hidden = true;
   ui.loader.hidden = false;
   setProgress(0.03, 'Opening your camera…');
+  await nextPaint(); // let the loading screen show before the GPU work starts
   try {
-    toon = toon || new ToonRenderer(glCanvas);
+    if (!toon) {
+      toon = new ToonRenderer(glCanvas);
+      const gpu = toon.rendererInfo();
+      console.info('[charmcaster] webgl renderer:', gpu);
+      if (/swiftshader|llvmpipe|basic render/i.test(gpu)) state.softwareGl = true;
+    }
   } catch (e) {
-    showError('This browser has no WebGL2, which the lens needs. Try Chrome, Safari 15+ or Firefox.');
+    showError(OPT.desktop
+      ? 'Your graphics card did not give the lens WebGL2. Press F9 to restart in safe graphics mode.'
+      : 'This browser has no WebGL2, which the lens needs. Try Chrome, Safari 15+ or Firefox.');
     return;
   }
   tracker = tracker || new Tracker({
@@ -154,6 +174,10 @@ async function boot() {
   capture = capture || new Capture(ui.out, () => state.stream);
   updateModeLabel();
   toast('Raise your eyebrows to cast a spell ✦', 3500);
+  if (params.has('safe')) toast('Safe graphics mode: drawing in software, so it is slower. Press F9 to try the GPU again.', 6000);
+  else if (state.softwareGl) toast('No GPU acceleration here, so expect a low frame rate.', 5000);
+  desktopTitle('');
+  console.info('[charmcaster] ready', JSON.stringify(tracker.delegates));
   requestWakeLock();
   loop();
   tracker.loadBody();

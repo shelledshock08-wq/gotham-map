@@ -1,7 +1,7 @@
 {
   "name": "charmcaster-lens",
   "productName": "Charmcaster Lens",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Live camera lens that turns you into Charmcaster - unofficial fan project",
   "main": "main.js",
   "author": "shelledshock08-wq",
@@ -10,7 +10,7 @@
   "scripts": {
     "assets": "node fetch-assets.mjs",
     "start": "node fetch-assets.mjs && electron .",
-    "dist:win": "node fetch-assets.mjs && electron-builder --win portable --x64"
+    "dist:win": "node fetch-assets.mjs && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "electron": "44.7.0",
@@ -44,15 +44,22 @@
       }
     ],
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "../icons/icon-512.png"
-    },
-    "portable": {
-      "artifactName": "CharmcasterLens.exe"
     },
     "electronLanguages": [
       "en-US"
     ],
-    "compression": "maximum"
+    "compression": "maximum",
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Charmcaster Lens",
+      "artifactName": "CharmcasterLens-Setup.exe"
+    }
   }
 }

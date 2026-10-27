@@ -23,17 +23,20 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: node fetch-assets.mjs
-      - run: npx electron-builder --win portable --x64 --publish never
+      - run: npx electron-builder --win nsis --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: CharmcasterLens
-          path: charmcaster/desktop/dist/CharmcasterLens.exe
+          path: charmcaster/desktop/dist/CharmcasterLens-Setup.exe
       - name: Attach to the charmcaster-latest release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES="Download CharmcasterLens-Setup.exe and double-click it: it installs in a few seconds (no admin rights needed), adds a desktop shortcut and opens the lens. If the window stays dark, wait 20 seconds for the safe graphics prompt or press F9. Built from $GITHUB_SHA."
           gh release view charmcaster-latest >/dev/null 2>&1 || \
-            gh release create charmcaster-latest --target "$GITHUB_SHA" --title "Charmcaster Lens for Windows" \
-              --notes "Portable app: download CharmcasterLens.exe and double-click it. Built from $GITHUB_SHA."
-          gh release upload charmcaster-latest dist/CharmcasterLens.exe --clobber
+            gh release create charmcaster-latest --target "$GITHUB_SHA" --title "Charmcaster Lens for Windows" --notes "$NOTES"
+          gh release edit charmcaster-latest --notes "$NOTES"
+          gh release upload charmcaster-latest dist/CharmcasterLens-Setup.exe --clobber
+          # the old portable build showed a black window on some GPUs; don't leave it around
+          gh release delete-asset charmcaster-latest CharmcasterLens.exe --yes || true
