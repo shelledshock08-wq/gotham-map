@@ -1,0 +1,63 @@
+name: Charmcaster Windows EXE
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/charmcaster-avatar-v2]
+    paths:
+      - .github/workflows/charmcaster-windows.yml
+      - package.json
+      - package-lock.json
+      - electron/**
+      - filter/**
+      - index.html
+permissions:
+  contents: write
+concurrency:
+  group: charmcaster-windows-release
+  cancel-in-progress: false
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run dist:win
+      - name: Verify executable and record checksum
+        shell: pwsh
+        run: |
+          $exe = 'dist/windows/Charmcaster-Avatar-Windows-x64.exe'
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Missing or invalid Windows executable' }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  Charmcaster-Avatar-Windows-x64.exe" | Set-Content "$exe.sha256" -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Charmcaster-Windows-x64
+          path: |
+            dist/windows/Charmcaster-Avatar-Windows-x64.exe
+            dist/windows/Charmcaster-Avatar-Windows-x64.exe.sha256
+      - name: Publish downloadable preview build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'charmcaster-v2-windows'
+          @'
+          Portable Windows 10/11 x64 app. Download and run Charmcaster-Avatar-Windows-x64.exe.
+
+          Includes image-generated Charmcaster artwork, local face/body tracking, 80 selectable expression variations, photos and video. No Python, Node or separately downloaded models are required.
+
+          This preview build is unsigned. It is a deformable 2D puppet; extreme poses and occlusions can distort the artwork. The Windows executable was built in CI; physical webcam behavior is not tested by this build job.
+          '@ | Set-Content release-notes.md -Encoding utf8
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Charmcaster Avatar v2 — Windows' --notes-file release-notes.md --prerelease
+            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          }
+          gh release upload $tag 'dist/windows/Charmcaster-Avatar-Windows-x64.exe' 'dist/windows/Charmcaster-Avatar-Windows-x64.exe.sha256' --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Executable upload failed' }
