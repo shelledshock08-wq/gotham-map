@@ -1,10 +1,10 @@
 // Offline support: the app shell is network-first (updates land right away),
 // the MediaPipe runtime and models are cache-first (their URLs are versioned).
-const SHELL_CACHE = 'charm-shell-v1';
+const SHELL_CACHE = 'charm-shell-v2';
 const MODEL_CACHE = 'charm-models-v1';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
-  './js/app.js', './js/tracker.js', './js/toon.js', './js/charm.js', './js/geom.js', './js/canonical.js', './js/capture.js',
+  './js/app.js', './js/tracker.js', './js/toon.js', './js/charm.js', './js/body.js', './js/geom.js', './js/canonical.js', './js/capture.js',
   './icons/icon.svg', './icons/icon-192.png',
 ];
 const IMMUTABLE = /cdn\.jsdelivr\.net\/npm\/@mediapipe\/tasks-vision@|storage\.googleapis\.com\/mediapipe-models\//;

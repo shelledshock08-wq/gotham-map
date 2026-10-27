@@ -1,0 +1,39 @@
+name: Charmcaster Lens (Windows exe)
+
+on:
+  push:
+    paths:
+      - 'charmcaster/**'
+      - '.github/workflows/charmcaster-exe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: charmcaster/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node fetch-assets.mjs
+      - run: npx electron-builder --win portable --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CharmcasterLens
+          path: charmcaster/desktop/dist/CharmcasterLens.exe
+      - name: Attach to the charmcaster-latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view charmcaster-latest >/dev/null 2>&1 || \
+            gh release create charmcaster-latest --target "$GITHUB_SHA" --title "Charmcaster Lens for Windows" \
+              --notes "Portable app: download CharmcasterLens.exe and double-click it. Built from $GITHUB_SHA."
+          gh release upload charmcaster-latest dist/CharmcasterLens.exe --clobber

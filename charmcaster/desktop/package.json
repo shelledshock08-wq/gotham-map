@@ -1,0 +1,58 @@
+{
+  "name": "charmcaster-lens",
+  "productName": "Charmcaster Lens",
+  "version": "1.0.0",
+  "description": "Live camera lens that turns you into Charmcaster - unofficial fan project",
+  "main": "main.js",
+  "author": "shelledshock08-wq",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "assets": "node fetch-assets.mjs",
+    "start": "node fetch-assets.mjs && electron .",
+    "dist:win": "node fetch-assets.mjs && electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.fanlens.charmcaster",
+    "productName": "Charmcaster Lens",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "lens",
+        "filter": [
+          "index.html",
+          "manifest.webmanifest",
+          "js/**/*",
+          "icons/**/*",
+          "vendor/tasks-vision/vision_bundle.mjs",
+          "vendor/tasks-vision/wasm/vision_wasm_internal.*",
+          "vendor/models/face_landmarker.task",
+          "vendor/models/selfie_multiclass_256x256.tflite",
+          "vendor/models/pose_landmarker_full.task"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "../icons/icon-512.png"
+    },
+    "portable": {
+      "artifactName": "CharmcasterLens.exe"
+    },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "compression": "maximum"
+  }
+}

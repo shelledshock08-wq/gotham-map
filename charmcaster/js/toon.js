@@ -46,8 +46,15 @@ uniform float uMirror;
 uniform float uMaskOn;
 uniform int uMode;
 uniform float uTime;
-uniform vec4 uPanel[2];
-uniform float uPanelGrow;
+uniform vec4 uPanelA[2];  // per person: panel top xy, bottom xy (px)
+uniform vec4 uPanelB[2];  // half width at top, at bottom, on
+uniform vec4 uMaskRoi;    // where the mask sits in the (unmirrored) frame, normalized
+uniform vec4 uArm[6];     // limb segments in px: upper arm, forearm, hand (left then right)
+uniform vec3 uArmR;
+uniform vec4 uLeg[6];     // thigh, shin, foot (left then right)
+uniform vec3 uLegR;
+uniform vec4 uHem;        // point on the jacket hem line + unit normal pointing down the body
+uniform float uBody;
 uniform float uInk;
 in vec2 vUv;
 out vec4 o;
@@ -85,6 +92,26 @@ vec3 rgb2hsv(vec3 c) {
 vec3 hsv2rgb(vec3 c) {
   vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
   return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+float sdSeg(vec2 p, vec4 s) {
+  vec2 pa = p - s.xy, ba = s.zw - s.xy;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-3), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+float capsule(vec2 p, vec4 s, float r) { return 1.0 - smoothstep(r - 1.5, r + 1.5, sdSeg(p, s)); }
+// short line across a limb at the start of segment s (glove cuff, boot top)
+float cuff(vec2 p, vec4 s, float r, float w) {
+  vec2 d = normalize(s.zw - s.xy + vec2(1e-4));
+  vec2 q = p - s.xy;
+  float along = dot(q, d), across = abs(dot(q, vec2(-d.y, d.x)));
+  return (1.0 - smoothstep(w * 0.5 - 0.6, w * 0.5 + 0.6, abs(along))) * (1.0 - smoothstep(r - 1.0, r + 1.0, across));
+}
+
+vec4 maskAt(vec2 raw) {
+  vec2 q = (clamp(raw, 0.0, 1.0) - uMaskRoi.xy) / uMaskRoi.zw;
+  float inside = step(0.0, q.x) * step(q.x, 1.0) * step(0.0, q.y) * step(q.y, 1.0);
+  return texture(uMask, q) * inside * uMaskOn;
 }
 
 // Line along the 0.5 contour of a soft mask channel, constant width in pixels.
@@ -169,7 +196,7 @@ void main() {
   float gy = (tl + 2.0 * tc + tr) - (bl + 2.0 * bc + br);
   float edge = length(vec2(gx, gy));
 
-  vec4 m = texture(uMask, muv) * uMaskOn;
+  vec4 m = maskAt(muv);
   float person = m.a, hair = m.r, skin = m.g, cloth = m.b;
   float other = max(person - hair - skin - cloth, 0.0);
 
@@ -192,30 +219,59 @@ void main() {
   float hw2 = uInk * 0.5;
   float panel = 0.0, panelLine = 0.0;
   for (int k = 0; k < 2; k++) {
-    vec4 P = uPanel[k];
-    float below = pp.y - P.y;
-    float hw = P.z + max(below, 0.0) * uPanelGrow;
-    float d = abs(pp.x - P.x) - hw;
-    float inP = P.w * step(0.0, below);
+    vec4 A = uPanelA[k], B = uPanelB[k];
+    vec2 ax = A.zw - A.xy;
+    float len = max(length(ax), 1.0);
+    vec2 dir = ax / len;
+    vec2 q = pp - A.xy;
+    float t = dot(q, dir) / len;
+    float hw = mix(B.x, B.y, clamp(t, 0.0, 1.0));
+    float d = abs(dot(q, vec2(-dir.y, dir.x))) - hw;
+    float inP = B.z * step(0.0, t) * step(t, 1.0);
     panel = max(panel, inP * (1.0 - smoothstep(-1.0, 1.0, d)));
     panelLine = max(panelLine, inP * (1.0 - smoothstep(hw2 * 0.7 - 0.7, hw2 * 0.7 + 0.7, abs(d))));
   }
   vec3 panelC = tone4(r1, L1, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.02, 0.06), vec3(0.12, 0.04, 0.11), vec3(0.24, 0.10, 0.23), 1.3);
+  vec3 sleeveC = clothC;
   clothC = mix(clothC, panelC, panel);
   vec3 otherC = comic(s);
 
-  vec3 col = bg * (1.0 - person) + hairC * hair + skinC * skin + clothC * cloth + otherC * other;
+  // her outfit on the whole body: sleeves, fingerless gloves, leggings, boots (from body tracking)
+  float sleeve = 0.0, glove = 0.0, boot = 0.0, thigh = 0.0, lines = 0.0;
+  for (int k = 0; k < 2; k++) {
+    sleeve = max(sleeve, max(capsule(pp, uArm[k * 3], uArmR.x), capsule(pp, uArm[k * 3 + 1], uArmR.y)));
+    glove = max(glove, capsule(pp, uArm[k * 3 + 2], uArmR.z));
+    thigh = max(thigh, capsule(pp, uLeg[k * 3], uLegR.x));
+    boot = max(boot, max(capsule(pp, uLeg[k * 3 + 1], uLegR.y), capsule(pp, uLeg[k * 3 + 2], uLegR.z)));
+    lines = max(lines, cuff(pp, uArm[k * 3 + 2], uArmR.z * 1.1, uInk));
+    lines = max(lines, cuff(pp, uLeg[k * 3 + 1], uLegR.y * 1.15, uInk));
+  }
+  float below = smoothstep(-2.0, 2.0, dot(pp - uHem.xy, uHem.zw));
+  // gloves only where the hand's own skin shows; a hand hidden behind an arm leaves the sleeve alone
+  float gW = glove * uBody * (skin + other) / max(person, 1e-3);
+  float sW = max(sleeve, glove) * uBody * (1.0 - gW);
+  float bW = boot * uBody * (1.0 - max(gW, sW));
+  float lW = max(below, thigh) * uBody * (1.0 - max(gW, sW)) * (1.0 - bW);
+  float tW = max(1.0 - gW - sW - bW - lW, 0.0);
+  vec3 legC = tone4(r1, L1, vec3(0.02, 0.01, 0.04), vec3(0.07, 0.04, 0.10), vec3(0.13, 0.07, 0.18), vec3(0.34, 0.22, 0.46), 1.2);
+  vec3 bootC = tone4(r1, L1, vec3(0.03, 0.02, 0.05), vec3(0.09, 0.05, 0.13), vec3(0.17, 0.09, 0.23), vec3(0.45, 0.30, 0.60), 1.15);
+  vec3 gloveC = tone4(r1, L1, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.03, 0.07), vec3(0.11, 0.06, 0.13), vec3(0.26, 0.16, 0.32), 1.25);
+  vec3 dressed = sleeveC * sW + gloveC * gW + bootC * bW + legC * lW;
+  vec3 clothD = clothC * tW + dressed;
+  vec3 skinD = skinC * tW + dressed;
+  vec3 otherD = otherC * (tW + sW + gW) + bootC * bW + legC * lW;
 
-  vec4 mR = texture(uMask, muv + vec2(px.x * 1.5, 0.0)) * uMaskOn;
-  vec4 mL = texture(uMask, muv - vec2(px.x * 1.5, 0.0)) * uMaskOn;
-  vec4 mU = texture(uMask, muv + vec2(0.0, px.y * 1.5)) * uMaskOn;
-  vec4 mD = texture(uMask, muv - vec2(0.0, px.y * 1.5)) * uMaskOn;
+  vec3 col = bg * (1.0 - person) + hairC * hair + skinD * skin + clothD * cloth + otherD * other;
+
+  vec2 mo = vec2(px.x * 1.5, 0.0), no = vec2(0.0, px.y * 1.5);
+  vec4 mR = maskAt(muv + mo), mL = maskAt(muv - mo), mU = maskAt(muv + no), mD = maskAt(muv - no);
   vec4 gxm = (mR - mL) / 3.0;
   vec4 gym = (mU - mD) / 3.0;
   float line = iso(person, gxm.a, gym.a, hw2);
   line = max(line, iso(hair, gxm.r, gym.r, hw2 * 0.8));
   line = max(line, iso(cloth, gxm.b, gym.b, hw2 * 0.8));
   line = max(line, cloth * panelLine);
+  line = max(line, lines * uBody * (skin + cloth));
 
   float edgeInk = smoothstep(0.30, 0.55, edge) * mix(0.7, 0.9, person) * (1.0 - 0.9 * hair) * (1.0 - 0.35 * cloth);
   if (uMode == 2) edgeInk *= person + (1.0 - uMaskOn);
@@ -252,6 +308,7 @@ function program(gl, vs, fs) {
 }
 
 export const MODES = ['comic', 'lair', 'glass', 'off'];
+const NO_LIMBS = new Float32Array(24).fill(-1e5);
 
 export class ToonRenderer {
   constructor(canvas) {
@@ -332,7 +389,9 @@ export class ToonRenderer {
     this.maskVersion = mask.version;
   }
 
-  // opts: { mirror, maskOn, mode, time, panels: [[cx, top, halfW, on], ...up to 2], panelGrow, ink }
+  // opts: { mirror, maskOn, maskRoi, mode, time, ink,
+  //         panels: up to 2 of [topX, topY, botX, botY, halfTop, halfBot, on],
+  //         body: { arms[24], armR[3], legs[24], legR[3], hem[4] } | null }
   render(source, opts) {
     if (this.lost) return false;
     const gl = this.gl;
@@ -375,10 +434,22 @@ export class ToonRenderer {
     gl.uniform1f(u.uMaskOn, opts.maskOn || 0);
     gl.uniform1i(u.uMode, opts.mode || 0);
     gl.uniform1f(u.uTime, opts.time || 0);
-    const panels = new Float32Array(8);
-    (opts.panels || []).slice(0, 2).forEach((p, k) => panels.set(p, k * 4));
-    gl.uniform4fv(u['uPanel[0]'], panels);
-    gl.uniform1f(u.uPanelGrow, opts.panelGrow || 0);
+    const pa = new Float32Array(8), pb = new Float32Array(8);
+    (opts.panels || []).slice(0, 2).forEach((p, k) => {
+      pa.set(p.slice(0, 4), k * 4);
+      pb.set([p[4], p[5], p[6], 0], k * 4);
+    });
+    gl.uniform4fv(u['uPanelA[0]'], pa);
+    gl.uniform4fv(u['uPanelB[0]'], pb);
+    const roi = opts.maskRoi || { x: 0, y: 0, w: 1, h: 1 };
+    gl.uniform4f(u.uMaskRoi, roi.x, roi.y, roi.w, roi.h);
+    const b = opts.body;
+    gl.uniform1f(u.uBody, b ? 1 : 0);
+    gl.uniform4fv(u['uArm[0]'], b ? b.arms : NO_LIMBS);
+    gl.uniform4fv(u['uLeg[0]'], b ? b.legs : NO_LIMBS);
+    gl.uniform3fv(u.uArmR, b ? b.armR : [0, 0, 0]);
+    gl.uniform3fv(u.uLegR, b ? b.legR : [0, 0, 0]);
+    gl.uniform4fv(u.uHem, b ? b.hem : [0, 1e6, 0, 1]);
     gl.uniform1f(u.uInk, opts.ink || 2.5);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.activeTexture(gl.TEXTURE0);

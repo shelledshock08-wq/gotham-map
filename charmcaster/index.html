@@ -99,6 +99,8 @@
   #stats { position: fixed; left: 8px; top: calc(64px + var(--safe-t)); z-index: 40; margin: 0; max-width: 70vw; white-space: pre-wrap;
     font: 11px ui-monospace, monospace; background: rgba(0,0,0,.6); padding: 4px 6px; border-radius: 4px; pointer-events: none; }
   #flash { position: fixed; inset: 0; z-index: 25; background: #fff; opacity: 0; pointer-events: none; }
+  /* H on a keyboard: nothing on screen but the lens (for screen recording / OBS) */
+  body.clean #hud, body.clean #status, body.clean #stats { display: none !important; }
   #flash.on { animation: flash .35s ease-out; }
   @keyframes flash { from { opacity: .85; } to { opacity: 0; } }
 
@@ -174,7 +176,7 @@
       <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#fff" stroke-width="6"/><circle id="ring-progress" cx="50" cy="50" r="46" fill="none" stroke="#ff2a7f" stroke-width="7" stroke-dasharray="289" stroke-dashoffset="289" stroke-linecap="round"/></svg>
       <span class="core"></span>
     </button>
-    <div class="hint">tap = photo · hold = video · swipe = background</div>
+    <div class="hint" id="hint">tap = photo · hold = video · swipe = background</div>
   </div>
 </div>
 

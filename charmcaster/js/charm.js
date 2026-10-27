@@ -121,7 +121,7 @@ function catmull(nodes, widths, per = 5) {
 
 // ---------- hair strands with spring physics ----------
 
-class Strand {
+export class Strand {
   // nodes: head-space rest positions; widths: half widths in cm
   constructor(nodes, widths, opts = {}) {
     this.rest = nodes;
@@ -340,28 +340,33 @@ export class Charm {
     const target = brow > 0.42 || F.forceSpell ? 1 : 0;
     this.spell += (target - this.spell) * Math.min(1, F.dt * (target ? 5 : 2.5));
 
-    // body anchor (neck base) — from the clothes mask when available
-    const s0 = F.s;
-    this.bodyScale = this.bodyScale ? lerp(this.bodyScale, s0, 0.08) : s0;
-    let nx, ny;
-    if (F.neckline) {
-      nx = F.neckline[0]; ny = F.neckline[1];
+    // body anchor (neck base): body tracking, else where the clothes start, else below the chin
+    let nx, ny, s0, roll;
+    if (F.body) {
+      [nx, ny] = F.body.neck;
+      s0 = F.body.scale / 34; // shoulder joints are ~34 cm apart
+      roll = F.body.roll;
     } else {
-      const c = project(F.pose, 0, -16.0, -3.0);
-      nx = c[0]; ny = c[1];
+      s0 = F.s;
+      roll = clamp(F.roll * 0.3, -0.25, 0.25);
+      if (F.neckline) {
+        [nx, ny] = F.neckline;
+      } else {
+        const c = project(F.pose, 0, -16.0, -3.0);
+        nx = c[0]; ny = c[1];
+      }
     }
+    this.bodyScale = this.bodyScale ? lerp(this.bodyScale, s0, F.body ? 0.3 : 0.08) : s0;
     if (!this.neck) this.neck = [nx, ny];
-    else { this.neck[0] = lerp(this.neck[0], nx, 0.25); this.neck[1] = lerp(this.neck[1], ny, 0.25); }
-    this.bodyRoll = lerp(this.bodyRoll, clamp(F.roll * 0.3, -0.25, 0.25), 0.1);
-    F.neck = this.neck;
-    F.bodyScale = this.bodyScale;
+    else { this.neck[0] = lerp(this.neck[0], nx, 0.3); this.neck[1] = lerp(this.neck[1], ny, 0.3); }
+    this.bodyRoll = lerp(this.bodyRoll, roll, F.body ? 0.3 : 0.1);
   }
 
-  // Black centre panel of the outfit, for the toon shader (px).
-  panel(F) {
-    if (!this.neck) return [0, 0, 0, 0];
-    const s = this.bodyScale;
-    return [this.neck[0], this.neck[1] - 0.5 * s, 2.1 * s, 1];
+  // Black centre panel of the outfit for the toon shader: [top xy, bottom xy, half widths, on] in px.
+  panel() {
+    if (!this.neck) return [0, 0, 0, 0, 0, 0, 0];
+    const s = this.bodyScale, [x, y] = this.neck;
+    return [x, y - 0.5 * s, x, y + 2000, 2.1 * s, 2.1 * s + 200, 1];
   }
 
   // ---- layer behind the body (long hair, spell circle) ----

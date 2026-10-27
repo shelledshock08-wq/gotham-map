@@ -3,6 +3,7 @@
 import { Tracker } from './tracker.js';
 import { ToonRenderer, MODES } from './toon.js';
 import { Charm } from './charm.js';
+import { Body, bodyFrame } from './body.js';
 import { fitSimilarity } from './geom.js';
 import { RIGID } from './canonical.js';
 import { Capture } from './capture.js';
@@ -15,15 +16,19 @@ const OPT = {
   mirror: params.get('mirror'),
   debug: params.has('debug'),
   spell: params.has('spell'), // preview the spell effect without raising your brows
+  back: params.has('back'), // preview the view from behind on a front-facing test image
+  desktop: params.has('desktop'), // running inside the Windows app
 };
+if (OPT.desktop) OPT.local = true;
 
 const $ = (id) => document.getElementById(id);
+const TOUCH = matchMedia('(pointer: coarse)').matches;
 const ui = {
   start: $('start'), go: $('go'), loader: $('loader'), bar: $('bar'), loadText: $('load-text'),
   err: $('err'), errText: $('err-text'), retry: $('retry'),
   stage: $('stage'), video: $('cam'), out: $('out'),
   hud: $('hud'), flip: $('flip'), modeBtn: $('mode'), modeLabel: $('mode-label'), compare: $('compare'),
-  shutter: $('shutter'), ring: $('ring-progress'), toast: $('toast'), status: $('status'), stats: $('stats'),
+  shutter: $('shutter'), ring: $('ring-progress'), toast: $('toast'), status: $('status'), stats: $('stats'), hint: $('hint'),
   flash: $('flash'),
 };
 
@@ -57,10 +62,11 @@ function fitPose(lm, W, H, mirror, X, Y, Z) {
 function hairAt(x, y, W, H, mirror) {
   const m = tracker && tracker.mask;
   if (!m || state.maskOn <= 0) return 0;
-  const u = mirror ? 1 - x / W : x / W, v = y / H;
-  if (u < 0 || u >= 1 || v < 0 || v >= 1) return 0;
-  return m.soft[(Math.floor(v * m.h) * m.w + Math.floor(u * m.w)) * 4];
+  const i = tracker.maskIndex(mirror ? 1 - x / W : x / W, y / H);
+  return i < 0 ? 0 : m.soft[i * 4];
 }
+
+const body = new Body();
 
 // One drawn Charmcaster per tracked face.
 const puppets = new Map();
@@ -150,7 +156,7 @@ async function boot() {
   toast('Raise your eyebrows to cast a spell ✦', 3500);
   requestWakeLock();
   loop();
-  tracker.loadSegmenter();
+  tracker.loadBody();
 }
 
 function explain(e) {
@@ -162,7 +168,7 @@ function explain(e) {
   return `Something went wrong: ${e && e.message ? e.message : e}`;
 }
 
-async function startCamera(facing) {
+async function startCamera(facing, deviceId = null) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw Object.assign(new Error('Camera API unavailable'), { name: window.isSecureContext ? 'NotFoundError' : 'SecurityError' });
   }
@@ -170,8 +176,9 @@ async function startCamera(facing) {
   // ask for frames in the screen's orientation (portrait on phones) so nothing gets cropped
   const portrait = window.innerHeight > window.innerWidth;
   const video = {
-    facingMode: facing, frameRate: { ideal: 30 },
+    frameRate: { ideal: 30 },
     width: { ideal: portrait ? 720 : 1280 }, height: { ideal: portrait ? 1280 : 720 },
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: facing }),
   };
   let stream;
   try {
@@ -185,7 +192,8 @@ async function startCamera(facing) {
   state.stream = stream;
   const track = stream.getVideoTracks()[0];
   const settings = track.getSettings ? track.getSettings() : {};
-  state.facing = settings.facingMode || facing;
+  state.facing = settings.facingMode || facing || 'user';
+  state.deviceId = settings.deviceId || deviceId;
   state.mirror = OPT.mirror !== null ? OPT.mirror !== '0' : state.facing !== 'environment';
   // the OS took the camera away (call, another app): get it back when we're visible
   track.addEventListener('ended', () => {
@@ -200,6 +208,7 @@ async function startCamera(facing) {
   state.source = v;
   tracker && tracker.resetSmoothing();
   puppets.clear();
+  body.reset();
   refreshFlip();
   if (state.running) loop();
   return true;
@@ -234,14 +243,23 @@ async function refreshFlip() {
   } catch (_) { /* keep visible */ }
 }
 
+// Phones: front <-> back. Computers: step through the connected webcams.
 async function flipCamera() {
   if (OPT.src) return;
-  const next = state.facing === 'user' ? 'environment' : 'user';
   try {
-    await startCamera(next);
+    if (TOUCH) {
+      await startCamera(state.facing === 'user' ? 'environment' : 'user');
+    } else {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      if (cams.length < 2) return;
+      const i = cams.findIndex((d) => d.deviceId === state.deviceId);
+      const next = cams[(i + 1) % cams.length];
+      await startCamera(null, next.deviceId);
+      toast(next.label || 'Camera switched', 1200);
+    }
   } catch (e) {
     toast('Could not switch camera');
-    try { await startCamera(state.facing); } catch (_) { /* leave it */ }
+    try { await startCamera(state.facing, state.deviceId); } catch (_) { /* leave it */ }
   }
 }
 
@@ -295,16 +313,22 @@ function frame(now) {
   const lensOn = !state.comparing && MODES[state.mode] !== 'off';
   if (tracker.segState === 'ready' && tracker.mask) state.maskOn = Math.min(1, state.maskOn + dt * 2);
 
+  // whole body (shoulders in view): costume pieces + the view from behind
+  const B = lensOn ? bodyFrame(tracker.pose, W, H, mirror) : null;
+  if (B && OPT.back) B.front = -1;
   const frames = [];
-  const faces = lensOn ? tracker.faces : [];
+  const faces = lensOn && !(B && OPT.back) ? tracker.faces : [];
   for (const face of faces) {
     const pup = puppetFor(face.id);
     const pose = fitPose(face.lm, W, H, mirror, pup.X, pup.Y, pup.Z);
+    const withBody = B && face.id === tracker.poseFaceId ? B : null;
     let neckline = null;
-    const nl = tracker.findNeckline(face.lm);
-    if (nl) neckline = [(mirror ? 1 - nl.x : nl.x) * W, nl.y * H];
+    if (!withBody) {
+      const nl = tracker.findNeckline(face.lm);
+      if (nl) neckline = [(mirror ? 1 - nl.x : nl.x) * W, nl.y * H];
+    }
     const F = {
-      W, H, mirror, X: pup.X, Y: pup.Y, pose, s: pose.s,
+      W, H, mirror, X: pup.X, Y: pup.Y, pose, s: pose.s, body: withBody,
       bs: (n) => tracker.blend(face, n), time: now / 1000, dt, neckline,
       hairAt: (x, y) => hairAt(x, y, W, H, mirror), forceSpell: OPT.spell,
     };
@@ -315,33 +339,43 @@ function frame(now) {
   frames.sort((a, b) => a.F.s - b.F.s); // farther faces first
   window.__lens.face = faces.length > 0;
   window.__lens.faces = faces.length;
+  window.__lens.body = B ? { front: +B.front.toFixed(2), hips: B.hipsOk, poseFace: tracker.poseFaceId } : null;
+  window.__lens.slots = faces.map((f) => ({ id: f.id, synthetic: f.synthetic }));
+  const backView = B && !frames.some((f) => f.F.body) && B.front < -0.12;
 
+  const panels = frames.map((f) => (f.F.body ? body.panel(f.F.body) : f.charm.panel()));
+  if (B && !frames.some((f) => f.F.body)) panels.push(body.panel(B));
   toon.uploadMask(tracker.mask);
   toon.render(src, {
-    mirror, maskOn: state.maskOn, mode: lensOn ? state.mode : 3, time: now / 1000,
-    panels: frames.slice(-2).map((f) => f.charm.panel(f.F)), panelGrow: 0.1, ink: Math.max(1.5, H / 400),
+    mirror, maskOn: state.maskOn, maskRoi: tracker.mask && tracker.mask.roi,
+    mode: lensOn ? state.mode : 3, time: now / 1000, ink: Math.max(1.5, H / 400),
+    panels: panels.slice(-2), body: body.uniforms(B),
   });
   outCtx.drawImage(glCanvas, 0, 0);
 
-  if (frames.length) {
+  if (frames.length || B) {
     backCtx.clearRect(0, 0, W, H);
     for (const { F, charm } of frames) charm.drawBack(backCtx, F);
     const m = tracker.mask;
     if (m && state.maskOn > 0) {
+      const r = m.roi;
       backCtx.save();
       backCtx.globalCompositeOperation = 'destination-out';
       backCtx.globalAlpha = state.maskOn;
       if (mirror) { backCtx.translate(W, 0); backCtx.scale(-1, 1); }
-      backCtx.drawImage(m.cutCanvas, 0, 0, W, H);
+      backCtx.drawImage(m.cutCanvas, r.x * W, r.y * H, r.w * W, r.h * H);
       backCtx.restore();
     }
     outCtx.drawImage(back, 0, 0);
+    const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
+    if (B) body.drawCostume(outCtx, B, lw);
+    if (backView) body.drawBackView(outCtx, B, dt, lw);
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
   const t2 = performance.now();
 
   // hints
-  if (!faces.length && lensOn) {
+  if (!faces.length && !B && lensOn) {
     if (!state.noFaceSince) state.noFaceSince = now;
     else if (now - state.noFaceSince > 1500) setStatus('Show me your face 👀', true);
   } else if (state.noFaceSince) {
@@ -357,7 +391,7 @@ function frame(now) {
   if (OPT.debug && state.frames % 10 === 0) {
     const d = tracker.delegates;
     ui.stats.hidden = false;
-    ui.stats.textContent = `${W}x${H} ${state.fps.toFixed(0)} fps | track ${state.timings.track.toFixed(1)} ms | draw ${state.timings.draw.toFixed(1)} ms | face ${d.face} seg ${d.seg || tracker.segState} x${tracker.segEvery}`;
+    ui.stats.textContent = `${W}x${H} ${state.fps.toFixed(0)} fps | track ${state.timings.track.toFixed(1)} ms | draw ${state.timings.draw.toFixed(1)} ms | face ${d.face} pose ${d.pose || '-'} seg ${d.seg || tracker.segState} x${tracker.segEvery}${B ? ` | facing ${B.front.toFixed(2)}` : ''}`;
   }
 }
 
@@ -423,26 +457,43 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) ui.compare.addE
   });
 }
 
+// recording (hold the shutter, or R on a keyboard)
+const MAX_REC_MS = 60000;
+let recording = false;
+function resetShutter() {
+  ui.shutter.classList.remove('down', 'rec');
+  ui.ring.style.strokeDashoffset = '289';
+}
+async function startRecording() {
+  if (recording || !capture) return;
+  recording = await capture.startVideo((p) => {
+    ui.ring.style.strokeDashoffset = `${(1 - p) * 289}`;
+  }, MAX_REC_MS, () => { recording = false; resetShutter(); });
+  if (recording) ui.shutter.classList.add('rec');
+}
+function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  capture.stopVideo();
+  resetShutter();
+}
+function takePhoto() {
+  if (!capture) return;
+  ui.flash.classList.remove('on');
+  void ui.flash.offsetWidth;
+  ui.flash.classList.add('on');
+  capture.photo();
+}
+
 // shutter: tap = photo, hold = video (like Snapchat)
 {
-  let holdTimer = 0, recording = false, downAt = 0;
-  const MAX_MS = 60000;
+  let holdTimer = 0, downAt = 0;
   const start = (e) => {
     e.preventDefault();
     if (!state.running || !capture) return;
     downAt = performance.now();
     ui.shutter.classList.add('down');
-    holdTimer = setTimeout(async () => {
-      holdTimer = 0;
-      recording = await capture.startVideo((p) => {
-        ui.ring.style.strokeDashoffset = `${(1 - p) * 289}`;
-      }, MAX_MS, () => { recording = false; finishUi(); });
-      if (recording) ui.shutter.classList.add('rec');
-    }, 280);
-  };
-  const finishUi = () => {
-    ui.shutter.classList.remove('down', 'rec');
-    ui.ring.style.strokeDashoffset = '289';
+    holdTimer = setTimeout(() => { holdTimer = 0; startRecording(); }, 280);
   };
   const end = () => {
     if (!downAt) return;
@@ -450,15 +501,12 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) ui.compare.addE
     if (holdTimer) {
       clearTimeout(holdTimer);
       holdTimer = 0;
-      finishUi();
-      ui.flash.classList.remove('on');
-      void ui.flash.offsetWidth;
-      ui.flash.classList.add('on');
-      capture.photo();
+      resetShutter();
+      takePhoto();
       return;
     }
-    if (recording) { recording = false; capture.stopVideo(); }
-    finishUi();
+    stopRecording();
+    resetShutter();
   };
   ui.shutter.addEventListener('pointerdown', start);
   ui.shutter.addEventListener('pointerup', end);
@@ -467,15 +515,34 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) ui.compare.addE
   ui.shutter.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
+// keyboard (desktop): Space photo, R record, arrows background, H hide the UI, M mirror, C camera, F fullscreen
 document.addEventListener('keydown', (e) => {
-  if (!state.running) return;
-  if (e.key === ' ' || e.key === 'Enter') { capture && capture.photo(); }
-  if (e.key === 'ArrowRight') cycleMode(1);
-  if (e.key === 'ArrowLeft') cycleMode(-1);
+  if (!state.running || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'enter') { e.preventDefault(); takePhoto(); }
+  else if (k === 'r') { if (recording) stopRecording(); else startRecording(); }
+  else if (k === 'arrowright') cycleMode(1);
+  else if (k === 'arrowleft') cycleMode(-1);
+  else if (k === 'h') {
+    const hide = !document.body.classList.contains('clean');
+    document.body.classList.toggle('clean', hide);
+    if (hide) toast('UI hidden — press H to bring it back', 1500);
+  } else if (k === 'm') {
+    state.mirror = !state.mirror;
+    tracker.resetSmoothing();
+    puppets.clear();
+    body.reset();
+    toast(state.mirror ? 'Mirrored' : 'Not mirrored', 900);
+  } else if (k === 'c') flipCamera();
+  else if (k === 'f') {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
 });
+if (!TOUCH) ui.hint.textContent = 'Space photo · R record · ← → background · H hide UI · F fullscreen';
 
 if ('serviceWorker' in navigator && !params.has('nosw') && !OPT.local && !OPT.src && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-if (params.has('autostart') || OPT.src) boot();
+if (params.has('autostart') || OPT.src || OPT.desktop) boot();

@@ -1,0 +1,314 @@
+// Charmcaster's outfit on the whole body, driven by the 33 pose landmarks:
+// shader regions (sleeves, fingerless gloves, leggings, boots), the pointed
+// jacket flaps at the hips, heart emblems on the arms and hips, and the view
+// from behind (her long hair down your back) when you turn around.
+
+import { projectEllipsoid, clamp, smoothstep } from './geom.js';
+import { PAL, Strand } from './charm.js';
+import { POSE as P } from './tracker.js';
+
+const TAU = Math.PI * 2;
+const FAR = [-1e5, -1e5, -1e5, -1e5];
+const LAVENDER = '#9a78b8', LAVENDER_SHADE = '#7f5989', SWIRL = '#4b2c63';
+
+const norm = (x, y) => {
+  const d = Math.hypot(x, y) || 1;
+  return [x / d, y / d];
+};
+
+// Pose landmarks in screen pixels plus a body frame (up axis, size). Null when the
+// shoulders aren't in view.
+export function bodyFrame(pose, W, H, mirror) {
+  if (!pose) return null;
+  const lm = pose.lm, V = pose.vis;
+  if (V[P.L_SHOULDER] < 0.4 || V[P.R_SHOULDER] < 0.4) return null;
+  const X = new Float32Array(33), Y = new Float32Array(33);
+  for (let i = 0; i < 33; i++) {
+    X[i] = (mirror ? 1 - lm[i * 3] : lm[i * 3]) * W;
+    Y[i] = lm[i * 3 + 1] * H;
+  }
+  const mid = (a, b) => [(X[a] + X[b]) / 2, (Y[a] + Y[b]) / 2];
+  const dist = (a, b) => Math.hypot(X[a] - X[b], Y[a] - Y[b]);
+  const sm = mid(P.L_SHOULDER, P.R_SHOULDER), hm = mid(P.L_HIP, P.R_HIP);
+  const shoulderW = dist(P.L_SHOULDER, P.R_SHOULDER);
+  const hipsOk = V[P.L_HIP] > 0.4 && V[P.R_HIP] > 0.4;
+  let up;
+  if (hipsOk) {
+    up = norm(sm[0] - hm[0], sm[1] - hm[1]);
+  } else {
+    // perpendicular to the shoulders, on the side the head is on
+    const d = norm(X[P.R_SHOULDER] - X[P.L_SHOULDER], Y[P.R_SHOULDER] - Y[P.L_SHOULDER]);
+    up = [d[1], -d[0]];
+    if (up[0] * (X[P.NOSE] - sm[0]) + up[1] * (Y[P.NOSE] - sm[1]) < 0) up = [-up[0], -up[1]];
+  }
+  const torso = hipsOk ? Math.hypot(sm[0] - hm[0], sm[1] - hm[1]) : shoulderW * 1.45;
+  const scale = Math.max(shoulderW, torso * 0.62);
+  let thigh = 0, nT = 0;
+  if (hipsOk && V[P.L_KNEE] > 0.4) { thigh += dist(P.L_HIP, P.L_KNEE); nT++; }
+  if (hipsOk && V[P.R_KNEE] > 0.4) { thigh += dist(P.R_HIP, P.R_KNEE); nT++; }
+  const hemLen = nT ? (thigh / nT) * 0.42 : torso * 0.3;
+  return {
+    X, Y, V, sm, hm, hipsOk, up, down: [-up[0], -up[1]], shoulderW, torso, scale, hemLen,
+    front: pose.front, W, H,
+    neck: [sm[0] + up[0] * scale * 0.15, sm[1] + up[1] * scale * 0.15],
+    roll: clamp(Math.atan2(up[0], -up[1]), -0.6, 0.6),
+  };
+}
+
+// Lavender heart with a double swirl, like the emblems on her sleeves.
+function heart(ctx, x, y, size, angle, lw) {
+  const k = size / 100;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(k, k);
+  ctx.translate(-50, -50);
+  ctx.beginPath();
+  ctx.moveTo(50, 90);
+  ctx.bezierCurveTo(22, 70, 5, 52, 9, 32);
+  ctx.bezierCurveTo(13, 13, 36, 9, 50, 27);
+  ctx.bezierCurveTo(64, 9, 87, 13, 91, 32);
+  ctx.bezierCurveTo(95, 52, 78, 70, 50, 90);
+  ctx.closePath();
+  ctx.fillStyle = LAVENDER;
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = LAVENDER_SHADE;
+  ctx.fillRect(54, 0, 50, 100);
+  ctx.restore();
+  ctx.lineWidth = lw / k;
+  ctx.strokeStyle = PAL.ink;
+  ctx.stroke();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = SWIRL;
+  ctx.lineWidth = (lw * 1.1) / k;
+  ctx.beginPath();
+  ctx.moveTo(50, 46); ctx.bezierCurveTo(50, 33, 64, 27, 72, 35); ctx.bezierCurveTo(79, 42, 74, 53, 65, 53); ctx.bezierCurveTo(58, 53, 56, 45, 62, 42);
+  ctx.moveTo(50, 46); ctx.bezierCurveTo(50, 33, 36, 27, 28, 35); ctx.bezierCurveTo(21, 42, 26, 53, 35, 53); ctx.bezierCurveTo(42, 53, 44, 45, 38, 42);
+  ctx.moveTo(50, 46); ctx.lineTo(50, 78);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Jacket skirt around the hips, in (across, down) units of half-width and flap length:
+// it flares out from the waist into big pointed flaps, open at the front over the black panel.
+const HEM_FRONT = [
+  [[-0.9, -0.3], [-1.3, 0.62], [-0.98, 0.5], [-0.8, 1.06], [-0.52, 0.62], [-0.32, 0.96], [-0.12, 0.18], [-0.1, -0.3]],
+  [[0.1, -0.3], [0.12, 0.18], [0.32, 0.96], [0.52, 0.62], [0.8, 1.06], [0.98, 0.5], [1.3, 0.62], [0.9, -0.3]],
+];
+const HEM_BACK = [
+  [[-0.9, -0.3], [-1.3, 0.62], [-0.9, 0.48], [-0.62, 1.04], [-0.32, 0.56], [0, 1.0], [0.32, 0.56], [0.62, 1.04], [0.9, 0.48], [1.3, 0.62], [0.9, -0.3]],
+];
+
+export class Body {
+  constructor() {
+    this.layer = document.createElement('canvas');
+    this.lctx = this.layer.getContext('2d');
+    // her hair seen from behind, down to the small of the back
+    this.backHair = new Strand(
+      [[0, 1, 2], [0.6, -9, 2], [1.0, -19, 2], [1.2, -29, 2], [1.2, -38, 2], [1.0, -46, 2]],
+      [8.5, 9.5, 10, 9.5, 8.5, 6.5], { stiff: 0.14, tips: 5, purpleAt: 0.7 });
+  }
+
+  reset() {
+    this.backHair.reset();
+  }
+
+  // Limb capsules + hem line for the toon shader (screen px).
+  uniforms(B) {
+    if (!B) return null;
+    const { X, Y, V, scale: s } = B;
+    const ok = (...ids) => ids.every((i) => V[i] > 0.3);
+    const seg = (a, b) => (ok(a, b) ? [X[a], Y[a], X[b], Y[b]] : FAR);
+    const hand = (w, i, p) => {
+      if (!ok(w, i)) return FAR;
+      const tx = (X[i] + X[p]) / 2, ty = (Y[i] + Y[p]) / 2;
+      return [X[w], Y[w], X[w] + (tx - X[w]) * 1.15, Y[w] + (ty - Y[w]) * 1.15];
+    };
+    const arms = [
+      seg(P.L_SHOULDER, P.L_ELBOW), seg(P.L_ELBOW, P.L_WRIST), hand(P.L_WRIST, P.L_INDEX, P.L_PINKY),
+      seg(P.R_SHOULDER, P.R_ELBOW), seg(P.R_ELBOW, P.R_WRIST), hand(P.R_WRIST, P.R_INDEX, P.R_PINKY),
+    ].flat();
+    const legs = (B.hipsOk ? [
+      seg(P.L_HIP, P.L_KNEE), seg(P.L_KNEE, P.L_ANKLE), seg(P.L_ANKLE, P.L_FOOT),
+      seg(P.R_HIP, P.R_KNEE), seg(P.R_KNEE, P.R_ANKLE), seg(P.R_ANKLE, P.R_FOOT),
+    ] : [FAR, FAR, FAR, FAR, FAR, FAR]).flat();
+    const hem = B.hipsOk
+      ? [B.hm[0] + B.down[0] * B.hemLen * 0.3, B.hm[1] + B.down[1] * B.hemLen * 0.3, B.down[0], B.down[1]]
+      : [0, 1e6, 0, 1];
+    return {
+      arms, legs, hem,
+      armR: [s * 0.17, s * 0.14, s * 0.12],
+      legR: [s * 0.21, s * 0.15, s * 0.11],
+    };
+  }
+
+  // Black centre panel down the front of the jacket (shader quad), fading out as you turn away.
+  panel(B) {
+    const top = [B.sm[0] + B.up[0] * B.scale * 0.06, B.sm[1] + B.up[1] * B.scale * 0.06];
+    const L = B.hipsOk ? B.torso + B.hemLen * 0.9 : B.torso * 1.2;
+    const bot = [B.sm[0] + B.down[0] * L, B.sm[1] + B.down[1] * L];
+    return [top[0], top[1], bot[0], bot[1], B.scale * 0.1, B.scale * 0.2, smoothstep(0.15, 0.45, B.front)];
+  }
+
+  // Flaps at the hips + arm hearts, drawn over the cartoon body.
+  drawCostume(ctx, B, lw) {
+    if (B.hipsOk) this.drawHem(ctx, B, lw);
+    const { X, Y, V } = B;
+    const cx = B.sm[0], cy = B.sm[1];
+    for (const [s, e] of [[P.L_SHOULDER, P.L_ELBOW], [P.R_SHOULDER, P.R_ELBOW]]) {
+      if (V[s] < 0.6 || V[e] < 0.6) continue;
+      let x = X[s] + (X[e] - X[s]) * 0.4, y = Y[s] + (Y[e] - Y[s]) * 0.4;
+      // sit on the outer side of the sleeve, away from the chest
+      const [ax, ay] = norm(X[e] - X[s], Y[e] - Y[s]);
+      let nx = -ay, ny = ax;
+      if (nx * (x - cx) + ny * (y - cy) < 0) { nx = -nx; ny = -ny; }
+      x += nx * B.scale * 0.06;
+      y += ny * B.scale * 0.06;
+      heart(ctx, x, y, B.scale * 0.18, Math.atan2(ay, ax) - Math.PI / 2, lw);
+    }
+  }
+
+  drawHem(ctx, B, lw) {
+    const W = B.W, H = B.H;
+    if (this.layer.width !== W || this.layer.height !== H) { this.layer.width = W; this.layer.height = H; }
+    const c = this.lctx;
+    c.clearRect(0, 0, W, H);
+    const down = B.down;
+    let across = [-down[1], down[0]];
+    if (across[0] < 0) across = [-across[0], -across[1]];
+    const { X, Y } = B;
+    const hipW = Math.max(Math.hypot(X[P.L_HIP] - X[P.R_HIP], Y[P.L_HIP] - Y[P.R_HIP]), B.scale * 0.55);
+    const hw = hipW * 0.85, L = B.hemLen * 1.1;
+    const pt = (u, v) => [B.hm[0] + across[0] * u * hw + down[0] * v * L, B.hm[1] + across[1] * u * hw + down[1] * v * L];
+    const pieces = B.front > -0.2 ? HEM_FRONT : HEM_BACK;
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    for (const piece of pieces) {
+      const pts = piece.map(([u, v]) => pt(u, v));
+      const outline = () => {
+        c.beginPath();
+        pts.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+        c.closePath();
+      };
+      // the edge that hangs free (everything except the waist seam at the end)
+      const jagged = () => {
+        c.beginPath();
+        pts.slice(0, -1).forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+      };
+      outline();
+      c.fillStyle = PAL.magenta;
+      c.fill();
+      c.save();
+      c.clip();
+      // cel shade on the outer side of each flap, lavender trim along the points
+      c.fillStyle = PAL.magentaShade;
+      const sideU = pts[0][0] === pt(-0.9, -0.3)[0] ? -1 : 1;
+      const sh = piece.length > 8
+        ? [pt(0.6, -0.4), pt(1.6, -0.4), pt(1.6, 1.2), pt(0.75, 1.2)]
+        : [pt(sideU * 0.72, -0.4), pt(sideU * 1.6, -0.4), pt(sideU * 1.6, 1.2), pt(sideU * 0.9, 1.2)];
+      c.beginPath();
+      sh.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+      c.fill();
+      jagged();
+      c.strokeStyle = LAVENDER;
+      c.lineWidth = L * 0.16;
+      c.stroke();
+      c.restore();
+      jagged();
+      c.strokeStyle = PAL.ink;
+      c.lineWidth = lw;
+      c.stroke();
+    }
+    for (const u of [-0.7, 0.7]) {
+      const p = pt(u, 0.36);
+      heart(c, p[0], p[1], L * 0.34, Math.atan2(down[1], down[0]) - Math.PI / 2, lw);
+    }
+    // hands and forearms in front of the hips stay on top
+    c.save();
+    c.globalCompositeOperation = 'destination-out';
+    c.lineCap = 'round';
+    for (const [e, w, i] of [[P.L_ELBOW, P.L_WRIST, P.L_INDEX], [P.R_ELBOW, P.R_WRIST, P.R_INDEX]]) {
+      if (B.V[e] < 0.5 || B.V[w] < 0.5) continue;
+      c.lineWidth = B.scale * 0.3;
+      c.beginPath();
+      c.moveTo(X[e], Y[e]);
+      c.lineTo(X[w], Y[w]);
+      if (B.V[i] > 0.4) c.lineTo(X[i], Y[i]);
+      c.stroke();
+    }
+    c.restore();
+    ctx.drawImage(this.layer, 0, 0);
+  }
+
+  // Seen from behind: tall collar, then her hair over your back.
+  drawBackView(ctx, B, dt, lw) {
+    const a = smoothstep(-0.12, -0.42, B.front);
+    if (a < 0.02) return;
+    const { X, Y, V } = B;
+    let hx, hy, earD;
+    if (V[P.L_EAR] > 0.3 && V[P.R_EAR] > 0.3) {
+      hx = (X[P.L_EAR] + X[P.R_EAR]) / 2;
+      hy = (Y[P.L_EAR] + Y[P.R_EAR]) / 2;
+      earD = Math.max(Math.hypot(X[P.L_EAR] - X[P.R_EAR], Y[P.L_EAR] - Y[P.R_EAR]), B.scale * 0.3);
+    } else {
+      hx = B.sm[0] + B.up[0] * B.scale * 0.62;
+      hy = B.sm[1] + B.up[1] * B.scale * 0.62;
+      earD = B.scale * 0.38;
+    }
+    const phi = Math.atan2(B.up[0], -B.up[1]);
+    const co = Math.cos(phi), si = Math.sin(phi);
+    const pose = { s: earD / 14.5, R: [co, -si, 0, si, co, 0, 0, 0, 1], t: [hx, hy, 0] };
+    const F = { pose, s: pose.s, dt, lw };
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.lineJoin = 'round';
+    // collar standing up behind the neck
+    const sB = B.scale / 34;
+    const bp = (x, y) => [B.neck[0] + sB * (x * Math.cos(B.roll) + y * Math.sin(B.roll)), B.neck[1] + sB * (x * Math.sin(B.roll) - y * Math.cos(B.roll))];
+    for (const poly of [
+      [[-5.5, -1.5], [-6.8, 7.5], [6.8, 7.5], [5.5, -1.5]],
+      [[-6.8, 7.5], [-10, 10.8], [-8.6, 2.6], [-5.6, -1]],
+      [[6.8, 7.5], [10, 10.8], [8.6, 2.6], [5.6, -1]],
+    ]) {
+      ctx.beginPath();
+      poly.forEach(([x, y], i) => { const p = bp(x, y); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+      ctx.closePath();
+      ctx.fillStyle = PAL.magenta;
+      ctx.fill();
+      ctx.strokeStyle = PAL.ink;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
+    // the back of her head: same hair volume as the front view
+    const e = projectEllipsoid(pose, 0, 3.3, -3.5, 9.8, 11.0, 10.2);
+    this.backHair.step(F);
+    this.backHair.draw(ctx, F);
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y, e.rx, e.ry, e.angle, 0, TAU);
+    ctx.fillStyle = PAL.hairShade;
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.beginPath();
+    ctx.ellipse(e.x - e.rx * 0.08, e.y - e.ry * 0.06, e.rx * 0.94, e.ry * 0.95, e.angle, 0, TAU);
+    ctx.fillStyle = PAL.hair;
+    ctx.fill();
+    ctx.strokeStyle = PAL.hairDeep;
+    ctx.lineWidth = lw * 0.6;
+    for (const k of [-0.5, 0, 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(e.x + e.rx * k * 0.3, e.y - e.ry * 0.9);
+      ctx.quadraticCurveTo(e.x + e.rx * k * 0.9, e.y, e.x + e.rx * k * 0.7, e.y + e.ry);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y, e.rx, e.ry, e.angle, Math.PI * 0.92, Math.PI * 2.08);
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
