@@ -1,0 +1,32 @@
+name: Upload verified Charmcaster v5 EXE
+on:
+  push:
+    branches: [release/charmcaster-v5-binary]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and verify existing executable
+        run: |
+          cat payload/exe.part-* > Charmcaster-Avatar-v5-Windows-x64.exe
+          cp payload/Charmcaster-Avatar-v5-Windows-x64.exe.sha256 .
+          sha256sum --check Charmcaster-Avatar-v5-Windows-x64.exe.sha256
+      - name: Upload Windows download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Portable Windows x64 preview. Download and run Charmcaster-Avatar-v5-Windows-x64.exe. All artwork and tracking models are bundled.
+
+          Default mode keeps your actual body, clothes and movements. Clothing colors are preserved instead of being replaced with purple. Full-window framing fits the entire camera view. Camera background prevents segmentation failures from cutting away the body. Hands near the face restore filtered camera pixels instead of synthetic gloves. Long hair is layered behind the torso.
+
+          Keep Replace body with costume puppet OFF and Background set to Camera. Calibrate relaxed face for expression tracking. Head/hair edges and hand occlusion remain approximate; this is not a seamless neural body transformation.
+
+          Browser and Linux Electron checks passed, including local tracking and photo/video export. This unsigned Windows binary was cross-built locally. Physical Windows webcam behavior and complex occluded poses remain unverified. Single-camera depth and hidden-body tracking are approximate.
+          NOTES
+          gh release create charmcaster-v5-windows --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Charmcaster Avatar v5 — Windows' --notes-file notes.md --prerelease
+          gh release upload charmcaster-v5-windows Charmcaster-Avatar-v5-Windows-x64.exe Charmcaster-Avatar-v5-Windows-x64.exe.sha256 --repo "$GITHUB_REPOSITORY"
