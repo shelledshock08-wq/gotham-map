@@ -1,0 +1,30 @@
+name: Upload verified Charmcaster v3 EXE
+on:
+  push:
+    branches: [release/charmcaster-v3-binary]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and verify existing executable
+        run: |
+          cat payload/exe.part-* > Charmcaster-Avatar-v3-Windows-x64.exe
+          cp payload/Charmcaster-Avatar-v3-Windows-x64.exe.sha256 .
+          sha256sum --check Charmcaster-Avatar-v3-Windows-x64.exe.sha256
+      - name: Upload Windows download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Portable Windows x64 preview. Download and run Charmcaster-Avatar-v3-Windows-x64.exe. All artwork and tracking models are bundled.
+
+          Full-window framing, outlined flat body colors, automatic facial expression controls, finger tracking and hand-over-face layering, cheek interaction, and rear-view artwork.
+
+          Browser and Linux Electron checks passed, including local tracking and photo/video export. This unsigned Windows binary was cross-built locally. Physical Windows webcam behavior and complex occluded poses remain unverified. Single-camera depth and hidden-body tracking are approximate.
+          NOTES
+          gh release create charmcaster-v3-windows --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Charmcaster Avatar v3 — Windows' --notes-file notes.md --prerelease
+          gh release upload charmcaster-v3-windows Charmcaster-Avatar-v3-Windows-x64.exe Charmcaster-Avatar-v3-Windows-x64.exe.sha256 --repo "$GITHUB_REPOSITORY"
