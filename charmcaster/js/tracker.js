@@ -130,7 +130,7 @@ export class Tracker {
 
     // body
     this.pose = null; // { lm, vis, world, front, ts }
-    this.poseFilter = new OneEuroArray(N_POSE * 3, 1.6, 20, 1.0);
+    this.poseFilter = new OneEuroArray(N_POSE * 3, 1.1, 10, 1.0);
     this.poseRaw = new Float32Array(N_POSE * 3);
     this.poseVis = new Float32Array(N_POSE);
     this.poseWorld = new Float32Array(N_POSE * 3);
@@ -394,7 +394,7 @@ export class Tracker {
       raw[i * 3 + 1] = lms[i].y;
       raw[i * 3 + 2] = lms[i].z;
       const v = lms[i].visibility ?? 1;
-      this.poseVis[i] = this.pose ? this.poseVis[i] * 0.5 + v * 0.5 : v;
+      this.poseVis[i] = this.pose ? this.poseVis[i] * 0.7 + v * 0.3 : v;
       if (world) {
         const w = world[i], k = this.pose ? 0.4 : 1, o = this.poseWorld;
         o[i * 3] += (w.x - o[i * 3]) * k;
@@ -632,7 +632,7 @@ export class Tracker {
     const n = m.w * m.h;
     const { cat, soft, rgba } = m;
     const cut = m.cut.data;
-    const k = m.fresh ? 1 : 0.65; // lower = steadier edges, higher = less trailing when you move
+    const k = m.fresh ? 1 : 0.5; // lower = steadier edges, higher = less trailing when you move
     m.fresh = false;
     for (let i = 0; i < n; i++) {
       const c = cat[i];

@@ -66,6 +66,28 @@ function hairAt(x, y, W, H, mirror) {
   return i < 0 ? 0 : m.soft[i * 4];
 }
 
+// Is the torso bare skin (shirt off)? Sampled from the smoothed mask over the mid torso,
+// with hysteresis so the toon abs don't flicker on and off at the boundary.
+let bareOn = false;
+function torsoBare(B, W, H, mirror) {
+  const m = tracker && tracker.mask;
+  if (!B || !m || state.maskOn < 0.5) { bareOn = false; return false; }
+  const across = [-B.down[1], B.down[0]];
+  const L = B.hipsOk ? B.torso : B.scale * 1.25;
+  let skin = 0, cloth = 0, n = 0;
+  for (const t of [0.42, 0.55, 0.68]) for (const u of [-0.18, 0, 0.18]) {
+    const sx = B.sm[0] + across[0] * u * B.scale * 0.34 + B.down[0] * t * L;
+    const sy = B.sm[1] + across[1] * u * B.scale * 0.34 + B.down[1] * t * L;
+    const i = tracker.maskIndex(mirror ? 1 - sx / W : sx / W, sy / H);
+    if (i < 0) continue;
+    skin += m.soft[i * 4 + 1]; cloth += m.soft[i * 4 + 2]; n++;
+  }
+  if (n < 3) return bareOn;
+  const r = skin / n;
+  bareOn = bareOn ? (r > 0.4 && skin > cloth) : (r > 0.55 && skin > cloth * 1.6);
+  return bareOn;
+}
+
 const body = new Body();
 
 // One drawn Charmcaster per tracked face.
@@ -395,7 +417,7 @@ function frame(now) {
     }
     outCtx.drawImage(back, 0, 0);
     const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
-    if (B) body.drawCostume(outCtx, B, lw);
+    if (B) body.drawCostume(outCtx, B, lw, torsoBare(B, W, H, mirror));
     if (backView) body.drawBackView(outCtx, B, dt, lw);
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
