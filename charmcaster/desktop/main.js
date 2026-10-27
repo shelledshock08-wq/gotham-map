@@ -81,6 +81,27 @@ if (!app.requestSingleInstanceLock()) {
     else if (response === 2) shell.openPath(LOG);
   }
 
+  // Drawn but blank? Look at what the window actually shows (the loading screen and HUD are never one flat colour).
+  async function checkDrawing(when) {
+    if (!win || win.isDestroyed() || win.isMinimized()) return;
+    const img = await Promise.race([win.webContents.capturePage(), new Promise((r) => setTimeout(() => r(null), 5000))]);
+    if (!img) { offerSafeMode('The window stopped drawing.'); return; }
+    const { width, height } = img.getSize();
+    if (!width || !height) return;
+    const px = img.toBitmap();
+    const lo = [255, 255, 255], hi = [0, 0, 0];
+    const step = Math.max(1, Math.floor(px.length / 4 / 4000)) * 4;
+    for (let i = 0; i + 2 < px.length; i += step) {
+      for (let k = 0; k < 3; k++) {
+        if (px[i + k] < lo[k]) lo[k] = px[i + k];
+        if (px[i + k] > hi[k]) hi[k] = px[i + k];
+      }
+    }
+    const spread = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+    log('drawing check', when, `${width}x${height}`, 'colour spread', spread);
+    if (spread < 6) offerSafeMode('The window is showing a blank screen.');
+  }
+
   function showError(title, detail) {
     const html = `<!doctype html><meta charset="utf-8"><title>Charmcaster Lens</title>
       <body style="margin:0;height:100vh;display:grid;place-items:center;background:#14061a;color:#f3e6fb;font:16px system-ui">
@@ -121,7 +142,11 @@ if (!app.requestSingleInstanceLock()) {
       const msg = typeof message === 'string' ? message : e.message;
       const lvl = typeof level === 'number' ? ['debug', 'info', 'warning', 'error'][level] : e.level;
       if (!msg) return;
-      if (msg.includes('[charmcaster] painted')) painted = true;
+      if (msg.includes('[charmcaster] painted') && !painted) {
+        painted = true;
+        setTimeout(() => checkDrawing('after paint'), 3000);
+      }
+      if (msg.includes('[charmcaster] ready')) setTimeout(() => checkDrawing('after camera start'), 4000);
       if (lvl !== 'debug') log(`page ${lvl}:`, msg.slice(0, 500));
     });
     wc.on('did-finish-load', () => log('page loaded', wc.getURL().slice(0, 80)));

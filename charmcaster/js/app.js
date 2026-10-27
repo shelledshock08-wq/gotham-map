@@ -185,6 +185,9 @@ async function boot() {
 
 function explain(e) {
   const name = e && e.name;
+  if ((name === 'NotAllowedError' || name === 'SecurityError') && OPT.desktop) {
+    return 'Windows blocked the camera. Open Settings → Privacy & security → Camera, turn on "Let desktop apps access your camera", then click Try again.';
+  }
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'Camera access was blocked. Allow the camera for this site in your browser settings, then tap Try again.';
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No camera was found on this device.';
   if (name === 'NotReadableError') return 'The camera is busy in another app. Close it and tap Try again.';
