@@ -1,27 +1,52 @@
 {
-  "name": "sonic-anthology",
-  "version": "1.0.0",
-  "description": "Sonic Anthology - unofficial non-commercial fan game",
+  "name": "charmcaster-avatar",
+  "version": "2.0.0",
+  "description": "Image-generated Charmcaster puppet with on-device face and body tracking",
   "main": "electron/main.js",
   "author": "shelledshock08-wq",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
+    "dev": "python3 tools/filter/serve.py --port 8010",
+    "build:web": "python3 tools/filter/build.py",
     "dist:win": "electron-builder --win portable --x64",
-    "dist:linux": "electron-builder --linux AppImage --x64"
+    "test:camera": "node tests/filter/smoke.cjs"
   },
   "devDependencies": {
-    "electron": "33.2.1",
-    "electron-builder": "25.1.8"
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0"
   },
   "build": {
-    "appId": "com.fangame.sonic-anthology",
-    "productName": "Sonic Anthology",
-    "directories": { "output": "dist" },
-    "files": ["index.html", "js/**", "assets/**", "electron/**", "package.json"],
-    "win": { "target": "portable", "signAndEditExecutable": false },
-    "portable": { "artifactName": "SonicEmeraldMeadow.exe" },
-    "linux": { "target": "AppImage", "category": "Game" }
+    "appId": "com.tooncamera.desktop",
+    "productName": "Charmcaster Avatar",
+    "directories": {
+      "output": "dist/windows"
+    },
+    "asar": true,
+    "files": [
+      "index.html",
+      "filter/**",
+      "electron/main.js",
+      "electron/icon.png",
+      "package.json",
+      "!filter/vendor/**/*.d.ts",
+      "!filter/vendor/**/README.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "Charmcaster-Avatar-Windows-x64.exe"
+    }
   }
 }

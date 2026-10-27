@@ -1,138 +1,302 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0b1a4a">
-<title>Sonic Anthology</title>
-<style>
-  @font-face { font-family: "Press Start 2P"; src: url("assets/fonts/PressStart2P.woff2") format("woff2"); font-display: swap; }
-  :root { --bg: #05081a; }
-  html, body {
-    margin: 0; height: 100%; background: var(--bg); overflow: hidden;
-    touch-action: none; -webkit-user-select: none; user-select: none;
-    -webkit-touch-callout: none;
-  }
-  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas#screen { display: block; image-rendering: auto; background: #000; box-shadow: 0 0 40px rgba(0,0,0,.6); }
-  #boot-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #fff; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; pointer-events: none; }
-  #boot-err { color: #ff8a8a; white-space: pre-wrap; font-size: 13px; max-width: 90vw; }
-  #dev { position: fixed; left: 10px; top: 10px; display: none; z-index: 5; font: 700 13px system-ui, sans-serif; }
-  #dev.on { display: block; }
-  #dev button { display: block; margin: 0 0 4px; padding: 8px 12px; border: 1px solid #ffd23f; border-radius: 6px;
-    background: rgba(10,15,40,.85); color: #ffd23f; font: inherit; cursor: pointer; min-width: 190px; text-align: left; }
-  #dev-list { display: none; }
-  #dev.open #dev-list { display: block; }
-  #dev #dev-toggle { min-width: 0; background: #ffd23f; color: #10142e; }
-  #touch { position: fixed; inset: 0; pointer-events: none; display: none; }
-  #touch.on { display: block; }
-  .tbtn {
-    position: absolute; pointer-events: auto; border-radius: 50%;
-    background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.45);
-    color: rgba(255,255,255,.85); font: 700 20px system-ui, sans-serif;
-    display: flex; align-items: center; justify-content: center;
-    width: 64px; height: 64px; touch-action: none;
-  }
-  .tbtn.down { background: rgba(255,255,255,.45); }
-  #t-left  { left: 16px;  bottom: 92px; }
-  #t-right { left: 152px; bottom: 92px; }
-  #t-up    { left: 84px;  bottom: 160px; }
-  #t-down  { left: 84px;  bottom: 24px; }
-  #t-jump  { right: 24px; bottom: 60px; width: 92px; height: 92px; font-size: 26px; background: rgba(40,110,255,.35); }
-  #t-pause { right: 16px; top: 16px; width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
-  .tbtn.sup { display: none; width: 68px; height: 68px; font-size: 20px; background: rgba(255,200,40,.3); }
-  #touch.super .tbtn.sup { display: flex; }
-  #t-laser  { right: 132px; bottom: 40px; }
-  #t-clones { right: 110px; bottom: 130px; }
-  #t-grab   { right: 24px;  bottom: 168px; }
-  .tbtn.sky { display: none; width: 60px; height: 60px; font-size: 22px; background: rgba(120,255,90,.25); }
-  #touch.sky .tbtn.sky { display: flex; }
-  #t-swap  { right: 200px; bottom: 150px; }
-  #t-roles { right: 200px; bottom: 232px; }
-  #t-bite  { left: 200px; bottom: 150px; background: rgba(255,60,60,.25) !important; }
-  .tbtn.sp { width: 46px; height: 46px; font-size: 16px; top: 120px; }
-  #t-sp1 { right: 24px; } #t-sp2 { right: 76px; } #t-sp3 { right: 128px; } #t-sp4 { right: 180px; } #t-sp5 { right: 232px; }
-</style>
-</head>
-<body>
-<div id="wrap"><canvas id="screen" width="1280" height="720"></canvas></div>
-<!-- Visible until the game starts. If it never goes away, scripts are not running. -->
-<div id="boot-msg">
-  <div><b>Loading Sonic...</b><br><br>
-  If this message stays, this viewer is not running the game's JavaScript.<br>
-  Open the file in <b>Chrome, Edge, Firefox or Safari</b> (not a file preview inside another app).<br>
-  The full version is about 13 MB; if your copy is much smaller, the download was cut off.</div>
-  <pre id="boot-err"></pre>
-</div>
-<script>
-  // Show any startup error on screen instead of a silent black canvas.
-  window.addEventListener('error', function (e) {
-    var el = document.getElementById('boot-err');
-    if (el) el.textContent += 'Error: ' + (e.message || e) + (e.filename ? ' (' + e.filename.split('/').pop().slice(0, 40) + ':' + e.lineno + ')' : '') + '\n';
-    var m = document.getElementById('boot-msg'); if (m) m.style.display = 'block';
-  });
-</script>
-<!-- DEV ONLY: section skip menu on the title screen. Set DEV_MENU = false in js/game.js to remove. -->
-<div id="dev">
-  <button id="dev-toggle">DEV</button>
-  <div id="dev-list">
-    <button data-skip="1">1 Act 1</button>
-    <button data-skip="2">2 Act 2</button>
-    <button data-skip="3">3 Act 3</button>
-    <button data-skip="4">4 Eggman ship boss</button>
-    <button data-skip="5">5 Egg Colossus (cutscene)</button>
-    <button data-skip="6">6 Super battle</button>
-    <button data-skip="7">7 Brawl</button>
-    <button data-skip="8">8 Base escape (3D)</button>
-    <button data-skip="9">9 Emerald Ruins (Diamond Rush)</button>
-    <button data-skip="0">0 Special Stage</button>
-    <button data-skip="10">- Sky Chase (Tornado)</button>
-  </div>
-</div>
-<div id="touch">
-  <div class="tbtn" id="t-left"  data-k="left">&#9664;</div>
-  <div class="tbtn" id="t-right" data-k="right">&#9654;</div>
-  <div class="tbtn" id="t-up"    data-k="up">&#9650;</div>
-  <div class="tbtn" id="t-down"  data-k="down">&#9660;</div>
-  <div class="tbtn" id="t-jump"  data-k="jump">A</div>
-  <div class="tbtn sup" id="t-laser" data-k="laser">B</div>
-  <div class="tbtn sup" id="t-clones" data-k="clones">X</div>
-  <div class="tbtn sup" id="t-grab" data-k="grab">Y</div>
-  <div class="tbtn sky" id="t-swap" data-k="swap">&#8644;</div>
-  <div class="tbtn sky" id="t-roles" data-k="roles">&#10226;</div>
-  <div class="tbtn sky" id="t-bite" data-k="bite">&#9760;</div>
-  <div class="tbtn sky sp" id="t-sp1" data-k="sp1">1</div>
-  <div class="tbtn sky sp" id="t-sp2" data-k="sp2">2</div>
-  <div class="tbtn sky sp" id="t-sp3" data-k="sp3">3</div>
-  <div class="tbtn sky sp" id="t-sp4" data-k="sp4">4</div>
-  <div class="tbtn sky sp" id="t-sp5" data-k="sp5">5</div>
-  <div class="tbtn" id="t-pause" data-k="start">II</div>
-</div>
-<script src="js/lib/three.min.js"></script>
-<script src="js/assets.js"></script>
-<script src="js/sonicframes.js"></script>
-<script src="js/eggframes.js"></script>
-<script src="js/eggface.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/sprites.js"></script>
-<script src="js/levels.js"></script>
-<script src="js/world.js"></script>
-<script src="js/player.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/superboss.js"></script>
-<script src="js/brawl.js"></script>
-<script src="js/models3d.js"></script>
-<script src="js/mocap.js"></script>
-<script src="js/escape.js"></script>
-<script src="js/ruins.js"></script>
-<script src="js/special.js"></script>
-<script src="js/models_tornado.js"></script>
-<script src="js/tailsframes.js"></script>
-<script src="js/tornado.js"></script>
-<script src="js/save.js"></script>
-<script src="js/speech.js"></script>
-<script src="js/input.js"></script>
-<script src="js/game.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#100e19" />
+    <meta
+      name="description"
+      content="A private, on-device Toon camera lens. Track your expressions, turn your body into a cartoon, and capture photos and clips."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%231d1429%27/%3E%3Cpath d=%27M16 3 20 12 29 16 20 20 16 29 12 20 3 16 12 12Z%27 fill=%27%23c096e4%27/%3E%3C/svg%3E"
+    />
+    <title>Charmcaster Camera</title>
+    <link rel="stylesheet" href="filter/style.css" />
+  </head>
+  <body>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <symbol id="i-star" viewBox="0 0 24 24">
+          <path d="m12 2 2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7Z" />
+        </symbol>
+        <symbol id="i-flip" viewBox="0 0 24 24">
+          <path d="M3 8h3l2-3h8l2 3h3v12H3Z" />
+          <path d="M8 13a4 4 0 0 1 7-2m1 4a4 4 0 0 1-7 2M15 8v4h-4m-2 8v-4h4" />
+        </symbol>
+        <symbol id="i-mirror" viewBox="0 0 24 24">
+          <path d="M12 2v20M3 7l6 5-6 5Zm18 0-6 5 6 5Z" />
+        </symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24">
+          <path d="M5 3v18M12 3v18M19 3v18M2 8h6m1 8h6m1-10h6" />
+        </symbol>
+        <symbol id="i-x" viewBox="0 0 24 24">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </symbol>
+        <symbol id="i-download" viewBox="0 0 24 24">
+          <path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" />
+        </symbol>
+        <symbol id="i-share" viewBox="0 0 24 24">
+          <path d="M12 16V2m-5 5 5-5 5 5M6 10H3v12h18V10h-3" />
+        </symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24">
+          <path d="M3 7h4l2-3h6l2 3h4v14H3Z" />
+          <circle cx="12" cy="13" r="4" />
+        </symbol>
+        <symbol id="i-help" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9 8a3 3 0 1 1 4 3c-1 1-1 1-1 3m0 3v1" />
+        </symbol>
+      </defs>
+    </svg>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Charmcaster Camera home"
+        ><span class="gem-mark">✦</span
+        ><span>CHARMCASTER<small>OMNIVERSE PUPPET</small></span></a
+      >
+      <div class="private"><span></span>ON YOUR DEVICE</div>
+      <button class="icon-button" id="help" aria-label="How to use the lens">
+        <svg><use href="#i-help" /></svg>
+      </button>
+    </header>
+    <main class="studio">
+      <section class="viewfinder" aria-label="Camera preview">
+        <canvas
+          id="output"
+          width="720"
+          height="1280"
+          aria-label="Toon camera output"
+        ></canvas
+        ><video id="camera" playsinline muted autoplay hidden></video>
+        <div class="frame-top">
+          <span id="state-pill" class="pill"
+            ><i></i><span id="state-text">ANIMATED PREVIEW</span></span
+          ><span id="record-timer" hidden>● 00:00</span>
+        </div>
+        <div class="camera-tools">
+          <button
+            id="flip"
+            class="glass-button"
+            aria-label="Switch front and back camera"
+            disabled
+          >
+            <svg><use href="#i-flip" /></svg></button
+          ><button
+            id="mirror"
+            class="glass-button active"
+            aria-label="Mirror camera"
+            aria-pressed="true"
+          >
+            <svg><use href="#i-mirror" /></svg></button
+          ><button
+            id="settings-open"
+            class="glass-button"
+            aria-label="Lens settings"
+          >
+            <svg><use href="#i-settings" /></svg>
+          </button>
+        </div>
+        <div id="start-card" class="start-card">
+          <span class="eyebrow">YOUR CAMERA. YOUR EXPRESSIONS.</span>
+          <h1>Become<br />Charmcaster.</h1>
+          <p>Charmcaster, head to toe.<br />Animated by your movements.</p>
+          <button class="primary" id="start">
+            <svg><use href="#i-camera" /></svg
+            ><span id="start-label">Enable camera</span><span>↗</span></button
+          ><small>Camera permission only. Nothing is uploaded.</small>
+        </div>
+        <div id="tracking-hint" class="tracking-hint" hidden>
+          Look toward the camera
+        </div>
+        <div class="capture-controls" id="capture-controls" hidden>
+          <div class="mode-switch" role="group" aria-label="Capture mode">
+            <button id="photo-mode" class="selected" aria-pressed="true">
+              PHOTO</button
+            ><button id="video-mode" aria-pressed="false">VIDEO</button>
+          </div>
+          <div class="shutter-row">
+            <button
+              class="mini-button"
+              id="stop-camera"
+              aria-label="Turn camera off"
+            >
+              <svg><use href="#i-x" /></svg></button
+            ><button id="shutter" class="shutter" aria-label="Take photo">
+              <span></span></button
+            ><button
+              class="mini-button"
+              id="gallery"
+              aria-label="Open last capture"
+              disabled
+            >
+              <svg><use href="#i-download" /></svg>
+            </button>
+          </div>
+          <span id="capture-tip">TAP TO CAPTURE</span>
+        </div>
+        <div id="capture-flash" aria-hidden="true"></div>
+      </section>
+      <aside class="inspector" id="settings-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">THE LENS</span>
+            <h2>Charmcaster</h2>
+          </div>
+          <button
+            class="icon-button mobile-only"
+            id="settings-close"
+            aria-label="Close settings"
+          >
+            <svg><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <p class="character-note">
+          Image-generated Omniverse artwork.<br />Face and full-body movement.
+        </p>
+        <div class="swatches" aria-hidden="true">
+          <i style="--swatch: #f2f5f7"></i><i style="--swatch: #a46bcc"></i
+          ><i style="--swatch: #6b35ad"></i><i style="--swatch: #d7999f"></i
+          ><i style="--swatch: #850c64"></i>
+        </div>
+        <label class="toggle-row" for="full-body"
+          ><span
+            >Full Charmcaster avatar<small
+              >Replace your visible body with the character</small
+            ></span
+          ><input type="checkbox" id="full-body" checked role="switch"
+        /></label>
+        <div class="setting">
+          <label for="expression-pose">Expression pose</label
+          ><select id="expression-pose">
+            <option value="live">Live face only</option></select
+          ><small>80 variations. Live speech and blinks remain active.</small>
+        </div>
+        <div class="setting">
+          <div class="setting-title">
+            <label for="toon-amount">Cartoon body</label
+            ><output for="toon-amount" id="toon-value">85%</output>
+          </div>
+          <input
+            id="toon-amount"
+            type="range"
+            min="0"
+            max="100"
+            value="85"
+          /><small>Your body and clothing, with cel shading.</small>
+        </div>
+        <label class="toggle-row" for="collar"
+          ><span>Signature collar<small>In camera-body mode</small></span
+          ><input type="checkbox" id="collar" checked role="switch"
+        /></label>
+        <label class="toggle-row" for="sparks"
+          ><span>Studio glow<small>Soft ambient particles</small></span
+          ><input type="checkbox" id="sparks" checked role="switch"
+        /></label>
+        <label class="toggle-row" for="microphone"
+          ><span
+            >Record sound<small
+              >Ask for microphone access when recording</small
+            ></span
+          ><input type="checkbox" id="microphone" role="switch"
+        /></label>
+        <div class="setting">
+          <span class="setting-title">Backdrop</span>
+          <div class="choice-row">
+            <button data-backdrop="void" class="chosen" aria-pressed="true">
+              <i class="void-dot"></i>Void</button
+            ><button data-backdrop="rose" aria-pressed="false">
+              <i class="rose-dot"></i>Dusk
+            </button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-title">Framing</span>
+          <div class="choice-row">
+            <button data-framing="portrait" class="chosen" aria-pressed="true">
+              9:16</button
+            ><button data-framing="wide" aria-pressed="false">16:9</button>
+          </div>
+        </div>
+        <div class="tracking-note">
+          <svg><use href="#i-star" /></svg>
+          <p>
+            Blink. Smile. Raise an eyebrow.<br /><span
+              >The face follows you.</span
+            >
+          </p>
+        </div>
+        <p class="credits">
+          Unofficial Ben 10 fan avatar.<br />Tracking stays on your device.
+        </p>
+      </aside>
+    </main>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="help-dialog">
+      <button
+        class="dialog-close icon-button"
+        data-close="help-dialog"
+        aria-label="Close help"
+      >
+        <svg><use href="#i-x" /></svg></button
+      ><span class="eyebrow">YOUR CAMERA, TRANSFORMED</span>
+      <h2>Meet your alter ego.</h2>
+      <ol>
+        <li>Enable your camera and allow browser access.</li>
+        <li>Keep your face in frame, with light in front of you.</li>
+        <li>Try a smile, a blink, an open mouth or a head tilt.</li>
+        <li>
+          Tap the shutter for a photo. Switch to Video for a clip up to 60
+          seconds.
+        </li>
+      </ol>
+      <p>
+        Tracking and recording happen on this device. The app never uploads your
+        camera feed. The first camera start loads the bundled tracking models
+        and can take a few seconds.
+      </p>
+      <p>
+        Front-facing and moderate head turns work best. This is a rigged cartoon
+        head, so a full profile, hands over the face, or very dim light may
+        interrupt tracking.
+      </p>
+      <p>
+        Use a current Chrome, Edge, Firefox or Safari browser. A hosted copy
+        must use HTTPS; localhost is supported for development. Some mobile
+        browsers require the hosted version instead of a downloaded HTML file.
+      </p>
+      <button class="primary" data-close="help-dialog">Got it</button>
+    </dialog>
+    <dialog id="capture-dialog">
+      <button
+        id="capture-close"
+        class="dialog-close icon-button"
+        aria-label="Close capture"
+      >
+        <svg><use href="#i-x" /></svg></button
+      ><span class="eyebrow">MOMENT CAPTURED</span>
+      <h2 id="capture-title">Looking good.</h2>
+      <div id="capture-preview"></div>
+      <div class="export-actions">
+        <button id="save" class="primary">
+          <svg><use href="#i-download" /></svg>Save</button
+        ><button id="share" class="secondary">
+          <svg><use href="#i-share" /></svg>Share</button
+        ><button id="retake" class="secondary">Retake</button>
+      </div>
+      <small>Your capture stays here until you save or share it.</small>
+    </dialog>
+    <script src="filter/vendor/face_mesh/face_mesh.js"></script>
+    <script src="filter/vendor/pose/pose.js"></script>
+    <script src="filter/generated-art.js"></script>
+    <script src="filter/puppet.js"></script>
+    <script src="filter/vendor/selfie_segmentation/selfie_segmentation.js"></script>
+    <script src="filter/character.js"></script>
+    <script src="filter/tracking.js"></script>
+    <script src="filter/render.js"></script>
+    <script src="filter/app.js"></script>
+  </body>
 </html>
