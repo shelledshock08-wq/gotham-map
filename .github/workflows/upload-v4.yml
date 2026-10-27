@@ -1,0 +1,32 @@
+name: Upload verified Charmcaster v4 EXE
+on:
+  push:
+    branches: [release/charmcaster-v4-binary]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and verify existing executable
+        run: |
+          cat payload/exe.part-* > Charmcaster-Avatar-v4-Windows-x64.exe
+          cp payload/Charmcaster-Avatar-v4-Windows-x64.exe.sha256 .
+          sha256sum --check Charmcaster-Avatar-v4-Windows-x64.exe.sha256
+      - name: Upload Windows download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Portable Windows x64 preview. Download and run Charmcaster-Avatar-v4-Windows-x64.exe. All artwork and tracking models are bundled.
+
+          Fixes dark body shading, jagged mask edges and folded finger spikes. Facial actions now use a calibrated neutral baseline, with inner-brow tilt, stronger frowns and angry/sad brow shapes. Hold a relaxed face during startup or click Calibrate relaxed face in settings.
+
+          Expression preview PNG shows controlled facial-action inputs at three strengths; it is not evidence of real-person emotion recognition.
+
+          Browser and Linux Electron checks passed, including local tracking and photo/video export. This unsigned Windows binary was cross-built locally. Physical Windows webcam behavior and complex occluded poses remain unverified. Single-camera depth and hidden-body tracking are approximate.
+          NOTES
+          gh release create charmcaster-v4-windows --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Charmcaster Avatar v4 — Windows' --notes-file notes.md --prerelease
+          gh release upload charmcaster-v4-windows Charmcaster-Avatar-v4-Windows-x64.exe Charmcaster-Avatar-v4-Windows-x64.exe.sha256 payload/expressions-v4.png --repo "$GITHUB_REPOSITORY"
