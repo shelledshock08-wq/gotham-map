@@ -2242,6 +2242,8 @@ window.CharmRender = (() => {
     $("tracking-hint").hidden = true;
     status("STARTING CAMERA", "loading");
     try {
+      if (location.protocol === "file:" && !window.CHARM_PACKED_ASSETS)
+        throw Error("This source page needs a web server. Open Toon-Camera.html or index.html from the updated download, which includes the tracking models.");
       await attach(await cameraStream());
       if (state.cancelStart || document.hidden)
         throw Error(
