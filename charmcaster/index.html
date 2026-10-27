@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2a0a2e">
+<meta name="description" content="Live camera lens that turns you into Charmcaster (Ben 10: Omniverse) — runs in your browser, nothing to install.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Charmcaster">
+<title>Charmcaster Lens</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --magenta: #760057; --magenta-hi: #c2188f; --purple: #a16bc8; --deep: #14061a;
+    --ink: #000; --paper: #fbfdfe; --gold: #d8b353;
+    --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: var(--deep); color: var(--paper); overflow: hidden;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+
+  #stage { position: fixed; inset: 0; background: #000; touch-action: none; }
+  #cam, #out { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #cam { opacity: 0.01; }
+
+  .panel {
+    position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: calc(24px + var(--safe-t)) 24px calc(24px + var(--safe-b)); text-align: center;
+    background: radial-gradient(120% 80% at 50% 10%, #4a1150 0%, #1d0722 55%, #0b030e 100%);
+  }
+  .emblem { width: 120px; height: 120px; filter: drop-shadow(0 0 22px rgba(224, 123, 255, .55)); }
+  h1 { margin: 18px 0 4px; font-size: 34px; letter-spacing: .14em; font-weight: 900; text-transform: uppercase;
+    color: var(--paper); text-shadow: 3px 3px 0 var(--magenta), 0 0 24px rgba(194, 24, 143, .6); }
+  .sub { margin: 0 0 28px; color: #e4c9f2; max-width: 320px; }
+  .big {
+    border: 3px solid var(--ink); border-radius: 999px; padding: 16px 34px; font-weight: 800; font-size: 18px;
+    background: linear-gradient(180deg, #d0369f, var(--magenta)); color: #fff; box-shadow: 0 6px 0 var(--ink), 0 0 30px rgba(194, 24, 143, .5);
+  }
+  .big:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--ink); }
+  .fine { margin-top: 22px; font-size: 13px; color: #b99ac8; max-width: 300px; }
+  .track { width: min(280px, 80vw); height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #2a0e30; overflow: hidden; margin-top: 22px; }
+  #bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--purple), var(--magenta-hi)); transition: width .2s; }
+  #load-text { margin-top: 12px; color: #e4c9f2; font-size: 14px; }
+  .spin { animation: spin 3.5s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #err-text { max-width: 320px; margin: 18px 0 24px; color: #ffd1ec; }
+
+  #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+  #hud > * { pointer-events: auto; }
+  .chip {
+    position: absolute; left: 14px; top: calc(14px + var(--safe-t)); display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px 7px 8px; border-radius: 99px; background: rgba(20, 6, 26, .55); backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px); font-weight: 800; letter-spacing: .04em; font-size: 15px;
+  }
+  .chip svg { width: 26px; height: 26px; }
+  .side { position: absolute; right: 12px; top: calc(12px + var(--safe-t)); display: flex; flex-direction: column; gap: 12px; }
+  .icon {
+    width: 46px; height: 46px; border-radius: 50%; border: 0; display: grid; place-items: center;
+    background: rgba(20, 6, 26, .55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .icon svg { width: 24px; height: 24px; }
+  .icon.down { background: rgba(194, 24, 143, .8); }
+  .bottom {
+    position: absolute; left: 0; right: 0; bottom: calc(22px + var(--safe-b)); display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  #mode-label {
+    padding: 5px 14px; border-radius: 99px; background: rgba(20, 6, 26, .55); font-size: 13px; font-weight: 700; letter-spacing: .05em;
+    pointer-events: none;
+  }
+  #shutter { position: relative; width: 96px; height: 96px; border: 0; padding: 0; background: none; touch-action: none; }
+  #shutter svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  #shutter .core { position: absolute; inset: 16px; border-radius: 50%; background: rgba(255, 255, 255, .22); transition: transform .15s, background .15s; }
+  #shutter.down .core { transform: scale(.88); background: rgba(255, 255, 255, .4); }
+  #shutter.rec .core { background: rgba(255, 40, 120, .75); transform: scale(.7); }
+  #ring-progress { transition: stroke-dashoffset .1s linear; }
+  .hint { font-size: 12px; color: rgba(255, 255, 255, .75); text-shadow: 0 1px 2px #000; pointer-events: none; }
+
+  #status {
+    position: absolute; left: 50%; top: calc(74px + var(--safe-t)); transform: translateX(-50%); max-width: 80vw;
+    padding: 6px 14px; border-radius: 99px; background: rgba(20, 6, 26, .6); font-size: 13px; text-align: center;
+    opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  #status.on { opacity: 1; }
+  #toast {
+    position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.96); z-index: 30;
+    padding: 10px 18px; border-radius: 14px; background: rgba(20, 6, 26, .78); border: 2px solid rgba(224, 123, 255, .5);
+    font-weight: 700; opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none; text-align: center; max-width: 86vw;
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #stats { position: fixed; left: 8px; top: calc(64px + var(--safe-t)); z-index: 40; margin: 0; max-width: 70vw; white-space: pre-wrap;
+    font: 11px ui-monospace, monospace; background: rgba(0,0,0,.6); padding: 4px 6px; border-radius: 4px; pointer-events: none; }
+  #flash { position: fixed; inset: 0; z-index: 25; background: #fff; opacity: 0; pointer-events: none; }
+  #flash.on { animation: flash .35s ease-out; }
+  @keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+
+  #preview { position: fixed; inset: 0; z-index: 35; background: #000; display: flex; flex-direction: column; }
+  #pv-media { flex: 1; min-height: 0; display: grid; place-items: center; }
+  #pv-media img, #pv-media video { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .pv-bar {
+    display: flex; gap: 12px; justify-content: center; padding: 14px 16px calc(18px + var(--safe-b));
+    background: linear-gradient(0deg, rgba(20, 6, 26, .95), rgba(20, 6, 26, .6));
+  }
+  .pv-bar button {
+    min-width: 96px; padding: 12px 18px; border-radius: 99px; border: 2px solid var(--ink); font-weight: 800;
+    background: var(--paper); color: var(--magenta);
+  }
+  .pv-bar #pv-share { background: linear-gradient(180deg, #d0369f, var(--magenta)); color: #fff; }
+  .pv-bar #pv-close { min-width: 52px; background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255,255,255,.3); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="out" width="1280" height="720"></canvas>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="heart" viewBox="0 0 100 100">
+      <path d="M50 90 C 22 70 5 52 9 32 C 13 13 36 9 50 27 C 64 9 87 13 91 32 C 95 52 78 70 50 90 Z" fill="#a16bc8" stroke="#000" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M50 82 C 30 66 18 52 20 37 C 22 25 36 22 46 33" fill="none" stroke="#653d8a" stroke-width="5" stroke-linecap="round"/>
+      <path d="M50 44 C 50 32 64 26 72 34 C 79 41 74 52 65 52 C 58 52 56 44 62 41" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+      <path d="M50 44 C 50 32 36 26 28 34 C 21 41 26 52 35 52 C 42 52 44 44 38 41" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<section id="start" class="panel">
+  <svg class="emblem" aria-hidden="true"><use href="#heart"/></svg>
+  <h1>Charmcaster</h1>
+  <p class="sub">A live lens that turns you into the sorceress of Ledgerdomain. Your face drives hers — blink, smile, talk, glare.</p>
+  <button id="go" class="big">Cast the spell</button>
+  <p class="fine">Runs entirely on your device. The camera feed never leaves your phone.</p>
+</section>
+
+<section id="loader" class="panel" hidden>
+  <svg class="emblem spin" aria-hidden="true"><use href="#heart"/></svg>
+  <div class="track"><div id="bar"></div></div>
+  <div id="load-text">Opening your camera…</div>
+</section>
+
+<section id="err" class="panel" hidden>
+  <svg class="emblem" aria-hidden="true"><use href="#heart"/></svg>
+  <p id="err-text"></p>
+  <button id="retry" class="big">Try again</button>
+</section>
+
+<div id="hud" hidden>
+  <div class="chip"><svg aria-hidden="true"><use href="#heart"/></svg>Charmcaster</div>
+  <div class="side">
+    <button id="flip" class="icon" aria-label="Switch camera">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><path d="M9 13a3 3 0 0 0 5.2 2M15 13a3 3 0 0 0-5.2-2"/><path d="M14.5 15.5 14.2 15l.5-.2M9.5 10.5l.3.5-.5.2"/></svg>
+    </button>
+    <button id="mode" class="icon" aria-label="Change background">
+      <svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2l2.2 6.3L20.5 9l-5 4 1.6 6.5L12 16l-5.1 3.5L8.5 13l-5-4 6.3-.7z"/></svg>
+    </button>
+    <button id="compare" class="icon" aria-label="Hold to see without the lens">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4v16" /><path d="M12 4a8 8 0 0 1 0 16z" fill="#fff"/></svg>
+    </button>
+  </div>
+  <div id="status"></div>
+  <div class="bottom">
+    <div id="mode-label">Comic</div>
+    <button id="shutter" aria-label="Tap for a photo, hold for video">
+      <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="#fff" stroke-width="6"/><circle id="ring-progress" cx="50" cy="50" r="46" fill="none" stroke="#ff2a7f" stroke-width="7" stroke-dasharray="289" stroke-dashoffset="289" stroke-linecap="round"/></svg>
+      <span class="core"></span>
+    </button>
+    <div class="hint">tap = photo · hold = video · swipe = background</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="flash"></div>
+<pre id="stats" hidden></pre>
+
+<div id="preview" hidden>
+  <div id="pv-media"></div>
+  <div class="pv-bar">
+    <button id="pv-close" aria-label="Discard">✕</button>
+    <button id="pv-save">Save</button>
+    <button id="pv-share">Share</button>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

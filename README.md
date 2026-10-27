@@ -1,5 +1,7 @@
 # Sonic Anthology (fan game)
 
+> Also in this repo: **[Charmcaster Lens](charmcaster/)**, a live camera filter that turns you into Charmcaster from *Ben 10: Omniverse*. It runs in the phone's browser with nothing to install.
+
 A complete 2D Sonic-style platformer in plain HTML5 canvas and JavaScript. It has no build step and no dependencies.
 
 ## Play

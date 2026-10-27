@@ -5,3 +5,5 @@ dist/
 assets/music/
 sonic-standalone-full.html
 __pycache__/
+# local-only copies of MediaPipe + models for offline testing (the app loads them from CDNs)
+charmcaster/vendor/
