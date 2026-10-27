@@ -14,4 +14,10 @@ Photos and video record the rendered view. Camera data and recordings stay on th
 
 Run `python3 tools/filter/serve.py --port 8010` to serve source. Rebuild distributions with `python3 tools/filter/build.py`. Run `tests/filter/smoke.cjs` using Playwright and the prepared camera fixture as described in `tools/filter/prepare_test.py`. The browser test exercises actual face, segmentation and body-pose inference, capture, expression controls, settings and permission handling. Model licenses and provenance are documented in `filter/ASSETS.md`.
 
-The older Windows EXE has not been rebuilt with this version. Use the v2 browser download for the changes above.
+## Windows EXE
+
+The `Charmcaster Windows EXE` GitHub Actions workflow builds the portable Windows x64 app from `codex/charmcaster-avatar-v2`, verifies the executable header, records a SHA-256 checksum and publishes both files to the `charmcaster-v2-windows` prerelease. The workflow also retains a build artifact. The executable bundles Chromium, all three tracking models and the generated artwork; users do not need Node or Python. The executable is unsigned. Linux desktop camera/capture tests do not prove physical Windows webcam behavior.
+
+Release page: https://github.com/shelledshock08-wq/gotham-map/releases/tag/charmcaster-v2-windows
+
+To reproduce locally, run `npm ci` followed by `npm run dist:win`.
