@@ -215,55 +215,12 @@ void main() {
   vec3 hairC = mix(vec3(0.776, 0.839, 0.882), vec3(0.984, 0.992, 0.996), smoothstep(0.62, 0.7, r2));
   hairC = mix(vec3(0.62, 0.70, 0.78), hairC, smoothstep(0.38, 0.45, r2) * smoothstep(0.02, 0.05, L2));
   vec3 skinC = tone4(rB, LB, vec3(0.541, 0.31, 0.369), vec3(0.718, 0.451, 0.486), vec3(0.835, 0.592, 0.592), vec3(0.91, 0.69, 0.678), 1.22);
-  vec3 clothC = tone4(rB, LB, vec3(0.20, 0.0, 0.13), vec3(0.33, 0.02, 0.24), vec3(0.463, 0.0, 0.341), vec3(0.64, 0.14, 0.49), 1.3);
-
-  vec2 pp = vec2(uv.x * uRes.x, (1.0 - uv.y) * uRes.y);
-  float hw2 = uInk * 0.5;
-  float panel = 0.0, panelLine = 0.0;
-  for (int k = 0; k < 2; k++) {
-    vec4 A = uPanelA[k], B = uPanelB[k];
-    vec2 ax = A.zw - A.xy;
-    float len = max(length(ax), 1.0);
-    vec2 dir = ax / len;
-    vec2 q = pp - A.xy;
-    float t = dot(q, dir) / len;
-    float hw = mix(B.x, B.y, clamp(t, 0.0, 1.0));
-    float d = abs(dot(q, vec2(-dir.y, dir.x))) - hw;
-    float inP = B.z * step(0.0, t) * step(t, 1.0);
-    panel = max(panel, inP * (1.0 - smoothstep(-1.0, 1.0, d)));
-    panelLine = max(panelLine, inP * (1.0 - smoothstep(hw2 * 0.7 - 0.7, hw2 * 0.7 + 0.7, abs(d))));
-  }
-  vec3 panelC = tone4(rB, LB, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.02, 0.06), vec3(0.12, 0.04, 0.11), vec3(0.24, 0.10, 0.23), 1.6);
-  vec3 sleeveC = clothC;
-  clothC = mix(clothC, panelC, panel);
+  // cartoon YOUR real clothes: flatten the real colour into drawn cel bands (hue kept), not her outfit
+  vec3 clothC = comic(textureLod(uS, suv, 1.5).rgb);
   vec3 otherC = comic(s);
+  float hw2 = uInk * 0.5;
 
-  // her outfit on the whole body: sleeves, fingerless gloves, leggings, boots (from body tracking)
-  float sleeve = 0.0, glove = 0.0, boot = 0.0, thigh = 0.0, lines = 0.0;
-  for (int k = 0; k < 2; k++) {
-    sleeve = max(sleeve, max(capsule(pp, uArm[k * 3], uArmR.x), capsule(pp, uArm[k * 3 + 1], uArmR.y)));
-    glove = max(glove, capsule(pp, uArm[k * 3 + 2], uArmR.z));
-    thigh = max(thigh, capsule(pp, uLeg[k * 3], uLegR.x));
-    boot = max(boot, max(capsule(pp, uLeg[k * 3 + 1], uLegR.y), capsule(pp, uLeg[k * 3 + 2], uLegR.z)));
-    lines = max(lines, cuff(pp, uArm[k * 3 + 2], uArmR.z * 1.1, uInk));
-    lines = max(lines, cuff(pp, uLeg[k * 3 + 1], uLegR.y * 1.15, uInk));
-  }
-  float below = smoothstep(-2.0, 2.0, dot(pp - uHem.xy, uHem.zw));
-  // gloves only where the hand's own skin shows; a hand hidden behind an arm leaves the sleeve alone
-  float gW = glove * uBody * (skin + other) / max(person, 1e-3);
-  float sW = max(sleeve, glove) * uBody * (1.0 - gW);
-  float bW = boot * uBody * (1.0 - max(gW, sW));
-  float lW = max(below, thigh) * uBody * (1.0 - max(gW, sW)) * (1.0 - bW);
-  float tW = max(1.0 - gW - sW - bW - lW, 0.0);
-  vec3 legC = tone4(rB, LB, vec3(0.02, 0.01, 0.04), vec3(0.07, 0.04, 0.10), vec3(0.13, 0.07, 0.18), vec3(0.34, 0.22, 0.46), 1.6);
-  vec3 bootC = tone4(rB, LB, vec3(0.03, 0.02, 0.05), vec3(0.09, 0.05, 0.13), vec3(0.17, 0.09, 0.23), vec3(0.45, 0.30, 0.60), 1.6);
-  vec3 gloveC = tone4(rB, LB, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.03, 0.07), vec3(0.11, 0.06, 0.13), vec3(0.26, 0.16, 0.32), 1.6);
-  vec3 dressed = sleeveC * sW + gloveC * gW + bootC * bW + legC * lW;
-  vec3 clothD = clothC * tW + dressed;
-  vec3 skinD = skinC * tW + dressed;
-  vec3 otherD = otherC * (tW + sW + gW) + bootC * bW + legC * lW;
-
-  vec3 col = bg * (1.0 - person) + hairC * hair + skinD * skin + clothD * cloth + otherD * other;
+  vec3 col = bg * (1.0 - person) + hairC * hair + skinC * skin + clothC * cloth + otherC * other;
 
   vec2 mo = vec2(px.x * 1.5, 0.0), no = vec2(0.0, px.y * 1.5);
   vec4 mR = maskAt(muv + mo), mL = maskAt(muv - mo), mU = maskAt(muv + no), mD = maskAt(muv - no);
@@ -272,8 +229,6 @@ void main() {
   float line = iso(person, gxm.a, gym.a, hw2 * 1.25);
   line = max(line, iso(hair, gxm.r, gym.r, hw2 * 0.8));
   line = max(line, iso(cloth, gxm.b, gym.b, hw2 * 0.8));
-  line = max(line, cloth * panelLine);
-  line = max(line, lines * uBody * (skin + cloth));
 
   float edgeInk = smoothstep(0.40, 0.66, edge) * mix(0.6, 0.95, person) * (1.0 - 0.9 * hair) * (1.0 - 0.5 * cloth);
   if (uMode == 2) edgeInk *= person + (1.0 - uMaskOn);

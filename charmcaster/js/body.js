@@ -9,7 +9,6 @@ import { POSE as P } from './tracker.js';
 
 const TAU = Math.PI * 2;
 const FAR = [-1e5, -1e5, -1e5, -1e5];
-const LAVENDER = '#9a78b8', LAVENDER_SHADE = '#7f5989', SWIRL = '#4b2c63';
 
 const norm = (x, y) => {
   const d = Math.hypot(x, y) || 1;
@@ -66,42 +65,6 @@ export function bodyFrame(pose, W, H, mirror) {
   };
 }
 
-// Lavender heart with a double swirl, like the emblems on her sleeves.
-function heart(ctx, x, y, size, angle, lw) {
-  const k = size / 100;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-  ctx.scale(k, k);
-  ctx.translate(-50, -50);
-  ctx.beginPath();
-  ctx.moveTo(50, 90);
-  ctx.bezierCurveTo(22, 70, 5, 52, 9, 32);
-  ctx.bezierCurveTo(13, 13, 36, 9, 50, 27);
-  ctx.bezierCurveTo(64, 9, 87, 13, 91, 32);
-  ctx.bezierCurveTo(95, 52, 78, 70, 50, 90);
-  ctx.closePath();
-  ctx.fillStyle = LAVENDER;
-  ctx.fill();
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = LAVENDER_SHADE;
-  ctx.fillRect(54, 0, 50, 100);
-  ctx.restore();
-  ctx.lineWidth = lw / k;
-  ctx.strokeStyle = PAL.ink;
-  ctx.stroke();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = SWIRL;
-  ctx.lineWidth = (lw * 1.1) / k;
-  ctx.beginPath();
-  ctx.moveTo(50, 46); ctx.bezierCurveTo(50, 33, 64, 27, 72, 35); ctx.bezierCurveTo(79, 42, 74, 53, 65, 53); ctx.bezierCurveTo(58, 53, 56, 45, 62, 42);
-  ctx.moveTo(50, 46); ctx.bezierCurveTo(50, 33, 36, 27, 28, 35); ctx.bezierCurveTo(21, 42, 26, 53, 35, 53); ctx.bezierCurveTo(42, 53, 44, 45, 38, 42);
-  ctx.moveTo(50, 46); ctx.lineTo(50, 78);
-  ctx.stroke();
-  ctx.restore();
-}
-
 export class Body {
   constructor() {
     // her hair seen from behind, down to the small of the back
@@ -151,22 +114,9 @@ export class Body {
     return [top[0], top[1], bot[0], bot[1], B.scale * 0.1, B.scale * 0.2, smoothstep(0.15, 0.45, B.front)];
   }
 
-  // Flaps at the hips + arm hearts, drawn over the cartoon body.
+  // The body is now a cartoon of your own clothes; only the bare-torso abs are drawn on top.
   drawCostume(ctx, B, lw, bare) {
     if (bare) this.drawAbs(ctx, B, lw);
-    const { X, Y, V } = B;
-    const cx = B.sm[0], cy = B.sm[1];
-    for (const [s, e] of [[P.L_SHOULDER, P.L_ELBOW], [P.R_SHOULDER, P.R_ELBOW]]) {
-      if (V[s] < 0.6 || V[e] < 0.6) continue;
-      let x = X[s] + (X[e] - X[s]) * 0.4, y = Y[s] + (Y[e] - Y[s]) * 0.4;
-      // sit on the outer side of the sleeve, away from the chest
-      const [ax, ay] = norm(X[e] - X[s], Y[e] - Y[s]);
-      let nx = -ay, ny = ax;
-      if (nx * (x - cx) + ny * (y - cy) < 0) { nx = -nx; ny = -ny; }
-      x += nx * B.scale * 0.06;
-      y += ny * B.scale * 0.06;
-      heart(ctx, x, y, B.scale * 0.18, Math.atan2(ay, ax) - Math.PI / 2, lw);
-    }
   }
 
   // Cartoon chest + ab definition for a bare torso (drawn only when the shirt is off,
@@ -204,7 +154,7 @@ export class Body {
     ctx.restore();
   }
 
-  // Seen from behind: tall collar, then her hair over your back.
+  // Seen from behind: her long hair over your back.
   drawBackView(ctx, B, dt, lw) {
     const a = smoothstep(-0.12, -0.42, B.front);
     if (a < 0.02) return;
@@ -226,23 +176,6 @@ export class Body {
     ctx.save();
     ctx.globalAlpha = a;
     ctx.lineJoin = 'round';
-    // collar standing up behind the neck
-    const sB = B.scale / 34;
-    const bp = (x, y) => [B.neck[0] + sB * (x * Math.cos(B.roll) + y * Math.sin(B.roll)), B.neck[1] + sB * (x * Math.sin(B.roll) - y * Math.cos(B.roll))];
-    for (const poly of [
-      [[-5.5, -1.5], [-6.8, 7.5], [6.8, 7.5], [5.5, -1.5]],
-      [[-6.8, 7.5], [-10, 10.8], [-8.6, 2.6], [-5.6, -1]],
-      [[6.8, 7.5], [10, 10.8], [8.6, 2.6], [5.6, -1]],
-    ]) {
-      ctx.beginPath();
-      poly.forEach(([x, y], i) => { const p = bp(x, y); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
-      ctx.closePath();
-      ctx.fillStyle = PAL.magenta;
-      ctx.fill();
-      ctx.strokeStyle = PAL.ink;
-      ctx.lineWidth = lw;
-      ctx.stroke();
-    }
     // the back of her head: same hair volume as the front view
     const e = projectEllipsoid(pose, 0, 3.3, -3.5, 9.8, 11.0, 10.2);
     this.backHair.step(F);

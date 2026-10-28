@@ -4,12 +4,11 @@ A live camera filter, like a Snapchat lens, that turns you into **Charmcaster** 
 
 Your face drives hers: blinks, winks, smiles, talking, frowns and brow raises all come through. The head is redrawn as Charmcaster: white hair with purple tips, the curled marks under her eyes, purple eyes with winged liner, black lips, and pointed ears with gold rings.
 
-Step back and your whole body becomes her outfit too, tracked from 33 body points:
+Step back and your whole body is cartooned to match, tracked from 33 body points:
 
-- Your top becomes her magenta jacket with the black front panel. With your shirt off, the bare torso is drawn as a cartoon chest with ab lines instead.
-- Bare arms or not, you get her long sleeves with heart emblems, and your hands get black fingerless gloves.
-- Your legs get black leggings, with boots from the knee down. There are no skirt flaps, so the lower body reads clean head-to-toe.
-- Turn around and you see her long white hair down your back and her collar from behind.
+- Whatever you're wearing is 2D-ified in its own colours: the real fabric flattens into drawn cel tones with bold ink outlines, so your outfit reads as drawn, not filmed. It's your clothes, cartooned — not her costume painted on.
+- Your skin is toned to her pink and your hair to her white, so the body matches the head. With your shirt off, the bare torso is drawn as a cartoon chest with ab lines.
+- Turn around and you see her long white hair down your back.
 
 Shading follows your real body and lighting, so it moves naturally.
 
@@ -72,10 +71,10 @@ Everything runs on the device and nothing is uploaded.
 
 - **Tracking:** [MediaPipe Tasks Vision](https://www.npmjs.com/package/@mediapipe/tasks-vision) 1.0.1. The Face Landmarker gives 478 face points and 52 expression blendshapes, for up to 2 faces. The Pose Landmarker gives 33 body points: full model on computers, lite on phones. The selfie multiclass segmenter splits the frame into hair, skin, clothes and background. All of them run on the GPU when possible and fall back to the CPU. Pose landmarks and the segmentation mask are temporally smoothed, with hysteresis on whether a limb is in view, so the cartoon body stays steady instead of shimmering.
 - **Full-body shots:** when the face is too small for the face detector, a second face tracker runs on a zoomed crop around the head found by the pose model. If that fails too, a neutral face is posed from the body points (nose, eyes, ears, mouth). Segmentation runs on a crop around the people in frame, so the mask stays sharp when you're far away.
-- **Outfit:** limb capsules from the pose drive shader regions for sleeves, gloves (on hand skin only), leggings and boots. Heart emblems and the view from behind are drawn on top. When the torso reads as bare skin (shirt off) the mask drives cartoon chest and ab lines drawn over it, bounded between the collar and the navel.
+- **Body:** the segmenter labels every pixel as hair, skin, clothes or background. Your clothes are flattened into drawn cel tones in their *own* colours (not repainted as a fixed costume); your skin is toned to her pink and your hair to her white so the body matches the head. When the torso reads as bare skin (shirt off), cartoon chest and ab lines are drawn over it, between the collar and the navel.
 - **Head pose:** a weighted similarity fit (Horn's method) between the rigid points of MediaPipe's canonical face model and the tracked points. Hair and ears are modelled in 3D head space in centimetres and projected with this pose, so they turn with you. Loose hair has spring physics.
 - **Face:** a vector puppet drawn with Canvas 2D straight from the landmarks, so expressions are your own. Blink blendshapes force a full close.
-- **Body and background:** a WebGL2 shader (bilateral smoothing, cel tones relative to local brightness, ink lines from mask contours and image edges) recolors each body part into her palette, with flat cel tones and bold outlines so the whole body reads as drawn as the head, whatever you're wearing. The long hair is tucked behind your shoulders using the body mask.
+- **Body and background:** a WebGL2 shader (bilateral smoothing, flat cel tones from a blurred local brightness, bold ink lines from mask contours and image edges) draws your clothes as flat cartoon colour and keeps her palette for skin and hair, so the body matches the head whatever you're wearing. The long hair is tucked behind your shoulders using the body mask.
 - **Capture:** photos come from `canvas.toBlob`. Videos use `MediaRecorder` on the canvas stream plus the mic, recording MP4 where supported and WebM otherwise. Saving uses the Web Share API when the phone supports it, and a download otherwise.
 
 | File | Role |
@@ -86,7 +85,7 @@ Everything runs on the device and nothing is uploaded.
 | `js/canonical.js` | Rigid points of MediaPipe's canonical face model |
 | `js/toon.js` | WebGL cartoon pass and backgrounds |
 | `js/charm.js` | The drawn Charmcaster head, collar and hair physics (palette sampled from the show) |
-| `js/body.js` | Full-body outfit: shader regions, emblems, bare-torso abs, view from behind |
+| `js/body.js` | Full-body: body frame from the pose, bare-torso abs, the view from behind (her hair) |
 | `js/capture.js` | Photo/video capture, preview, save/share |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installable and offline support |
 | `desktop/` | Windows app: Electron wrapper (`main.js`), offline asset fetcher, build config |
