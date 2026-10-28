@@ -199,6 +199,12 @@ void main() {
   }
 
   vec3 s = textureLod(uS, suv, 0.0).rgb;
+  // gentle gray-world white balance: neutralise coloured room light (magenta LEDs etc.) so the
+  // cartoonised background reads natural instead of a colour-cast mess. Her palette is untouched.
+  vec3 wbAvg = textureLod(uS, vec2(0.5), 10.0).rgb;
+  float wbGray = max((wbAvg.r + wbAvg.g + wbAvg.b) / 3.0, 0.05);
+  vec3 wbGain = mix(vec3(1.0), clamp(wbGray / max(wbAvg, vec3(0.05)), 0.5, 2.0), 0.6);
+  vec3 sWB = clamp(s * wbGain, 0.0, 1.0);
   float L = luma(s);
   float Lm = luma(textureLod(uS, suv, 4.0).rgb);
   float r = L / max(Lm, 0.04);
@@ -223,8 +229,8 @@ void main() {
   vec3 bg;
   if (uMode == 1) bg = lair(L, uv);
   else if (uMode == 2) bg = glass(uv, L);
-  else bg = comic(s);
-  bg = mix(comic(s), bg, uMaskOn);
+  else bg = comic(sWB);
+  bg = mix(comic(sWB), bg, uMaskOn);
 
   // body parts are toned from blurrier brightness so fabric/hair texture flattens out
   float L1 = luma(textureLod(uS, suv, 1.5).rgb), r1 = L1 / max(Lm, 0.04);
@@ -237,7 +243,7 @@ void main() {
   vec3 skinC = tone4(rB, LB, vec3(0.541, 0.31, 0.369), vec3(0.718, 0.451, 0.486), vec3(0.835, 0.592, 0.592), vec3(0.91, 0.69, 0.678), 1.22);
   // cartoon YOUR real clothes: flatten the real colour into drawn cel bands (hue kept), not her outfit
   vec3 clothC = comic(textureLod(uS, suv, 1.5).rgb);
-  vec3 otherC = comic(s);
+  vec3 otherC = comic(sWB);
   float hw2 = uInk * 0.5;
 
   vec3 col = bg * (1.0 - person) + hairC * hair + skinC * skin + clothC * cloth + otherC * other;
