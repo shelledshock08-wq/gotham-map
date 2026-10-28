@@ -49,6 +49,7 @@ uniform float uTime;
 uniform vec4 uPanelA[2];  // per person: panel top xy, bottom xy (px)
 uniform vec4 uPanelB[2];  // half width at top, at bottom, on
 uniform vec4 uMaskRoi;    // where the mask sits in the (unmirrored) frame, normalized
+uniform vec2 uMaskTexel;  // one mask texel in frame-normalized units (edge-aware refine)
 uniform vec4 uArm[6];     // limb segments in px: upper arm, forearm, hand (left then right)
 uniform vec3 uArmR;
 uniform vec4 uLeg[6];     // thigh, shin, foot (left then right)
@@ -112,6 +113,19 @@ vec4 maskAt(vec2 raw) {
   vec2 q = (clamp(raw, 0.0, 1.0) - uMaskRoi.xy) / uMaskRoi.zw;
   float inside = step(0.0, q.x) * step(q.x, 1.0) * step(0.0, q.y) * step(q.y, 1.0);
   return texture(uMask, q) * inside * uMaskOn;
+}
+
+// Joint-bilateral refine: pull the coarse mask's edges onto the real image edges using the
+// source colour, so thin limbs/hands read cleanly instead of blocky/blobby. c0 = pixel colour.
+vec4 maskRefined(vec2 muv, vec3 c0) {
+  vec2 tp = uMaskTexel * 1.2;
+  vec4 acc = maskAt(muv) * 1.5;
+  float wsum = 1.5, w; vec3 d;
+  d = textureLod(uS, vec2(muv.x + tp.x, 1.0 - muv.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(tp.x, 0.0)) * w; wsum += w;
+  d = textureLod(uS, vec2(muv.x - tp.x, 1.0 - muv.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv - vec2(tp.x, 0.0)) * w; wsum += w;
+  d = textureLod(uS, vec2(muv.x, 1.0 - muv.y - tp.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(0.0, tp.y)) * w; wsum += w;
+  d = textureLod(uS, vec2(muv.x, 1.0 - muv.y + tp.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(0.0, -tp.y)) * w; wsum += w;
+  return acc / wsum;
 }
 
 // Line along the 0.5 contour of a soft mask channel, constant width in pixels.
@@ -196,7 +210,7 @@ void main() {
   float gy = (tl + 2.0 * tc + tr) - (bl + 2.0 * bc + br);
   float edge = length(vec2(gx, gy));
 
-  vec4 m = maskAt(muv);
+  vec4 m = maskRefined(muv, s);
   float person = m.a, hair = m.r, skin = m.g, cloth = m.b;
   float other = max(person - hair - skin - cloth, 0.0);
 
@@ -230,7 +244,7 @@ void main() {
   line = max(line, iso(hair, gxm.r, gym.r, hw2 * 0.8));
   line = max(line, iso(cloth, gxm.b, gym.b, hw2 * 0.8));
 
-  float edgeInk = smoothstep(0.40, 0.66, edge) * mix(0.6, 0.95, person) * (1.0 - 0.9 * hair) * (1.0 - 0.5 * cloth);
+  float edgeInk = smoothstep(0.40, 0.66, edge) * mix(0.1, 0.95, person) * (1.0 - 0.9 * hair) * (1.0 - 0.5 * cloth);
   if (uMode == 2) edgeInk *= person + (1.0 - uMaskOn);
   float ink = max(line, edgeInk);
   o = vec4(mix(col, INK, ink), 1.0);
@@ -407,6 +421,7 @@ export class ToonRenderer {
     gl.uniform4fv(u['uPanelB[0]'], pb);
     const roi = opts.maskRoi || { x: 0, y: 0, w: 1, h: 1 };
     gl.uniform4f(u.uMaskRoi, roi.x, roi.y, roi.w, roi.h);
+    gl.uniform2f(u.uMaskTexel, (opts.maskTexel && opts.maskTexel[0]) || 0, (opts.maskTexel && opts.maskTexel[1]) || 0);
     const b = opts.body;
     gl.uniform1f(u.uBody, b ? 1 : 0);
     gl.uniform4fv(u['uArm[0]'], b ? b.arms : NO_LIMBS);

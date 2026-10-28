@@ -371,7 +371,7 @@ export class Tracker {
         const ms = performance.now() - t0;
         this.segMs = this.segMs ? this.segMs * 0.9 + ms * 0.1 : ms;
         // On slow devices segment every other frame; the mask is smoothed anyway.
-        this.segEvery = this.segMs > 28 ? 2 : 1;
+        this.segEvery = this.segMs > 42 ? 2 : 1;
       }
     }
     return { maskUpdated };
@@ -632,7 +632,7 @@ export class Tracker {
     const n = m.w * m.h;
     const { cat, soft, rgba } = m;
     const cut = m.cut.data;
-    const k = m.fresh ? 1 : 0.5; // lower = steadier edges, higher = less trailing when you move
+    const fresh = m.fresh;
     m.fresh = false;
     for (let i = 0; i < n; i++) {
       const c = cat[i];
@@ -641,6 +641,10 @@ export class Tracker {
       const skin = c === 2 || c === 3 ? 1 : 0;
       const cloth = c === 4 ? 1 : 0;
       const person = c !== 0 ? 1 : 0;
+      // adaptive: smooth hard where the mask is steady (kills flicker), snap fast where a pixel
+      // is changing (kills the trailing smear when you move)
+      const motion = Math.max(Math.abs(hair - soft[j]), Math.abs(skin - soft[j + 1]), Math.abs(cloth - soft[j + 2]), Math.abs(person - soft[j + 3]));
+      const k = fresh ? 1 : 0.35 + 0.55 * motion;
       const a = soft[j] + (hair - soft[j]) * k;
       const b = soft[j + 1] + (skin - soft[j + 1]) * k;
       const d = soft[j + 2] + (cloth - soft[j + 2]) * k;

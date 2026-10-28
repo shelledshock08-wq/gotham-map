@@ -606,7 +606,7 @@ export class Charm {
       ctx.closePath();
       ctx.fillStyle = PAL.teeth;
       ctx.fill();
-      if (gap > 0.55) {
+      if (gap > 0.33) {
         const il = LIP_IN_L.map(tf);
         const rise = 0.16 * s;
         ctx.beginPath();
@@ -616,7 +616,7 @@ export class Charm {
         ctx.fill();
         const tb = tf(14);
         ctx.beginPath();
-        ctx.ellipse(tb[0] - vx * s * 0.25, tb[1] - vy * s * 0.25, s * 0.85, s * 0.35, Math.atan2(uy, ux), 0, TAU);
+        ctx.ellipse(tb[0] - vx * s * 0.2, tb[1] - vy * s * 0.2, s * 1.02, s * 0.46, Math.atan2(uy, ux), 0, TAU);
         ctx.fillStyle = PAL.tongue;
         ctx.fill();
       }

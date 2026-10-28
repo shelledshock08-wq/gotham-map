@@ -114,46 +114,6 @@ export class Body {
     return [top[0], top[1], bot[0], bot[1], B.scale * 0.1, B.scale * 0.2, smoothstep(0.15, 0.45, B.front)];
   }
 
-  // The body is now a cartoon of your own clothes; only the bare-torso abs are drawn on top.
-  drawCostume(ctx, B, lw, bare) {
-    if (bare) this.drawAbs(ctx, B, lw);
-  }
-
-  // Cartoon chest + ab definition for a bare torso (drawn only when the shirt is off,
-  // so the toon body still reads as drawn rather than photographed). Bounded between
-  // the collar and the navel, never lower.
-  drawAbs(ctx, B, lw) {
-    const down = B.down;
-    let across = [-down[1], down[0]];
-    if (across[0] < 0) across = [-across[0], -across[1]];
-    const L = B.hipsOk ? B.torso : B.scale * 1.25;
-    const hw = B.scale * 0.34;
-    const pt = (u, t) => [
-      B.sm[0] + across[0] * u * hw + down[0] * t * L,
-      B.sm[1] + across[1] * u * hw + down[1] * t * L,
-    ];
-    const curve = (a, b, c, w) => {
-      const A = pt(a[0], a[1]), M = pt(b[0], b[1]), C = pt(c[0], c[1]);
-      ctx.lineWidth = w;
-      ctx.beginPath();
-      ctx.moveTo(A[0], A[1]);
-      ctx.quadraticCurveTo(M[0], M[1], C[0], C[1]);
-      ctx.stroke();
-    };
-    ctx.save();
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = PAL.ink;
-    curve([-0.34, 0.33], [-0.20, 0.44], [-0.03, 0.43], lw);  // left pec
-    curve([0.34, 0.33], [0.20, 0.44], [0.03, 0.43], lw);     // right pec
-    curve([0, 0.34], [0, 0.53], [0, 0.72], lw * 1.1);        // centre line to the navel
-    for (const t of [0.50, 0.59, 0.68]) {                    // three rows of abs
-      curve([-0.22, t - 0.01], [-0.12, t + 0.02], [-0.03, t], lw * 0.9);
-      curve([0.22, t - 0.01], [0.12, t + 0.02], [0.03, t], lw * 0.9);
-    }
-    ctx.restore();
-  }
-
   // Seen from behind: her long hair over your back.
   drawBackView(ctx, B, dt, lw) {
     const a = smoothstep(-0.12, -0.42, B.front);

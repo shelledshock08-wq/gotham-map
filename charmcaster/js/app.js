@@ -55,7 +55,34 @@ function fitPose(lm, W, H, mirror, X, Y, Z) {
     const i = RIGID_IDX[k];
     Q[k * 3] = X[i]; Q[k * 3 + 1] = Y[i]; Q[k * 3 + 2] = Z[i];
   }
-  return fitSimilarity(mirror ? P_MIRROR : P_PLAIN, Q, RIGID_W);
+  const P = mirror ? P_MIRROR : P_PLAIN;
+  const fit = fitSimilarity(P, Q, RIGID_W);
+  // At steep head angles the landmarks go bad and the fitted scale can spike, ballooning the
+  // hair across the screen. Cap it to the face's real on-screen height (forehead 10 -> nose base 2)
+  // and rebuild the translation for the capped scale so the head stays anchored.
+  const faceH = Math.hypot(X[10] - X[2], Y[10] - Y[2]);
+  if (faceH > 1) {
+    const refS = faceH / 10.35; // |10 - 2| in the canonical model, frontal
+    const s = Math.min(Math.max(fit.s, refS * 0.5), refS * 1.45);
+    if (s !== fit.s) {
+      let sw = 0, pcx = 0, pcy = 0, pcz = 0, qcx = 0, qcy = 0, qcz = 0;
+      for (let k = 0; k < RIGID_W.length; k++) {
+        const w = RIGID_W[k];
+        sw += w;
+        pcx += w * P[k * 3]; pcy += w * P[k * 3 + 1]; pcz += w * P[k * 3 + 2];
+        qcx += w * Q[k * 3]; qcy += w * Q[k * 3 + 1]; qcz += w * Q[k * 3 + 2];
+      }
+      pcx /= sw; pcy /= sw; pcz /= sw; qcx /= sw; qcy /= sw; qcz /= sw;
+      const R = fit.R;
+      fit.t = [
+        qcx - s * (R[0] * pcx + R[1] * pcy + R[2] * pcz),
+        qcy - s * (R[3] * pcx + R[4] * pcy + R[5] * pcz),
+        qcz - s * (R[6] * pcx + R[7] * pcy + R[8] * pcz),
+      ];
+      fit.s = s;
+    }
+  }
+  return fit;
 }
 
 // How much of the user's own hair is at a screen point (0..1), from the smoothed mask.
@@ -64,28 +91,6 @@ function hairAt(x, y, W, H, mirror) {
   if (!m || state.maskOn <= 0) return 0;
   const i = tracker.maskIndex(mirror ? 1 - x / W : x / W, y / H);
   return i < 0 ? 0 : m.soft[i * 4];
-}
-
-// Is the torso bare skin (shirt off)? Sampled from the smoothed mask over the mid torso,
-// with hysteresis so the toon abs don't flicker on and off at the boundary.
-let bareOn = false;
-function torsoBare(B, W, H, mirror) {
-  const m = tracker && tracker.mask;
-  if (!B || !m || state.maskOn < 0.5) { bareOn = false; return false; }
-  const across = [-B.down[1], B.down[0]];
-  const L = B.hipsOk ? B.torso : B.scale * 1.25;
-  let skin = 0, cloth = 0, n = 0;
-  for (const t of [0.42, 0.55, 0.68]) for (const u of [-0.18, 0, 0.18]) {
-    const sx = B.sm[0] + across[0] * u * B.scale * 0.34 + B.down[0] * t * L;
-    const sy = B.sm[1] + across[1] * u * B.scale * 0.34 + B.down[1] * t * L;
-    const i = tracker.maskIndex(mirror ? 1 - sx / W : sx / W, sy / H);
-    if (i < 0) continue;
-    skin += m.soft[i * 4 + 1]; cloth += m.soft[i * 4 + 2]; n++;
-  }
-  if (n < 3) return bareOn;
-  const r = skin / n;
-  bareOn = bareOn ? (r > 0.4 && skin > cloth) : (r > 0.55 && skin > cloth * 1.6);
-  return bareOn;
 }
 
 const body = new Body();
@@ -397,6 +402,7 @@ function frame(now) {
   toon.uploadMask(tracker.mask);
   toon.render(src, {
     mirror, maskOn: state.maskOn, maskRoi: tracker.mask && tracker.mask.roi,
+    maskTexel: tracker.mask ? [tracker.mask.roi.w / tracker.mask.w, tracker.mask.roi.h / tracker.mask.h] : [0, 0],
     mode: lensOn ? state.mode : 3, time: now / 1000, ink: Math.max(1.5, H / 400),
     panels: panels.slice(-2), body: body.uniforms(B),
   });
@@ -417,7 +423,6 @@ function frame(now) {
     }
     outCtx.drawImage(back, 0, 0);
     const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
-    if (B) body.drawCostume(outCtx, B, lw, torsoBare(B, W, H, mirror));
     if (backView) body.drawBackView(outCtx, B, dt, lw);
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
