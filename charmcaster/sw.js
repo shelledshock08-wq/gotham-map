@@ -1,6 +1,6 @@
 // Offline support: the app shell is network-first (updates land right away),
 // the MediaPipe runtime and models are cache-first (their URLs are versioned).
-const SHELL_CACHE = 'charm-shell-v3';
+const SHELL_CACHE = 'charm-shell-v4';
 const MODEL_CACHE = 'charm-models-v1';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',

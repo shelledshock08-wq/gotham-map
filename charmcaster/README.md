@@ -75,7 +75,7 @@ Everything runs on the device and nothing is uploaded.
 - **Outfit:** limb capsules from the pose drive shader regions for sleeves, gloves (on hand skin only), leggings and boots. Heart emblems and the view from behind are drawn on top. When the torso reads as bare skin (shirt off) the mask drives cartoon chest and ab lines drawn over it, bounded between the collar and the navel.
 - **Head pose:** a weighted similarity fit (Horn's method) between the rigid points of MediaPipe's canonical face model and the tracked points. Hair and ears are modelled in 3D head space in centimetres and projected with this pose, so they turn with you. Loose hair has spring physics.
 - **Face:** a vector puppet drawn with Canvas 2D straight from the landmarks, so expressions are your own. Blink blendshapes force a full close.
-- **Body and background:** a WebGL2 shader (bilateral smoothing, cel tones relative to local brightness, ink lines from mask contours and image edges) recolors each body part into her palette. The long hair is tucked behind your shoulders using the body mask.
+- **Body and background:** a WebGL2 shader (bilateral smoothing, cel tones relative to local brightness, ink lines from mask contours and image edges) recolors each body part into her palette, with flat cel tones and bold outlines so the whole body reads as drawn as the head, whatever you're wearing. The long hair is tucked behind your shoulders using the body mask.
 - **Capture:** photos come from `canvas.toBlob`. Videos use `MediaRecorder` on the canvas stream plus the mic, recording MP4 where supported and WebM otherwise. Saving uses the Web Share API when the phone supports it, and a download otherwise.
 
 | File | Role |

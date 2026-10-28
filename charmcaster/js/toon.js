@@ -65,9 +65,9 @@ float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 // cel shading: 4 flat tones picked by brightness relative to the neighbourhood
 vec3 tone4(float r, float L, vec3 deep, vec3 shade, vec3 base, vec3 hi, float hiAt) {
-  vec3 c = mix(deep, shade, smoothstep(0.56, 0.62, r) * smoothstep(0.035, 0.075, L));
-  c = mix(c, base, smoothstep(0.84, 0.9, r));
-  return mix(c, hi, smoothstep(hiAt, hiAt + 0.06, r));
+  vec3 c = mix(deep, shade, smoothstep(0.575, 0.605, r) * smoothstep(0.035, 0.075, L));
+  c = mix(c, base, smoothstep(0.85, 0.88, r));
+  return mix(c, hi, smoothstep(hiAt, hiAt + 0.05, r));
 }
 
 float hash12(vec2 p) {
@@ -209,11 +209,13 @@ void main() {
   // body parts are toned from blurrier brightness so fabric/hair texture flattens out
   float L1 = luma(textureLod(uS, suv, 1.5).rgb), r1 = L1 / max(Lm, 0.04);
   float L2 = luma(textureLod(uS, suv, 2.5).rgb), r2 = L2 / max(Lm, 0.04);
+  // flatter brightness for the outfit/skin so it reads as drawn, not photographed
+  float LB = mix(L1, L2, 0.5), rB = mix(r1, r2, 0.5);
   // her hair is white; only real shadows turn blue-grey
   vec3 hairC = mix(vec3(0.776, 0.839, 0.882), vec3(0.984, 0.992, 0.996), smoothstep(0.62, 0.7, r2));
   hairC = mix(vec3(0.62, 0.70, 0.78), hairC, smoothstep(0.38, 0.45, r2) * smoothstep(0.02, 0.05, L2));
-  vec3 skinC = tone4(r1, L1, vec3(0.541, 0.31, 0.369), vec3(0.718, 0.451, 0.486), vec3(0.835, 0.592, 0.592), vec3(0.91, 0.69, 0.678), 1.22);
-  vec3 clothC = tone4(r1, L1, vec3(0.20, 0.0, 0.13), vec3(0.33, 0.02, 0.24), vec3(0.463, 0.0, 0.341), vec3(0.64, 0.14, 0.49), 1.3);
+  vec3 skinC = tone4(rB, LB, vec3(0.541, 0.31, 0.369), vec3(0.718, 0.451, 0.486), vec3(0.835, 0.592, 0.592), vec3(0.91, 0.69, 0.678), 1.22);
+  vec3 clothC = tone4(rB, LB, vec3(0.20, 0.0, 0.13), vec3(0.33, 0.02, 0.24), vec3(0.463, 0.0, 0.341), vec3(0.64, 0.14, 0.49), 1.3);
 
   vec2 pp = vec2(uv.x * uRes.x, (1.0 - uv.y) * uRes.y);
   float hw2 = uInk * 0.5;
@@ -231,7 +233,7 @@ void main() {
     panel = max(panel, inP * (1.0 - smoothstep(-1.0, 1.0, d)));
     panelLine = max(panelLine, inP * (1.0 - smoothstep(hw2 * 0.7 - 0.7, hw2 * 0.7 + 0.7, abs(d))));
   }
-  vec3 panelC = tone4(r1, L1, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.02, 0.06), vec3(0.12, 0.04, 0.11), vec3(0.24, 0.10, 0.23), 1.3);
+  vec3 panelC = tone4(rB, LB, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.02, 0.06), vec3(0.12, 0.04, 0.11), vec3(0.24, 0.10, 0.23), 1.6);
   vec3 sleeveC = clothC;
   clothC = mix(clothC, panelC, panel);
   vec3 otherC = comic(s);
@@ -253,9 +255,9 @@ void main() {
   float bW = boot * uBody * (1.0 - max(gW, sW));
   float lW = max(below, thigh) * uBody * (1.0 - max(gW, sW)) * (1.0 - bW);
   float tW = max(1.0 - gW - sW - bW - lW, 0.0);
-  vec3 legC = tone4(r1, L1, vec3(0.02, 0.01, 0.04), vec3(0.07, 0.04, 0.10), vec3(0.13, 0.07, 0.18), vec3(0.34, 0.22, 0.46), 1.2);
-  vec3 bootC = tone4(r1, L1, vec3(0.03, 0.02, 0.05), vec3(0.09, 0.05, 0.13), vec3(0.17, 0.09, 0.23), vec3(0.45, 0.30, 0.60), 1.15);
-  vec3 gloveC = tone4(r1, L1, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.03, 0.07), vec3(0.11, 0.06, 0.13), vec3(0.26, 0.16, 0.32), 1.25);
+  vec3 legC = tone4(rB, LB, vec3(0.02, 0.01, 0.04), vec3(0.07, 0.04, 0.10), vec3(0.13, 0.07, 0.18), vec3(0.34, 0.22, 0.46), 1.6);
+  vec3 bootC = tone4(rB, LB, vec3(0.03, 0.02, 0.05), vec3(0.09, 0.05, 0.13), vec3(0.17, 0.09, 0.23), vec3(0.45, 0.30, 0.60), 1.6);
+  vec3 gloveC = tone4(rB, LB, vec3(0.02, 0.01, 0.03), vec3(0.06, 0.03, 0.07), vec3(0.11, 0.06, 0.13), vec3(0.26, 0.16, 0.32), 1.6);
   vec3 dressed = sleeveC * sW + gloveC * gW + bootC * bW + legC * lW;
   vec3 clothD = clothC * tW + dressed;
   vec3 skinD = skinC * tW + dressed;
@@ -267,13 +269,13 @@ void main() {
   vec4 mR = maskAt(muv + mo), mL = maskAt(muv - mo), mU = maskAt(muv + no), mD = maskAt(muv - no);
   vec4 gxm = (mR - mL) / 3.0;
   vec4 gym = (mU - mD) / 3.0;
-  float line = iso(person, gxm.a, gym.a, hw2);
+  float line = iso(person, gxm.a, gym.a, hw2 * 1.25);
   line = max(line, iso(hair, gxm.r, gym.r, hw2 * 0.8));
   line = max(line, iso(cloth, gxm.b, gym.b, hw2 * 0.8));
   line = max(line, cloth * panelLine);
   line = max(line, lines * uBody * (skin + cloth));
 
-  float edgeInk = smoothstep(0.30, 0.55, edge) * mix(0.7, 0.9, person) * (1.0 - 0.9 * hair) * (1.0 - 0.35 * cloth);
+  float edgeInk = smoothstep(0.40, 0.66, edge) * mix(0.6, 0.95, person) * (1.0 - 0.9 * hair) * (1.0 - 0.5 * cloth);
   if (uMode == 2) edgeInk *= person + (1.0 - uMaskOn);
   float ink = max(line, edgeInk);
   o = vec4(mix(col, INK, ink), 1.0);
