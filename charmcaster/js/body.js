@@ -140,12 +140,13 @@ export class Body {
     }
     const L = Math.max(Math.hypot(sm[0] - hm[0], sm[1] - hm[1]), shoulderW * 0.9);
     const hipW = Math.max(Math.hypot(X[P.L_HIP] - X[P.R_HIP], Y[P.L_HIP] - Y[P.R_HIP]), shoulderW * 0.55);
-    const Wsh = shoulderW * 0.47;   // shoulders (a touch narrow)
-    const Ww = shoulderW * 0.27;    // waist pinch (hourglass)
-    const Wh = Math.max(hipW * 0.62, shoulderW * 0.5); // hips
+    const Wsh = shoulderW * 0.43;   // shoulders (narrow = feminine)
+    const Wb = shoulderW * 0.51;    // bust (bulges past the shoulders)
+    const Ww = shoulderW * 0.22;    // waist (strong hourglass pinch)
+    const Wh = Math.max(hipW * 0.64, shoulderW * 0.53); // hips
     const pt = (u, t) => [sm[0] + across[0] * u + down[0] * t * L, sm[1] + across[1] * u + down[1] * t * L];
     const css = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
-    const mul = (c, k) => css([c[0] * k, c[1] * k, c[2] * k]);
+    const mul = (c, k) => css([Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)]);
 
     const torsoCol = sample(...pt(0, 0.45));
     const lArmCol = V[P.L_ELBOW] > 0.3 ? sample((X[P.L_SHOULDER] + X[P.L_ELBOW]) / 2, (Y[P.L_SHOULDER] + Y[P.L_ELBOW]) / 2) : torsoCol;
@@ -153,10 +154,8 @@ export class Body {
 
     // hourglass torso outline, shoulders (t=0) down past the hips (t~1.12)
     const torso = [
-      pt(Wsh * 0.86, -0.04), pt(Wsh, 0.06), pt(Wsh * 0.98, 0.22), pt(Wsh * 0.9, 0.34),
-      pt(Ww, 0.54), pt(Wh * 0.86, 0.8), pt(Wh, 0.96), pt(Wh * 0.78, 1.12),
-      pt(-Wh * 0.78, 1.12), pt(-Wh, 0.96), pt(-Wh * 0.86, 0.8), pt(-Ww, 0.54),
-      pt(-Wsh * 0.9, 0.34), pt(-Wsh * 0.98, 0.22), pt(-Wsh, 0.06), pt(-Wsh * 0.86, -0.04),
+      pt(Wsh * 0.78, -0.05), pt(Wsh, 0.04), pt(Wb, 0.2), pt(Wb * 0.95, 0.31), pt(Ww * 1.12, 0.45), pt(Ww, 0.57), pt(Wh * 0.82, 0.82), pt(Wh, 0.96), pt(Wh * 0.78, 1.12),
+      pt(-Wh * 0.78, 1.12), pt(-Wh, 0.96), pt(-Wh * 0.82, 0.82), pt(-Ww, 0.57), pt(-Ww * 1.12, 0.45), pt(-Wb * 0.95, 0.31), pt(-Wb, 0.2), pt(-Wsh, 0.04), pt(-Wsh * 0.78, -0.05),
     ];
     ctx.save();
     ctx.lineJoin = 'round';
@@ -175,15 +174,22 @@ export class Body {
     [a0, a1, a2, a3].forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = mul(torsoCol, 0.7);
-    ctx.lineWidth = lw * 1.3;
+    // implied bust: a darker under-curve + a soft top highlight on each side, plus a faint centre line
+    ctx.lineCap = 'round';
     for (const sgn of [-1, 1]) {
-      const b0 = pt(sgn * Wsh * 0.12, 0.2), b1 = pt(sgn * Wsh * 0.62, 0.29), b2 = pt(sgn * Wsh * 0.32, 0.37);
-      ctx.beginPath();
-      ctx.moveTo(b0[0], b0[1]);
-      ctx.quadraticCurveTo(b1[0], b1[1], b2[0], b2[1]);
-      ctx.stroke();
+      const u0 = pt(sgn * Wb * 0.06, 0.17), u1 = pt(sgn * Wb * 0.82, 0.26), u2 = pt(sgn * Wb * 0.44, 0.41);
+      ctx.strokeStyle = mul(torsoCol, 0.58);
+      ctx.lineWidth = lw * 1.9;
+      ctx.beginPath(); ctx.moveTo(u0[0], u0[1]); ctx.quadraticCurveTo(u1[0], u1[1], u2[0], u2[1]); ctx.stroke();
+      const h0 = pt(sgn * Wb * 0.22, 0.15), h1 = pt(sgn * Wb * 0.62, 0.17), h2 = pt(sgn * Wb * 0.52, 0.23);
+      ctx.strokeStyle = mul(torsoCol, 1.2);
+      ctx.lineWidth = lw * 1.1;
+      ctx.beginPath(); ctx.moveTo(h0[0], h0[1]); ctx.quadraticCurveTo(h1[0], h1[1], h2[0], h2[1]); ctx.stroke();
     }
+    const c0 = pt(0, 0.15), c1 = pt(0, 0.33);
+    ctx.strokeStyle = mul(torsoCol, 0.66);
+    ctx.lineWidth = lw * 1.1;
+    ctx.beginPath(); ctx.moveTo(c0[0], c0[1]); ctx.lineTo(c1[0], c1[1]); ctx.stroke();
     ctx.restore();
     smoothClosed(ctx, torso);
     ctx.strokeStyle = PAL.ink;
