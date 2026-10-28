@@ -1,0 +1,41 @@
+name: Charmcaster Lens (phone / web)
+
+# Publishes the lens to GitHub Pages so it runs in a phone browser over https
+# (the camera needs https). After the first run, enable Pages once:
+# repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [claude/eloquent-hamilton-d44wqf]
+    paths:
+      - 'charmcaster/**'
+      - '.github/workflows/charmcaster-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage the lens at /charmcaster/
+        run: |
+          mkdir -p _site/charmcaster
+          cp -r charmcaster/index.html charmcaster/js charmcaster/sw.js \
+                charmcaster/manifest.webmanifest charmcaster/icons _site/charmcaster/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
