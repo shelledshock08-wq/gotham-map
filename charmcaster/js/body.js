@@ -15,6 +15,19 @@ const norm = (x, y) => {
   return [x / d, y / d];
 };
 
+// Closed curve through control points (quadratic through edge midpoints).
+function smoothClosed(ctx, pts) {
+  const n = pts.length;
+  ctx.beginPath();
+  const m0 = [(pts[n - 1][0] + pts[0][0]) / 2, (pts[n - 1][1] + pts[0][1]) / 2];
+  ctx.moveTo(m0[0], m0[1]);
+  for (let i = 0; i < n; i++) {
+    const cur = pts[i], nxt = pts[(i + 1) % n];
+    ctx.quadraticCurveTo(cur[0], cur[1], (cur[0] + nxt[0]) / 2, (cur[1] + nxt[1]) / 2);
+  }
+  ctx.closePath();
+}
+
 // Persistent smoothing for the body frame: hysteresis on whether the shoulders/hips
 // count as "in view" (so the costume doesn't blink at the threshold) and an EMA on the
 // overall scale/hem (so the capsule radii don't pulse frame to frame).
@@ -112,6 +125,92 @@ export class Body {
     const L = B.hipsOk ? B.torso + B.hemLen * 0.9 : B.torso * 1.2;
     const bot = [B.sm[0] + B.down[0] * L, B.sm[1] + B.down[1] * L];
     return [top[0], top[1], bot[0], bot[1], B.scale * 0.1, B.scale * 0.2, smoothstep(0.15, 0.45, B.front)];
+  }
+
+  // A drawn, feminine body rigged to the 33 pose joints: hourglass torso with an implied
+  // bust, slim arms and hands. The SHAPE comes from the skeleton (robust to lighting); the
+  // colour is sampled from the already-cartoonised frame via sample(x,y) -> [r,g,b], so it
+  // keeps your own clothes. Legs are left to the camera (your own), per request.
+  drawFigure(ctx, B, sample, lw) {
+    const { X, Y, V, sm, hm, shoulderW } = B;
+    const down = B.down;
+    let across = [-down[1], down[0]];
+    if (across[0] * (X[P.L_SHOULDER] - X[P.R_SHOULDER]) + across[1] * (Y[P.L_SHOULDER] - Y[P.R_SHOULDER]) < 0) {
+      across = [-across[0], -across[1]];
+    }
+    const L = Math.max(Math.hypot(sm[0] - hm[0], sm[1] - hm[1]), shoulderW * 0.9);
+    const hipW = Math.max(Math.hypot(X[P.L_HIP] - X[P.R_HIP], Y[P.L_HIP] - Y[P.R_HIP]), shoulderW * 0.55);
+    const Wsh = shoulderW * 0.47;   // shoulders (a touch narrow)
+    const Ww = shoulderW * 0.27;    // waist pinch (hourglass)
+    const Wh = Math.max(hipW * 0.62, shoulderW * 0.5); // hips
+    const pt = (u, t) => [sm[0] + across[0] * u + down[0] * t * L, sm[1] + across[1] * u + down[1] * t * L];
+    const css = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+    const mul = (c, k) => css([c[0] * k, c[1] * k, c[2] * k]);
+
+    const torsoCol = sample(...pt(0, 0.45));
+    const lArmCol = V[P.L_ELBOW] > 0.3 ? sample((X[P.L_SHOULDER] + X[P.L_ELBOW]) / 2, (Y[P.L_SHOULDER] + Y[P.L_ELBOW]) / 2) : torsoCol;
+    const rArmCol = V[P.R_ELBOW] > 0.3 ? sample((X[P.R_SHOULDER] + X[P.R_ELBOW]) / 2, (Y[P.R_SHOULDER] + Y[P.R_ELBOW]) / 2) : torsoCol;
+
+    // hourglass torso outline, shoulders (t=0) down past the hips (t~1.12)
+    const torso = [
+      pt(Wsh * 0.86, -0.04), pt(Wsh, 0.06), pt(Wsh * 0.98, 0.22), pt(Wsh * 0.9, 0.34),
+      pt(Ww, 0.54), pt(Wh * 0.86, 0.8), pt(Wh, 0.96), pt(Wh * 0.78, 1.12),
+      pt(-Wh * 0.78, 1.12), pt(-Wh, 0.96), pt(-Wh * 0.86, 0.8), pt(-Ww, 0.54),
+      pt(-Wsh * 0.9, 0.34), pt(-Wsh * 0.98, 0.22), pt(-Wsh, 0.06), pt(-Wsh * 0.86, -0.04),
+    ];
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    smoothClosed(ctx, torso);
+    ctx.fillStyle = css(torsoCol);
+    ctx.fill();
+    ctx.save();
+    smoothClosed(ctx, torso);
+    ctx.clip();
+    // soft side shade + two curves under the chest (implied bust)
+    const sgnShade = across[0] < 0 ? -1 : 1;
+    ctx.fillStyle = mul(torsoCol, 0.82);
+    ctx.beginPath();
+    const a0 = pt(sgnShade * Wsh * 0.4, -0.1), a1 = pt(sgnShade * Wsh * 1.3, -0.1), a2 = pt(sgnShade * Wh * 1.3, 1.2), a3 = pt(sgnShade * Ww * 0.5, 1.2);
+    [a0, a1, a2, a3].forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = mul(torsoCol, 0.7);
+    ctx.lineWidth = lw * 1.3;
+    for (const sgn of [-1, 1]) {
+      const b0 = pt(sgn * Wsh * 0.12, 0.2), b1 = pt(sgn * Wsh * 0.62, 0.29), b2 = pt(sgn * Wsh * 0.32, 0.37);
+      ctx.beginPath();
+      ctx.moveTo(b0[0], b0[1]);
+      ctx.quadraticCurveTo(b1[0], b1[1], b2[0], b2[1]);
+      ctx.stroke();
+    }
+    ctx.restore();
+    smoothClosed(ctx, torso);
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+
+    // slim arms + hands
+    const s = B.scale;
+    const rUp = s * 0.1, rFo = s * 0.075;
+    const seg = (ax, ay, bx, by, r, col) => {
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.strokeStyle = PAL.ink; ctx.lineWidth = r * 2 + lw * 2; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.strokeStyle = col; ctx.lineWidth = r * 2; ctx.stroke();
+    };
+    for (const [sh, el, wr, col] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST, css(lArmCol)], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST, css(rArmCol)]]) {
+      if (V[sh] < 0.3 || V[el] < 0.3) continue;
+      seg(X[sh], Y[sh], X[el], Y[el], rUp, col);
+      if (V[wr] > 0.3) {
+        seg(X[el], Y[el], X[wr], Y[wr], rFo, col);
+        ctx.beginPath();
+        ctx.arc(X[wr], Y[wr], rFo * 1.1, 0, TAU);
+        ctx.fillStyle = col; ctx.fill();
+        ctx.strokeStyle = PAL.ink; ctx.lineWidth = lw; ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // Seen from behind: her long hair over your back.

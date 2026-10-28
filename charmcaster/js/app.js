@@ -17,6 +17,7 @@ const OPT = {
   debug: params.has('debug'),
   spell: params.has('spell'), // preview the spell effect without raising your brows
   back: params.has('back'), // preview the view from behind on a front-facing test image
+  figure: params.has('figure'), // preview the drawn, pose-rigged feminine body (WIP)
   desktop: params.has('desktop'), // running inside the Windows app
 };
 if (OPT.desktop) OPT.local = true;
@@ -424,6 +425,13 @@ function frame(now) {
     outCtx.drawImage(back, 0, 0);
     const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
     if (backView) body.drawBackView(outCtx, B, dt, lw);
+    if (OPT.figure && B && !backView) {
+      const sampleCol = (x, y) => {
+        const d = outCtx.getImageData(Math.max(0, Math.min(W - 1, x | 0)), Math.max(0, Math.min(H - 1, y | 0)), 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      body.drawFigure(outCtx, B, sampleCol, lw);
+    }
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
   const t2 = performance.now();
