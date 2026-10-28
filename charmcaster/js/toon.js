@@ -115,17 +115,23 @@ vec4 maskAt(vec2 raw) {
   return texture(uMask, q) * inside * uMaskOn;
 }
 
-// Joint-bilateral refine: pull the coarse mask's edges onto the real image edges using the
-// source colour, so thin limbs/hands read cleanly instead of blocky/blobby. c0 = pixel colour.
+// Joint-bilateral refine: pull the coarse 256px mask's edges onto the real image edges using
+// the source colour, so thin limbs/hands read cleanly instead of blocky/blobby. A 3x3 kernel
+// with a wide reach snaps the boundary harder than a cross. c0 = this pixel's colour.
 vec4 maskRefined(vec2 muv, vec3 c0) {
-  vec2 tp = uMaskTexel * 1.2;
-  vec4 acc = maskAt(muv) * 1.5;
-  float wsum = 1.5, w; vec3 d;
-  d = textureLod(uS, vec2(muv.x + tp.x, 1.0 - muv.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(tp.x, 0.0)) * w; wsum += w;
-  d = textureLod(uS, vec2(muv.x - tp.x, 1.0 - muv.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv - vec2(tp.x, 0.0)) * w; wsum += w;
-  d = textureLod(uS, vec2(muv.x, 1.0 - muv.y - tp.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(0.0, tp.y)) * w; wsum += w;
-  d = textureLod(uS, vec2(muv.x, 1.0 - muv.y + tp.y), 0.0).rgb - c0; w = exp(-dot(d, d) * 24.0); acc += maskAt(muv + vec2(0.0, -tp.y)) * w; wsum += w;
-  return acc / wsum;
+  vec2 tp = uMaskTexel * 1.5;
+  vec4 acc = vec4(0.0);
+  float wsum = 0.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 mp = muv + vec2(float(i), float(j)) * tp;
+      vec3 d = textureLod(uS, vec2(mp.x, 1.0 - mp.y), 0.0).rgb - c0;
+      float w = (i == 0 && j == 0) ? 1.6 : exp(-dot(d, d) * 22.0) * exp(-float(i * i + j * j) * 0.4);
+      acc += maskAt(mp) * w;
+      wsum += w;
+    }
+  }
+  return acc / max(wsum, 1e-4);
 }
 
 // Line along the 0.5 contour of a soft mask channel, constant width in pixels.
