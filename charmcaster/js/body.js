@@ -15,6 +15,32 @@ const norm = (x, y) => {
   return [x / d, y / d];
 };
 
+// A smooth tapered limb through a joint chain (wide -> narrow), filled + inked, with an
+// optional rounded hand at the last joint. No balloon end-caps.
+function taperedLimb(ctx, pts, radii, col, lw, cap) {
+  const n = pts.length;
+  const perp = [];
+  for (let i = 0; i < n; i++) {
+    let dx = 0, dy = 0;
+    if (i > 0) { dx += pts[i][0] - pts[i - 1][0]; dy += pts[i][1] - pts[i - 1][1]; }
+    if (i < n - 1) { dx += pts[i + 1][0] - pts[i][0]; dy += pts[i + 1][1] - pts[i][1]; }
+    const d = Math.hypot(dx, dy) || 1;
+    perp.push([-dy / d, dx / d]);
+  }
+  const outline = [];
+  for (let i = 0; i < n; i++) outline.push([pts[i][0] + perp[i][0] * radii[i], pts[i][1] + perp[i][1] * radii[i]]);
+  for (let i = n - 1; i >= 0; i--) outline.push([pts[i][0] - perp[i][0] * radii[i], pts[i][1] - perp[i][1] * radii[i]]);
+  smoothClosed(ctx, outline);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.strokeStyle = PAL.ink; ctx.lineWidth = lw; ctx.stroke();
+  if (cap) {
+    ctx.beginPath();
+    ctx.arc(pts[n - 1][0], pts[n - 1][1], radii[n - 1] * 1.3, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = lw; ctx.stroke();
+  }
+}
+
 // Closed curve through control points (quadratic through edge midpoints).
 function smoothClosed(ctx, pts) {
   const n = pts.length;
@@ -195,25 +221,16 @@ export class Body {
     ctx.lineWidth = lw;
     ctx.stroke();
 
-    // slim arms + hands
+    // slim tapered arms (shoulder -> elbow -> wrist), connected into the torso
     const s = B.scale;
-    const rUp = s * 0.1, rFo = s * 0.075;
-    const seg = (ax, ay, bx, by, r, col) => {
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-      ctx.strokeStyle = PAL.ink; ctx.lineWidth = r * 2 + lw * 2; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-      ctx.strokeStyle = col; ctx.lineWidth = r * 2; ctx.stroke();
-    };
-    for (const [sh, el, wr, col] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST, armCss], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST, armCss]]) {
+    for (const [sh, el, wr] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST]]) {
       if (V[sh] < 0.3 || V[el] < 0.3) continue;
-      seg(X[sh], Y[sh], X[el], Y[el], rUp, col);
-      if (V[wr] > 0.3) {
-        seg(X[el], Y[el], X[wr], Y[wr], rFo, col);
-        ctx.beginPath();
-        ctx.arc(X[wr], Y[wr], rFo * 1.1, 0, TAU);
-        ctx.fillStyle = col; ctx.fill();
-        ctx.strokeStyle = PAL.ink; ctx.lineWidth = lw; ctx.stroke();
-      }
+      // root the arm a little inside the torso so it joins cleanly
+      const root = [X[sh] + (sm[0] - X[sh]) * 0.22, Y[sh] + (sm[1] - Y[sh]) * 0.22];
+      const chain = [root, [X[sh], Y[sh]], [X[el], Y[el]]];
+      const radii = [s * 0.12, s * 0.11, s * 0.085];
+      if (V[wr] > 0.3) { chain.push([X[wr], Y[wr]]); radii.push(s * 0.058); }
+      taperedLimb(ctx, chain, radii, armCss, lw, V[wr] > 0.3);
     }
     ctx.restore();
   }
