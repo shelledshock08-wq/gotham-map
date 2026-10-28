@@ -435,12 +435,12 @@ function frame(now) {
     }
     outCtx.drawImage(back, 0, 0);
     const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
-    if (backView) body.drawBackView(outCtx, B, dt, lw);
-    if ((OPT.figure || state.figureOn) && B && !backView) {
+    if ((OPT.figure || state.figureOn) && B) {
       if (!figSampC) figSample(src, 0, 0, W, H, mirror); // lazily create the scratch canvas
       figSampX.drawImage(src, 0, 0, figSampC.width, figSampC.height);
       body.drawFigure(outCtx, B, (x, y) => figSample(src, x, y, W, H, mirror), lw);
     }
+    if (backView) body.drawBackView(outCtx, B, dt, lw); // her hair/head over the back of the figure
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
   const t2 = performance.now();
