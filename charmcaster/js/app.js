@@ -396,7 +396,7 @@ function frame(now) {
     const F = {
       W, H, mirror, X: pup.X, Y: pup.Y, pose, s: pose.s, body: withBody,
       bs: (n) => tracker.blend(face, n), time: now / 1000, dt, neckline,
-      hairAt: (x, y) => hairAt(x, y, W, H, mirror), forceSpell: OPT.spell,
+      hairAt: (x, y) => hairAt(x, y, W, H, mirror), forceSpell: OPT.spell || state.spellOn,
     };
     pup.charm.update(F);
     frames.push({ F, charm: pup.charm });
@@ -611,9 +611,12 @@ document.addEventListener('keydown', (e) => {
   } else if (k === 'g') {
     state.figureOn = !state.figureOn;
     toast(state.figureOn ? 'Drawn body: on (beta)' : 'Drawn body: off', 1200);
+  } else if (k === 'x') {
+    state.spellOn = !state.spellOn;
+    toast(state.spellOn ? 'Casting a spell' : 'Spell off', 900);
   }
 });
-if (!TOUCH) ui.hint.textContent = 'Space photo · R record · ← → background · G drawn body (beta) · H hide UI · F fullscreen';
+if (!TOUCH) ui.hint.textContent = 'Space photo · R record · ← → background · X spell · H hide UI · F fullscreen';
 
 if ('serviceWorker' in navigator && !params.has('nosw') && !OPT.local && !OPT.src && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => {});

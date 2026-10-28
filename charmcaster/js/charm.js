@@ -337,7 +337,7 @@ export class Charm {
 
     // spell: raise both eyebrows
     const brow = (F.bs('browInnerUp') + 0.5 * (F.bs('browOuterUpLeft') + F.bs('browOuterUpRight'))) / 2;
-    const target = brow > 0.42 || F.forceSpell ? 1 : 0;
+    const target = brow > 0.38 || F.forceSpell ? 1 : 0;
     this.spell += (target - this.spell) * Math.min(1, F.dt * (target ? 5 : 2.5));
 
     // body anchor (neck base): body tracking, else where the clothes start, else below the chin
