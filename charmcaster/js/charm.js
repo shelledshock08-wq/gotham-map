@@ -392,6 +392,7 @@ export class Charm {
 
     const oval = this.faceOval(F);
     this.drawFace(ctx, F, oval);
+    this.drawExpression(ctx, F, oval);
     this.drawNose(ctx, F);
     this.drawMouth(ctx, F);
     for (const E of EYES) this.drawEye(ctx, F, E);
@@ -399,6 +400,44 @@ export class Charm {
     this.strands.left.draw(ctx, F);
     this.drawBangs(ctx, F);
     if (this.spell > 0.02) this.drawSpellFx(ctx, F);
+  }
+
+  // Emotional micro-layer driven by your blendshapes: blush when you smile, a furrow
+  // between the brows when you frown or concentrate. Subtle, clipped to the face.
+  drawExpression(ctx, F, oval) {
+    const { X, Y, s } = F;
+    const smile = (F.bs('mouthSmileLeft') + F.bs('mouthSmileRight')) / 2;
+    if (smile > 0.15) {
+      ctx.save();
+      ctx.beginPath(); smooth(ctx, oval, true); ctx.clip();
+      ctx.globalAlpha = Math.min(0.3, (smile - 0.12) * 0.5);
+      for (const i of [50, 280]) {
+        const g = ctx.createRadialGradient(X[i], Y[i], 0, X[i], Y[i], s * 0.55);
+        g.addColorStop(0, 'rgba(226,110,128,0.9)');
+        g.addColorStop(1, 'rgba(226,110,128,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(X[i], Y[i], s * 0.55, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const furrow = (F.bs('browDownLeft') + F.bs('browDownRight')) / 2;
+    if (furrow > 0.25) {
+      const cx = X[168], cy = Y[168];
+      let ux = X[151] - X[168], uy = Y[151] - Y[168];
+      const d = Math.hypot(ux, uy) || 1; ux /= d; uy /= d;
+      const ax = -uy, ay = ux;
+      ctx.save();
+      ctx.strokeStyle = PAL.skinDeep;
+      ctx.globalAlpha = Math.min(0.5, (furrow - 0.2) * 0.9);
+      ctx.lineWidth = F.lw * 0.9; ctx.lineCap = 'round';
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + ax * sgn * s * 0.05 - ux * s * 0.02, cy + ay * sgn * s * 0.05 - uy * s * 0.02);
+        ctx.lineTo(cx + ax * sgn * s * 0.055 + ux * s * 0.09, cy + ay * sgn * s * 0.055 + uy * s * 0.09);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   faceOval(F) {
