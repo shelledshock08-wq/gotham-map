@@ -62,16 +62,28 @@ const BF = { present: false, hipsOn: false, scale: 0, hemLen: 0 };
 // Pose landmarks in screen pixels plus a body frame (up axis, size). Null when the
 // shoulders aren't in view.
 export function bodyFrame(pose, W, H, mirror) {
-  if (!pose) { BF.present = false; BF.scale = 0; return null; }
+  if (!pose) { BF.present = false; BF.scale = 0; BF.sinit = false; return null; }
   const lm = pose.lm, V = pose.vis;
   const shoVis = Math.min(V[P.L_SHOULDER], V[P.R_SHOULDER]);
   BF.present = BF.present ? shoVis > 0.3 : shoVis > 0.45;
-  if (!BF.present) { BF.scale = 0; return null; }
+  if (!BF.present) { BF.scale = 0; BF.sinit = false; return null; }
   const X = new Float32Array(33), Y = new Float32Array(33);
   for (let i = 0; i < 33; i++) {
     X[i] = (mirror ? 1 - lm[i * 3] : lm[i * 3]) * W;
     Y[i] = lm[i * 3 + 1] * H;
   }
+  // Per-frame smoothing of every joint for a fluid body that never jitters, and HOLDS its last
+  // good position through a brief tracking wobble instead of popping or vanishing.
+  if (!BF.sx) { BF.sx = new Float32Array(33); BF.sy = new Float32Array(33); }
+  for (let i = 0; i < 33; i++) {
+    if (!BF.sinit) { BF.sx[i] = X[i]; BF.sy[i] = Y[i]; continue; }
+    const vis = V[i];
+    const k = vis > 0.5 ? 0.45 : vis > 0.2 ? 0.18 : 0.0; // follow when confident, hold when not
+    BF.sx[i] += (X[i] - BF.sx[i]) * k;
+    BF.sy[i] += (Y[i] - BF.sy[i]) * k;
+  }
+  BF.sinit = true;
+  for (let i = 0; i < 33; i++) { X[i] = BF.sx[i]; Y[i] = BF.sy[i]; }
   const mid = (a, b) => [(X[a] + X[b]) / 2, (Y[a] + Y[b]) / 2];
   const dist = (a, b) => Math.hypot(X[a] - X[b], Y[a] - Y[b]);
   const sm = mid(P.L_SHOULDER, P.R_SHOULDER), hm = mid(P.L_HIP, P.R_HIP);
