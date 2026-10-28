@@ -41,6 +41,31 @@ function taperedLimb(ctx, pts, radii, col, lw, cap) {
   }
 }
 
+// A simple drawn hand from the pose's wrist + knuckle + thumb points: a palm capsule,
+// a thumb, and faint finger creases. (Full 21-point fingers come with hand tracking.)
+function drawHand(ctx, w, knuck, thumb, rH, col, lw) {
+  const cap = (a, b, r) => {
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    ctx.strokeStyle = PAL.ink; ctx.lineWidth = r * 2 + lw * 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    ctx.strokeStyle = col; ctx.lineWidth = r * 2; ctx.stroke();
+  };
+  const tip = [w[0] + (knuck[0] - w[0]) * 1.28, w[1] + (knuck[1] - w[1]) * 1.28];
+  if (thumb) cap(w, thumb, rH * 0.5);
+  cap(w, tip, rH);
+  const dx = tip[0] - w[0], dy = tip[1] - w[1], d = Math.hypot(dx, dy) || 1;
+  const ux = dx / d, uy = dy / d, px = -uy, py = ux;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = PAL.ink; ctx.lineWidth = lw * 0.7; ctx.lineCap = 'round';
+  for (const o of [-0.4, 0, 0.4]) {
+    const bx = tip[0] + px * o * rH, by = tip[1] + py * o * rH;
+    ctx.beginPath(); ctx.moveTo(bx - ux * rH * 0.45, by - uy * rH * 0.45); ctx.lineTo(bx, by); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Closed curve through control points (quadratic through edge midpoints).
 function smoothClosed(ctx, pts) {
   const n = pts.length;
@@ -249,16 +274,26 @@ export class Body {
     ctx.lineWidth = lw;
     ctx.stroke();
 
-    // slim tapered arms (shoulder -> elbow -> wrist), connected into the torso
+    // slim tapered arms (shoulder -> elbow -> wrist) + a drawn hand, connected into the torso
     const s = B.scale;
-    for (const [sh, el, wr] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST]]) {
+    // [shoulder, elbow, wrist, index-knuckle, pinky-knuckle, thumb]
+    for (const [sh, el, wr, idx, pk, th] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST, 19, 17, 21], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST, 20, 18, 22]]) {
       if (V[sh] < 0.3 || V[el] < 0.3) continue;
       // root the arm a little inside the torso so it joins cleanly
       const root = [X[sh] + (sm[0] - X[sh]) * 0.22, Y[sh] + (sm[1] - Y[sh]) * 0.22];
       const chain = [root, [X[sh], Y[sh]], [X[el], Y[el]]];
       const radii = [s * 0.12, s * 0.11, s * 0.085];
       if (V[wr] > 0.3) { chain.push([X[wr], Y[wr]]); radii.push(s * 0.058); }
-      taperedLimb(ctx, chain, radii, armCss, lw, V[wr] > 0.3);
+      taperedLimb(ctx, chain, radii, armCss, lw, false);
+      if (V[wr] > 0.3) {
+        const w = [X[wr], Y[wr]];
+        const hasK = V[idx] > 0.2 && V[pk] > 0.2;
+        const knuck = hasK ? [(X[idx] + X[pk]) / 2, (Y[idx] + Y[pk]) / 2]
+          : (() => { const ex = X[wr] - X[el], ey = Y[wr] - Y[el], d = Math.hypot(ex, ey) || 1; return [X[wr] + ex / d * s * 0.11, Y[wr] + ey / d * s * 0.11]; })();
+        const rH = Math.max(hasK ? Math.hypot(X[idx] - X[pk], Y[idx] - Y[pk]) * 0.55 : 0, s * 0.072);
+        const thumb = V[th] > 0.2 ? [X[th], Y[th]] : null;
+        drawHand(ctx, w, knuck, thumb, rH, armCss, lw);
+      }
     }
     ctx.restore();
   }
