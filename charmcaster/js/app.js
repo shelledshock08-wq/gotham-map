@@ -95,6 +95,17 @@ function hairAt(x, y, W, H, mirror) {
 }
 
 const body = new Body();
+// tiny scratch copy of the raw frame, to sample your real clothing colour for the drawn figure
+let figSampC = null, figSampX = null;
+function figSample(src, x, y, W, H, mirror) {
+  if (!figSampC) { figSampC = document.createElement('canvas'); figSampC.width = 96; figSampC.height = 128; figSampX = figSampC.getContext('2d', { willReadFrequently: true }); }
+  const nx = mirror ? 1 - x / W : x / W, ny = y / H;
+  const px = Math.max(0, Math.min(figSampC.width - 1, (nx * figSampC.width) | 0));
+  const py = Math.max(0, Math.min(figSampC.height - 1, (ny * figSampC.height) | 0));
+  const d = figSampX.getImageData(px, py, 1, 1).data;
+  const q = (v) => Math.min(255, Math.round(v / 36) * 36 + 10); // flatten to cartoon bands
+  return [q(d[0]), q(d[1]), q(d[2])];
+}
 
 // One drawn Charmcaster per tracked face.
 const puppets = new Map();
@@ -405,7 +416,7 @@ function frame(now) {
     mirror, maskOn: state.maskOn, maskRoi: tracker.mask && tracker.mask.roi,
     maskTexel: tracker.mask ? [tracker.mask.roi.w / tracker.mask.w, tracker.mask.roi.h / tracker.mask.h] : [0, 0],
     mode: lensOn ? state.mode : 3, time: now / 1000, ink: Math.max(1.5, H / 400),
-    panels: panels.slice(-2), body: body.uniforms(B),
+    panels: panels.slice(-2), body: body.uniforms(B), hideUpper: (OPT.figure || state.figureOn) && !!B,
   });
   outCtx.drawImage(glCanvas, 0, 0);
 
@@ -425,12 +436,10 @@ function frame(now) {
     outCtx.drawImage(back, 0, 0);
     const lw = B ? Math.max(1.6, (B.scale / 34) * 0.11) : 2;
     if (backView) body.drawBackView(outCtx, B, dt, lw);
-    if (OPT.figure && B && !backView) {
-      const sampleCol = (x, y) => {
-        const d = outCtx.getImageData(Math.max(0, Math.min(W - 1, x | 0)), Math.max(0, Math.min(H - 1, y | 0)), 1, 1).data;
-        return [d[0], d[1], d[2]];
-      };
-      body.drawFigure(outCtx, B, sampleCol, lw);
+    if ((OPT.figure || state.figureOn) && B && !backView) {
+      if (!figSampC) figSample(src, 0, 0, W, H, mirror); // lazily create the scratch canvas
+      figSampX.drawImage(src, 0, 0, figSampC.width, figSampC.height);
+      body.drawFigure(outCtx, B, (x, y) => figSample(src, x, y, W, H, mirror), lw);
     }
     for (const { F, charm } of frames) charm.drawFront(outCtx, F);
   }
@@ -599,9 +608,12 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'f') {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
+  } else if (k === 'g') {
+    state.figureOn = !state.figureOn;
+    toast(state.figureOn ? 'Drawn body: on (beta)' : 'Drawn body: off', 1200);
   }
 });
-if (!TOUCH) ui.hint.textContent = 'Space photo · R record · ← → background · H hide UI · F fullscreen';
+if (!TOUCH) ui.hint.textContent = 'Space photo · R record · ← → background · G drawn body (beta) · H hide UI · F fullscreen';
 
 if ('serviceWorker' in navigator && !params.has('nosw') && !OPT.local && !OPT.src && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => {});

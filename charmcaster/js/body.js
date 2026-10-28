@@ -149,8 +149,7 @@ export class Body {
     const mul = (c, k) => css([Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)]);
 
     const torsoCol = sample(...pt(0, 0.45));
-    const lArmCol = V[P.L_ELBOW] > 0.3 ? sample((X[P.L_SHOULDER] + X[P.L_ELBOW]) / 2, (Y[P.L_SHOULDER] + Y[P.L_ELBOW]) / 2) : torsoCol;
-    const rArmCol = V[P.R_ELBOW] > 0.3 ? sample((X[P.R_SHOULDER] + X[P.R_ELBOW]) / 2, (Y[P.R_SHOULDER] + Y[P.R_ELBOW]) / 2) : torsoCol;
+    const armCss = PAL.skin; // arms/hands are bare skin -> her tone, so they match the head
 
     // hourglass torso outline, shoulders (t=0) down past the hips (t~1.12)
     const torso = [
@@ -205,7 +204,7 @@ export class Body {
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
       ctx.strokeStyle = col; ctx.lineWidth = r * 2; ctx.stroke();
     };
-    for (const [sh, el, wr, col] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST, css(lArmCol)], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST, css(rArmCol)]]) {
+    for (const [sh, el, wr, col] of [[P.L_SHOULDER, P.L_ELBOW, P.L_WRIST, armCss], [P.R_SHOULDER, P.R_ELBOW, P.R_WRIST, armCss]]) {
       if (V[sh] < 0.3 || V[el] < 0.3) continue;
       seg(X[sh], Y[sh], X[el], Y[el], rUp, col);
       if (V[wr] > 0.3) {

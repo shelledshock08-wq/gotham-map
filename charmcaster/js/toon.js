@@ -56,6 +56,7 @@ uniform vec4 uLeg[6];     // thigh, shin, foot (left then right)
 uniform vec3 uLegR;
 uniform vec4 uHem;        // point on the jacket hem line + unit normal pointing down the body
 uniform float uBody;
+uniform float uHideUpper;  // 1 = erase the real body above the hip line (the drawn figure covers it)
 uniform float uInk;
 in vec2 vUv;
 out vec4 o;
@@ -247,6 +248,11 @@ void main() {
   float hw2 = uInk * 0.5;
 
   vec3 col = bg * (1.0 - person) + hairC * hair + skinC * skin + clothC * cloth + otherC * other;
+  if (uHideUpper > 0.5) {
+    vec2 ppH = vec2(uv.x * uRes.x, (1.0 - uv.y) * uRes.y);
+    float belowHip = smoothstep(-3.0, 3.0, dot(ppH - uHem.xy, uHem.zw)); // 1 below hips, 0 above
+    col = mix(col, bg, (1.0 - belowHip) * person); // erase real upper body so the drawn figure replaces it
+  }
 
   vec2 mo = vec2(px.x * 1.5, 0.0), no = vec2(0.0, px.y * 1.5);
   vec4 mR = maskAt(muv + mo), mL = maskAt(muv - mo), mU = maskAt(muv + no), mD = maskAt(muv - no);
@@ -436,6 +442,7 @@ export class ToonRenderer {
     gl.uniform2f(u.uMaskTexel, (opts.maskTexel && opts.maskTexel[0]) || 0, (opts.maskTexel && opts.maskTexel[1]) || 0);
     const b = opts.body;
     gl.uniform1f(u.uBody, b ? 1 : 0);
+    gl.uniform1f(u.uHideUpper, opts.hideUpper ? 1 : 0);
     gl.uniform4fv(u['uArm[0]'], b ? b.arms : NO_LIMBS);
     gl.uniform4fv(u['uLeg[0]'], b ? b.legs : NO_LIMBS);
     gl.uniform3fv(u.uArmR, b ? b.armR : [0, 0, 0]);
